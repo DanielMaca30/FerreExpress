@@ -1,21 +1,20 @@
 body {
-    font-family: Arial, sans-serif;
+    font-family: 'Roboto', sans-serif;
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
-header {
-    background-color: #333;
-    color: #fff;
-    padding: 10px 0;
+.container {
+    max-width: 960px; 
+    margin: 0 auto;
+    padding: 0 20px;
 }
 
-header .container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 20px;
+header {
+    background-color: #2196f3; /* Blue */
+    color: white;
+    padding: 20px 0; 
 }
 
 header h1 {
@@ -30,44 +29,87 @@ nav ul {
 }
 
 nav ul li {
-    margin-left: 20px;
+    margin-left: 30px; 
 }
 
 nav ul li a {
-    color: #fff;
+    color: white;
     text-decoration: none;
     font-weight: bold;
 }
 
-section {
-    padding: 20px;
-}
-
-section#home {
-    background-color: #f4f4f4;
+/* Hero Section */
+#hero {
+    background-color: #f44336; /* Red */
+    color: white;
     text-align: center;
+    padding: 60px 0; 
 }
 
-section#products {
-    background-color: #e2e2e2;
-}
-
-section#products .product {
+#hero h2 {
+    font-size: 36px; 
     margin-bottom: 20px;
 }
 
-section#contact {
-    background-color: #f4f4f4;
+#hero p {
+    font-size: 18px;
+    margin-bottom: 30px;
+}
+
+.cta-button {
+    background-color: #ffd54f; /* Yellow */
+    color: black;
+    padding: 12px 20px;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+}
+
+/* Products Section */
+#products {
+    background-color: #f0f0f0; 
+    padding: 40px 0; 
+}
+
+#products h2 {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 20px;
+}
+
+.product {
+    text-align: center;
+}
+
+.product img {
+    max-width: 100%;
+    height: auto;
+    margin-bottom: 10px;
+}
+
+.product-button {
+    background-color: #2196f3; /* Blue */
+    color: white;
+    padding: 8px 15px;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+/* Contact Section */
+#contact {
+    background-color: #fff3e0; 
+    padding: 40px 0; 
     text-align: center;
 }
 
 footer {
-    background-color: #333;
-    color: #fff;
+    background-color: #ffd54f; /* Yellow */
+    color: black;
     text-align: center;
-    padding: 10px 0;
-}
-
-footer .container {
-    padding: 0 20px;
+    padding: 20px 0; 
 }
