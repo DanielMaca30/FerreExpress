@@ -38,8 +38,8 @@ body, html {
 }
 
 .background {
-    background-image: url('Imagenes/Banner_Mesa\ de\ trabajo\ 1.png'); 
-    background-size: 100%; 
+    background-image: url('Imagenes/Banner.png'); 
+    background-size: contain; 
     background-repeat: no-repeat;
     background-position: right center; 
 
