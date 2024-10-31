@@ -38,18 +38,18 @@ body, html {
 }
 
 .background {
-    background-image: url('Imagenes/Banner.png'); 
-    background-size: contain; 
+    background-image: url('Imagenes/Banner_Mesa\ de\ trabajo\ 1.png'); 
+    background-size: cover; /* Cambiado a cover */
     background-repeat: no-repeat;
-    background-position: right center; 
+    background-position: right center;
 
-   
     display: flex;
     align-items: center; 
     padding-top: 200px; 
     padding-left: 20px; 
     padding-bottom: 200px;
 }
+
 
 .form-container {
     background-color: rgba(105, 105, 105, 0.904); 
