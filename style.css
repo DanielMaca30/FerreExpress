@@ -29,7 +29,7 @@ body, html {
     padding: 0;
     display: flex;
     gap: 20px;
-    padding-left: 30px; /* Agregar padding a la izquierda para centrarlos más */
+    margin-right: 50px;
 }
 
 .container_header nav ul li a {
@@ -38,24 +38,27 @@ body, html {
 }
 
 .background {
-    background-image: url('Imagenes/Banner.png'); 
-    background-size: contain; 
+    background-image: url('Imagenes/Banner_Mesa\ de\ trabajo\ 1.png'); 
+    background-size: 100%; 
     background-repeat: no-repeat;
     background-position: right center; 
-    height: 60vh; 
+
+   
     display: flex;
     align-items: center; 
-    padding-top: 80px; 
+    padding-top: 200px; 
     padding-left: 20px; 
+    padding-bottom: 200px;
 }
 
 .form-container {
-    background-color: rgba(128, 128, 128, 0.5); 
+    background-color: rgba(105, 105, 105, 0.904); 
     padding: 20px 20px; 
     border-radius: 10px;
     width: 380px; 
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     margin-top: 20px;
+    margin-left: 100px;
 }
 
 .form-container .form h3 {
@@ -71,7 +74,28 @@ body, html {
     border: 1px solid #ccc;
     box-sizing: border-box;
 }
-
+.titulo{
+    margin-left: 500px;
+    text-align: right;
+    margin-right: 100px;
+    font-weight: 1000;
+}
+.titulo h1{
+    font-size: 75px;
+    margin-bottom: 1px;
+    color: white;
+    
+    
+}
+.titulo p{
+    margin-top: 1px;
+    font-size: 50px;
+    color: white;
+}
+.titulo strong{
+    color:#F5CF65;
+    font-style: italic;
+}
 /* Efecto hover para el botón */
 .primary-button {
     width: 100%;
@@ -86,8 +110,8 @@ body, html {
 }
 
 .primary-button:hover {
-    background-color: transparent; /* Se vuelve transparente */
-    color: #333; /* Cambia el color del texto al color del fondo */
+    background-color: white; /* Se vuelve transparente */
+    color: black; /* Cambia el color del texto al color del fondo */
     border: 1px solid #333; /* Añadir un borde cuando es transparente */
     opacity: 0.8; /* Ligera transparencia */
 }
