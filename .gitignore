@@ -1,0 +1,12 @@
+# Node
+node_modules/
+
+# Builds
+dist/
+
+# MySQL local data
+mysql_data/
+
+# Env files
+.env
+.env.*

@@ -1,0 +1,53 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: ferreexpress_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ferreexpress
+      MYSQL_USER: ferreuser
+      MYSQL_PASSWORD: ferrepass
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+  adminer:
+    image: adminer
+    container_name: ferreexpress_adminer
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+
+  backend:
+    build:
+      context: ../backend-node
+      dockerfile: Dockerfile
+    container_name: ferreexpress_backend
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - ../backend-node/.env   # 👈 leerá el mismo .env que usas en local
+    environment:
+      DB_HOST: db              # 👈 SOBREESCRIBIMOS el host
+      DB_PORT: 3306
+    ports:
+      - "3000:3000"
+
+
+  frontend:
+    build:
+      context: ../frontend        # 👈 también subimos un nivel
+      dockerfile: Dockerfile
+    container_name: ferreexpress_frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    # environment:
+    #   VITE_API_BASE_URL: "http://localhost:3000"
