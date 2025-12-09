@@ -5,7 +5,7 @@ const { sendMail } = require("../utils/mailer");
 /**
  * ✅ Pasarela DEMO para checkout:
  * - No toca la base de datos.
- * - Aplica la misma lógica: último dígito PAR => aprobado, IMPAR => rechazado.
+ * - Aplica la lógica: último dígito PAR => aprobado, IMPAR => rechazado.
  * - Si rechaza, devolvemos 200 con {aprobado:false} para que el front lo maneje sin caer en catch.
  */
 const simularPago = async (req, res) => {

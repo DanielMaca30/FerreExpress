@@ -5,6 +5,11 @@ const { logAuditoria } = require("../utils/auditoria");
 
 //Config IVA 
 const IVA_RATE = 0.19;
+
+//Calculo para no se que...
+const round2 = (value) =>
+  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
 // centralizar datos de la empresa para el PDF
 const COMPANY_INFO = {
   nombre: "FerreExpress S.A.S.",
@@ -13,10 +18,6 @@ const COMPANY_INFO = {
   telefono: "+57 (302) 804 3116", 
   email: "expressraquel@gmail.com", 
 };
-
-const round2 = (value) =>
-  Math.round((Number(value) + Number.EPSILON) * 100) / 100;
-
 
 
 // Crear cotización (solo CONTRATISTA/EMPRESA)
@@ -822,12 +823,4 @@ const exportarCotizacionPDF = async (req, res) => {
   }
 };
 
-
-
-module.exports = {
-  crearCotizacion,
-  listarCotizaciones,
-  detalleCotizacion,
-  cambiarEstadoCotizacion,
-  exportarCotizacionPDF,
-};
+module.exports = {crearCotizacion, listarCotizaciones, detalleCotizacion, cambiarEstadoCotizacion, exportarCotizacionPDF};

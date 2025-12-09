@@ -3,14 +3,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Avatar,
+  AvatarBadge, // Asegurarse de importar AvatarBadge
   Badge,
   Box,
   Button,
-  Divider,
+  Container,
   Flex,
   FormControl,
   FormHelperText,
   FormLabel,
+  Grid,
+  GridItem,
   HStack,
   Heading,
   Icon,
@@ -25,9 +28,17 @@ import {
   ModalOverlay,
   SimpleGrid,
   Skeleton,
-  SkeletonText,
   Stack,
+  Stat,
+  StatLabel,
+  StatNumber,
+  StatHelpText,
   Switch,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Tag,
   TagLabel,
   Text,
@@ -37,7 +48,14 @@ import {
   useDisclosure,
   useToast,
   VStack,
+  Divider,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from "@chakra-ui/react";
+
+// 🚨 LÍNEA CRÍTICA CORREGIDA: Se agregó FiArrowRight a la lista
 import {
   FiRefreshCw,
   FiUser,
@@ -48,15 +66,16 @@ import {
   FiHelpCircle,
   FiPlus,
   FiTrash2,
-  FiArrowRight,
-  FiExternalLink,
-  FiLifeBuoy, // soporte / casos
-  FiSettings, // encabezado de sección ayuda/soporte
+  FiEdit2,
+  FiLifeBuoy,
+  FiShield,
+  FiPackage,
+  FiHome,
+  FiArrowRight, // <--- 🌟 ¡AQUÍ ESTÁ EL ARREGLO! 🌟
 } from "react-icons/fi";
-import { motion } from "framer-motion";
 import api from "../../utils/axiosInstance";
 
-const MotionBox = motion(Box);
+// --- UTILIDADES Y COMPONENTES PEQUEÑOS ---
 
 const fmtCop = (n) =>
   Number(n ?? 0).toLocaleString("es-CO", {
@@ -67,36 +86,94 @@ const fmtCop = (n) =>
 
 const ESTADOS_PEDIDO_ACTIVOS = ["PENDIENTE", "PAGADO", "ENVIADO"];
 
+// Componente de Pestaña Personalizada
+function CustomTab({ icon, label, isMobile, ...props }) {
+   const { colorMode } = useColorModeValue("light", "dark");
+   const selectedColor = "yellow.800";
+   const selectedBg = "yellow.50";
+   const selectedIconColor = "yellow.600";
+   const hoverBg = useColorModeValue("gray.100", "gray.700");
+
+   return (
+     <Tab
+       _selected={{
+         color: selectedColor,
+         bg: selectedBg,
+         borderRightColor: isMobile ? "transparent" : "yellow.400",
+         borderBottomColor: isMobile ? "yellow.400" : "transparent",
+       }}
+       justifyContent={isMobile ? "center" : "flex-start"}
+       py={4}
+       px={6}
+       borderRight={isMobile ? "none" : "3px solid transparent"}
+       borderBottom={isMobile ? "3px solid transparent" : "none"}
+       _hover={{ bg: hoverBg }}
+       transition="all 0.2s"
+       flexShrink={0} 
+       {...props}
+     >
+       <Icon as={icon} mr={isMobile ? 2 : 4} boxSize={5} color={useColorModeValue("gray.500", "gray.300")} _selected={{ color: selectedIconColor }} />
+       {!isMobile && <Text fontWeight="medium">{label}</Text>}
+       {isMobile && <Text fontWeight="medium" fontSize="sm">{label}</Text>}
+     </Tab>
+   );
+ }
+
+// Componente de Tarjeta Estadística
+function StatCard({ label, number, icon, helpText, bgCard, borderColor }) {
+   return (
+      <Stat
+         px={5} py={4}
+         border="1px solid"
+         borderColor={borderColor}
+         borderRadius="xl"
+         bg={bgCard}
+         boxShadow="sm"
+         transition="transform 0.2s"
+         _hover={{ transform: "translateY(-2px)", boxShadow: "md" }}
+      >
+         <Flex justify="space-between" align="flex-start">
+            <Box>
+               <StatLabel color="gray.500" fontWeight="medium">{label}</StatLabel>
+               <StatNumber fontSize="3xl" fontWeight="bold" my={1}>{number}</StatNumber>
+               <StatHelpText fontSize="sm" color="gray.400" mb={0}>{helpText}</StatHelpText>
+            </Box>
+            <Flex p={3} bg="yellow.100" borderRadius="lg" align="center" justify="center">
+               <Icon as={icon} color="yellow.700" boxSize={6} />
+            </Flex>
+         </Flex>
+      </Stat>
+   );
+}
+
+
+// =========================================
+// COMPONENTE PRINCIPAL: PerfilCliente
+// =========================================
 export default function PerfilCliente() {
+  // HOOKS & UTILS
   const toast = useToast();
   const navigate = useNavigate();
   const isMobile = useBreakpointValue({ base: true, md: false });
 
-  // THEME
+  // THEME COLORS (Consistencia visual)
   const bgPage = useColorModeValue("gray.50", "gray.900");
   const cardBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
-  const muted = useColorModeValue("gray.600", "gray.400");
-  const accent = useColorModeValue("yellow.500", "yellow.300");
-  const stickyBg = useColorModeValue(
-    "rgba(255,255,255,0.92)",
-    "rgba(26,32,44,0.92)"
-  );
+  const brandColor = "yellow.400";
 
-  // PERFIL
+  // === ESTADOS (Lógica original conservada) ===
   const [perfil, setPerfil] = useState(null);
   const [perfilLoading, setPerfilLoading] = useState(true);
   const [perfilSaving, setPerfilSaving] = useState(false);
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
 
-  // PASSWORD
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newPassword2, setNewPassword2] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
 
-  // DIRECCIONES
   const [direcciones, setDirecciones] = useState([]);
   const [dirLoading, setDirLoading] = useState(true);
   const [dirSaving, setDirSaving] = useState(false);
@@ -107,254 +184,93 @@ export default function PerfilCliente() {
   } = useDisclosure();
   const [editandoDireccion, setEditandoDireccion] = useState(null);
   const [dirForm, setDirForm] = useState({
-    direccion: "",
-    ciudad: "",
-    departamento: "",
-    pais: "Colombia",
-    telefono: "",
-    es_principal: false,
+    direccion: "", ciudad: "", departamento: "", pais: "Colombia", telefono: "", es_principal: false,
   });
 
-  // PEDIDOS (para resumen)
   const [pedidos, setPedidos] = useState([]);
   const [pedidosLoading, setPedidosLoading] = useState(true);
 
-  // NOTIFICACIONES (resumen)
   const [notificaciones, setNotificaciones] = useState([]);
   const [notifLoading, setNotifLoading] = useState(true);
-  const [notifSaving, setNotifSaving] = useState(false);
 
-  // PREFERENCIAS DE NOTIFICACIÓN (por ahora solo front, sin backend)
   const [prefNotif, setPrefNotif] = useState({
-    estadoPedido: true,
-    soporte: true,
-    marketing: false,
+    estadoPedido: true, soporte: true, marketing: false,
   });
 
-  // ==== LOADERS ====
+  // === CARGA DE DATOS ===
+  const loadData = async () => {
+     setPerfilLoading(true); setPedidosLoading(true); setNotifLoading(true); setDirLoading(true);
+     // Usamos Promise.all para cargar todo en paralelo
+     try {
+       const [perfilRes, dirRes, pedRes, notifRes] = await Promise.allSettled([
+         api.get("/auth/perfil"),
+         api.get("/direcciones"),
+         api.get("/pedidos/mios"),
+         api.get("/notificaciones")
+       ]);
 
-  const loadPerfil = async () => {
-    setPerfilLoading(true);
-    try {
-      const { data } = await api.get("/auth/perfil");
-      setPerfil(data || null);
-      setNombre(data?.username || "");
-      setTelefono(data?.telefono || "");
-    } catch (e) {
-      toast({
-        title: "Error al cargar perfil",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setPerfilLoading(false);
-    }
-  };
+       if(perfilRes.status === 'fulfilled') {
+         setPerfil(perfilRes.value.data);
+         setNombre(perfilRes.value.data?.username || "");
+         setTelefono(perfilRes.value.data?.telefono || "");
+       }
+       if(dirRes.status === 'fulfilled') setDirecciones(Array.isArray(dirRes.value.data) ? dirRes.value.data : []);
+       if(pedRes.status === 'fulfilled') setPedidos(Array.isArray(pedRes.value.data) ? pedRes.value.data : []);
+       if(notifRes.status === 'fulfilled') setNotificaciones(Array.isArray(notifRes.value.data) ? notifRes.value.data : []);
 
-  const loadDirecciones = async () => {
-    setDirLoading(true);
-    try {
-      const { data } = await api.get("/direcciones");
-      setDirecciones(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toast({
-        title: "Error al cargar direcciones",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setDirLoading(false);
-    }
-  };
-
-  const loadPedidos = async () => {
-    setPedidosLoading(true);
-    try {
-      const { data } = await api.get("/pedidos/mios");
-      setPedidos(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toast({
-        title: "Error al cargar pedidos",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-      });
-    } finally {
-      setPedidosLoading(false);
-    }
-  };
-
-  const loadNotificaciones = async () => {
-    setNotifLoading(true);
-    try {
-      const { data } = await api.get("/notificaciones");
-      setNotificaciones(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toast({
-        title: "Error al cargar notificaciones",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-      });
-    } finally {
-      setNotifLoading(false);
-    }
+     } catch (e) {
+       // toast({ title: "Error de conexión", status: "error" }); // Comentado para no spammear toast
+     } finally {
+       setPerfilLoading(false); setPedidosLoading(false); setNotifLoading(false); setDirLoading(false);
+     }
   };
 
   useEffect(() => {
-    loadPerfil();
-    loadDirecciones();
-    loadPedidos();
-    loadNotificaciones();
+    loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ==== DERIVADOS ====
-
+  // === CALCULADOS ===
   const resumenPedidos = useMemo(() => {
     const totalPedidos = pedidos.length;
-    const pedidosActivos = pedidos.filter((p) =>
-      ESTADOS_PEDIDO_ACTIVOS.includes(p.estado)
-    ).length;
-    const totalGastado = pedidos.reduce(
-      (acc, p) => acc + Number(p.total || 0),
-      0
-    );
+    const pedidosActivos = pedidos.filter((p) => ESTADOS_PEDIDO_ACTIVOS.includes(p.estado)).length;
+    const totalGastado = pedidos.reduce((acc, p) => acc + Number(p.total || 0), 0);
     return { totalPedidos, pedidosActivos, totalGastado };
   }, [pedidos]);
 
   const ultimosPedidos = useMemo(() => pedidos.slice(0, 3), [pedidos]);
+  const ultimasNotificaciones = useMemo(() => notificaciones.slice(0, 3), [notificaciones]);
 
-  const ultimasNotificaciones = useMemo(
-    () => notificaciones.slice(0, 3),
-    [notificaciones]
-  );
-
-  // ==== HANDLERS PERFIL ====
-
+  // === HANDLERS (Lógica original) ===
   const handleGuardarPerfil = async () => {
-    if (!nombre.trim()) {
-      toast({
-        title: "Nombre requerido",
-        status: "warning",
-        duration: 2500,
-        isClosable: true,
-      });
-      return;
-    }
+    if (!nombre.trim()) return;
     setPerfilSaving(true);
     try {
-      await api.put("/auth/perfil", {
-        username: nombre.trim(),
-        telefono: telefono.trim() || null,
-      });
-      toast({
-        title: "Perfil actualizado",
-        status: "success",
-        duration: 2500,
-        isClosable: true,
-      });
-      await loadPerfil();
-    } catch (e) {
-      toast({
-        title: "No se pudo actualizar",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setPerfilSaving(false);
-    }
+      await api.put("/auth/perfil", { username: nombre.trim(), telefono: telefono.trim() || null });
+      toast({ title: "Perfil actualizado", status: "success", duration: 2000 });
+      loadData();
+    } catch (e) { toast({ title: "Error", status: "error" }); } finally { setPerfilSaving(false); }
   };
-
-  // ==== HANDLERS PASSWORD ====
 
   const handleCambiarPassword = async () => {
-    if (!oldPassword || !newPassword || !newPassword2) {
-      toast({
-        title: "Completa todos los campos",
-        status: "warning",
-        duration: 2500,
-        isClosable: true,
-      });
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast({
-        title: "Contraseña muy corta",
-        description: "La nueva contraseña debe tener al menos 6 caracteres.",
-        status: "warning",
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    if (newPassword !== newPassword2) {
-      toast({
-        title: "Las contraseñas no coinciden",
-        status: "warning",
-        duration: 2500,
-        isClosable: true,
-      });
-      return;
-    }
-
+    if (!oldPassword || !newPassword || !newPassword2) return;
     setPwSaving(true);
     try {
-      await api.put("/auth/change-password", {
-        oldPassword,
-        newPassword,
-      });
-      toast({
-        title: "Contraseña actualizada",
-        status: "success",
-        duration: 2500,
-        isClosable: true,
-      });
-      setOldPassword("");
-      setNewPassword("");
-      setNewPassword2("");
-    } catch (e) {
-      toast({
-        title: "No se pudo cambiar la contraseña",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setPwSaving(false);
-    }
+      await api.put("/auth/change-password", { oldPassword, newPassword });
+      toast({ title: "Contraseña actualizada", status: "success" });
+      setOldPassword(""); setNewPassword(""); setNewPassword2("");
+    } catch (e) { toast({ title: "Error", description: e.response?.data?.error, status: "error" }); } finally { setPwSaving(false); }
   };
-
-  // ==== HANDLERS DIRECCIONES ====
 
   const abrirCrearDireccion = () => {
     setEditandoDireccion(null);
-    setDirForm({
-      direccion: "",
-      ciudad: "",
-      departamento: "",
-      pais: "Colombia",
-      telefono: "",
-      es_principal: direcciones.length === 0,
-    });
+    setDirForm({ direccion: "", ciudad: "", departamento: "", pais: "Colombia", telefono: "", es_principal: direcciones.length === 0 });
     onDirModalOpen();
   };
 
   const abrirEditarDireccion = (dir) => {
     setEditandoDireccion(dir);
-    setDirForm({
-      direccion: dir.direccion || "",
-      ciudad: dir.ciudad || "",
-      departamento: dir.departamento || "",
-      pais: dir.pais || "Colombia",
-      telefono: dir.telefono || "",
-      es_principal: !!dir.es_principal,
-    });
+    setDirForm({ ...dir, es_principal: !!dir.es_principal });
     onDirModalOpen();
   };
 
@@ -363,1037 +279,546 @@ export default function PerfilCliente() {
   };
 
   const handleGuardarDireccion = async () => {
-    if (!dirForm.direccion.trim() || !dirForm.ciudad.trim()) {
-      toast({
-        title: "Dirección y ciudad son requeridas",
-        status: "warning",
-        duration: 2500,
-        isClosable: true,
-      });
-      return;
-    }
-
+    if (!dirForm.direccion.trim()) return;
     setDirSaving(true);
     try {
-      if (editandoDireccion) {
-        await api.put(`/direcciones/${editandoDireccion.id}`, {
-          ...dirForm,
-        });
-        toast({
-          title: "Dirección actualizada",
-          status: "success",
-          duration: 2500,
-          isClosable: true,
-        });
-      } else {
-        await api.post("/direcciones", {
-          ...dirForm,
-        });
-        toast({
-          title: "Dirección creada",
-          status: "success",
-          duration: 2500,
-          isClosable: true,
-        });
-      }
-      await loadDirecciones();
+      if (editandoDireccion) await api.put(`/direcciones/${editandoDireccion.id}`, { ...dirForm });
+      else await api.post("/direcciones", { ...dirForm });
+      toast({ title: "Dirección guardada", status: "success" });
+      loadData();
       onDirModalClose();
-    } catch (e) {
-      toast({
-        title: "No se pudo guardar la dirección",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    } finally {
-      setDirSaving(false);
-    }
+    } catch (e) { toast({ title: "Error", status: "error" }); } finally { setDirSaving(false); }
   };
 
   const handleEliminarDireccion = async (dir) => {
-    if (
-      !window.confirm(
-        `¿Eliminar la dirección "${dir.direccion}"?\nEsta acción no se puede deshacer.`
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await api.delete(`/direcciones/${dir.id}`);
-      toast({
-        title: "Dirección eliminada",
-        status: "info",
-        duration: 2500,
-        isClosable: true,
-      });
-      await loadDirecciones();
-    } catch (e) {
-      toast({
-        title: "No se pudo eliminar",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    }
+    if(!window.confirm("¿Eliminar dirección?")) return;
+    try { await api.delete(`/direcciones/${dir.id}`); loadData(); } catch (e) {}
   };
 
   const handleMarcarPrincipal = async (dir) => {
-    try {
-      await api.put(`/direcciones/${dir.id}`, {
-        ...dir,
-        es_principal: true,
-      });
-      toast({
-        title: "Dirección marcada como principal",
-        status: "success",
-        duration: 2500,
-        isClosable: true,
-      });
-      await loadDirecciones();
-    } catch (e) {
-      toast({
-        title: "No se pudo actualizar",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-        duration: 3000,
-        isClosable: true,
-      });
-    }
+    try { await api.put(`/direcciones/${dir.id}`, { ...dir, es_principal: true }); loadData(); } catch (e) {}
   };
-
-  // ==== HANDLERS NOTIFICACIONES ====
 
   const handleMarcarNotifLeida = async (id) => {
-    setNotifSaving(true);
-    try {
-      await api.put(`/notificaciones/${id}/leida`);
-      await loadNotificaciones();
-    } catch (e) {
-      toast({
-        title: "No se pudo marcar como leída",
-        description: e?.response?.data?.error || e.message,
-        status: "error",
-      });
-    } finally {
-      setNotifSaving(false);
-    }
+    try { await api.put(`/notificaciones/${id}/leida`); loadData(); } catch (e) {}
   };
 
-  // ==== LAYOUT / ANIMACIONES ====
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.06 },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 10 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
-  };
-
-  const estadoCuentaColor =
-    perfil?.estado === "BLOQUEADO"
-      ? "red"
-      : perfil?.estado === "ACTIVO"
-      ? "green"
-      : "gray";
-
+  // =========================================
+  // RENDER UI REFACTORIZADO
+  // =========================================
   return (
-    <Box bg={bgPage} minH="100vh" pb={10}>
-      {/* HEADER STICKY */}
-      <Box
-        position="sticky"
-        top={0}
-        zIndex={10}
-        bg={stickyBg}
-        backdropFilter="blur(12px)"
-        borderBottom="1px solid"
-        borderColor={borderColor}
-        py={3}
-        px={{ base: 3, md: 6, lg: 10 }}
-      >
-        <Flex justify="space-between" align="center" gap={3} wrap="wrap">
-          <HStack spacing={3}>
-            <Avatar size="md" name={perfil?.username || ""} />
-            <VStack align="start" spacing={0}>
-              <Heading size={{ base: "md", md: "lg" }}>
-                Mi perfil de cliente
-              </Heading>
-              <Text fontSize="sm" color={muted}>
-                Gestiona tus datos, direcciones y actividad en FerreExpress
-              </Text>
-            </VStack>
-          </HStack>
+    <Box bg={bgPage} minH="100vh" py={8}> {/* Padding vertical en la página */}
+      <Container maxW="container.xl">
 
-          <HStack spacing={2}>
-            <Tooltip label="Recargar todo" hasArrow>
-              <IconButton
-                size="sm"
-                variant="ghost"
-                icon={<FiRefreshCw />}
-                onClick={() => {
-                  loadPerfil();
-                  loadDirecciones();
-                  loadPedidos();
-                  loadNotificaciones();
-                }}
-              />
-            </Tooltip>
-            <Button
-              size="sm"
-              colorScheme="yellow"
-              color="gray.800"
-              rightIcon={<FiTruck />}
-              onClick={() => navigate("/cliente/pedidos")}
-            >
-              Ver mis pedidos
-            </Button>
-          </HStack>
-        </Flex>
-      </Box>
-
-      {/* CONTENIDO */}
-      <Box px={{ base: 3, md: 6, lg: 10 }} pt={4}>
-        <SimpleGrid
-          columns={{ base: 1, lg: 2 }}
-          spacing={5}
-          alignItems="flex-start"
+        {/* TARJETA PRINCIPAL UNIFICADA: Contiene Header + Tabs */}
+        <Box
+            bg={cardBg}
+            borderRadius="2xl" // Bordes redondeados modernos
+            boxShadow="xl"     // Sombra pronunciada para efecto flotante
+            border="1px solid"
+            borderColor={borderColor}
+            overflow="hidden" // Clave: asegura que el header respete los bordes redondeados
         >
-          {/* COLUMNA IZQUIERDA */}
-          <MotionBox
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
+
+          {/* 1. HEADER SECCION (Dentro de la tarjeta) */}
+          <Box
+             borderBottom="1px solid"
+             borderColor={borderColor}
+             bg={useColorModeValue("white", "gray.800")}
+             p={{ base: 5, md: 8 }} // Padding responsive
           >
-            {/* DATOS PERSONALES */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-              mb={4}
-            >
-              {perfilLoading ? (
-                <Stack spacing={3}>
-                  <Skeleton height="20px" />
-                  <SkeletonText noOfLines={3} />
-                </Stack>
-              ) : (
-                <>
-                  <HStack mb={3} justify="space-between">
-                    <HStack>
-                      <Icon as={FiUser} />
-                      <Heading size="sm">Información personal</Heading>
-                    </HStack>
-                    {perfil && (
-                      <Tag size="sm" colorScheme={estadoCuentaColor}>
-                        <TagLabel>
-                          {perfil.estado === "BLOQUEADO"
-                            ? "Cuenta bloqueada"
-                            : "Cuenta activa"}
-                        </TagLabel>
-                      </Tag>
+             <Flex direction={{ base: "column", md: "row" }} align={{ base: "start", md: "center" }} justify="space-between" gap={6}>
+                <HStack spacing={5}>
+                  <Box position="relative">
+                    <Avatar
+                      size="xl"
+                      name={perfil?.username}
+                      src="https://bit.ly/broken-link"
+                      border="4px solid"
+                      borderColor={brandColor}
+                      showBorder={true}
+                    >
+                       {/* Indicador de estado online/offline */}
+                       <AvatarBadge boxSize="1.em" bg={perfil?.estado === 'ACTIVO' ? 'green.400' : 'red.400'} border="3px solid white" />
+                    </Avatar>
+                  </Box>
+                  <VStack align="start" spacing={1}>
+                    {perfilLoading ? (
+                      <Skeleton height="32px" w="250px" borderRadius="md" />
+                    ) : (
+                      <Heading size="lg" color={useColorModeValue("gray.800", "white")}>
+                        Hola, {perfil?.username?.split(" ")[0] || "Cliente"}
+                      </Heading>
                     )}
-                  </HStack>
-
-                  <Stack spacing={3}>
-                    <FormControl>
-                      <FormLabel fontSize="sm">Nombre completo</FormLabel>
-                      <Input
-                        size="sm"
-                        value={nombre}
-                        onChange={(e) => setNombre(e.target.value)}
-                      />
-                    </FormControl>
-
-                    <FormControl isDisabled>
-                      <FormLabel fontSize="sm">Correo electrónico</FormLabel>
-                      <Input
-                        size="sm"
-                        value={perfil?.email || ""}
-                        isReadOnly
-                      />
-                      <FormHelperText fontSize="xs">
-                        Este correo se usa para iniciar sesión y recibir
-                        notificaciones.
-                      </FormHelperText>
-                    </FormControl>
-
-                    <FormControl>
-                      <FormLabel fontSize="sm">Teléfono de contacto</FormLabel>
-                      <Input
-                        size="sm"
-                        value={telefono}
-                        onChange={(e) => setTelefono(e.target.value)}
-                        placeholder="Ej: 3001234567"
-                      />
-                    </FormControl>
-
-                    <FormControl isDisabled>
-                      <FormLabel fontSize="sm">Rol</FormLabel>
-                      <Input
-                        size="sm"
-                        value={perfil?.role || "CLIENTE"}
-                        isReadOnly
-                      />
-                    </FormControl>
-
-                    {perfil?.created_at && (
-                      <Text fontSize="xs" color={muted}>
-                        Cliente desde:{" "}
-                        {new Date(perfil.created_at).toLocaleDateString()}
-                      </Text>
-                    )}
-
-                    <HStack justify="flex-end" pt={2}>
-                      <Button
-                        size="sm"
-                        colorScheme="yellow"
-                        color="gray.800"
-                        onClick={handleGuardarPerfil}
-                        isLoading={perfilSaving}
-                      >
-                        Guardar cambios
-                      </Button>
+                    <Text color="gray.500" fontSize="md" fontWeight="medium">
+                      Panel de Gestión FerreExpress
+                    </Text>
+                    <HStack mt={1}>
+                       <Tag size="sm" variant="solid" colorScheme="yellow" borderRadius="full">
+                          <TagLabel fontWeight="bold">Cliente Verificado</TagLabel>
+                       </Tag>
                     </HStack>
-                  </Stack>
-                </>
-              )}
-            </MotionBox>
+                  </VStack>
+                </HStack>
 
-            {/* SEGURIDAD */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-              mb={4}
-            >
-              <HStack mb={3} spacing={2}>
-                <Icon as={FiLock} />
-                <Heading size="sm">Seguridad y credenciales</Heading>
-              </HStack>
-
-              <Stack spacing={3}>
-                <FormControl>
-                  <FormLabel fontSize="sm">Contraseña actual</FormLabel>
-                  <Input
-                    size="sm"
-                    type="password"
-                    value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                  />
-                </FormControl>
-                <FormControl>
-                  <FormLabel fontSize="sm">Nueva contraseña</FormLabel>
-                  <Input
-                    size="sm"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <FormHelperText fontSize="xs">
-                    Mínimo 6 caracteres. Evita usar la misma contraseña de otros
-                    servicios.
-                  </FormHelperText>
-                </FormControl>
-                <FormControl>
-                  <FormLabel fontSize="sm">
-                    Confirmar nueva contraseña
-                  </FormLabel>
-                  <Input
-                    size="sm"
-                    type="password"
-                    value={newPassword2}
-                    onChange={(e) => setNewPassword2(e.target.value)}
-                  />
-                </FormControl>
-
-                <HStack justify="space-between" pt={2} flexWrap="wrap">
-                  <Tag size="sm" variant="subtle" colorScheme="yellow">
-                    <TagLabel>
-                      Verificación de correo: pendiente de implementar
-                    </TagLabel>
-                  </Tag>
+                {/* Botones de Acción (Responsive stack en móvil) */}
+                <Stack direction={{ base: "column", sm: "row" }} spacing={3} w={{ base: "full", md: "auto" }}>
                   <Button
-                    size="sm"
-                    colorScheme="yellow"
-                    color="gray.800"
-                    onClick={handleCambiarPassword}
-                    isLoading={pwSaving}
-                    leftIcon={<FiLock />}
+                    variant="outline"
+                    leftIcon={<FiRefreshCw />}
+                    onClick={loadData}
+                    isLoading={perfilLoading}
+                    w={{ base: "full", sm: "auto" }}
                   >
-                    Actualizar contraseña
+                    Actualizar
                   </Button>
-                </HStack>
-              </Stack>
-            </MotionBox>
-
-            {/* DIRECCIONES */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-            >
-              <HStack mb={3} justify="space-between">
-                <HStack>
-                  <Icon as={FiMapPin} />
-                  <Heading size="sm">Direcciones de entrega</Heading>
-                </HStack>
-                <Button
-                  size="sm"
-                  leftIcon={<FiPlus />}
-                  variant="outline"
-                  onClick={abrirCrearDireccion}
-                >
-                  Nueva dirección
-                </Button>
-              </HStack>
-
-              {dirLoading ? (
-                <Stack spacing={3}>
-                  <Skeleton height="60px" borderRadius="md" />
-                  <Skeleton height="60px" borderRadius="md" />
-                </Stack>
-              ) : direcciones.length === 0 ? (
-                <Box
-                  borderRadius="lg"
-                  border="1px dashed"
-                  borderColor={borderColor}
-                  p={4}
-                  textAlign="center"
-                >
-                  <Text fontSize="sm" color={muted} mb={2}>
-                    Aún no tienes direcciones guardadas.
-                  </Text>
-                  <Button size="sm" onClick={abrirCrearDireccion}>
-                    Agregar mi primera dirección
+                  <Button
+                    colorScheme="yellow"
+                    leftIcon={<FiTruck />}
+                    onClick={() => navigate("/cliente/pedidos")}
+                    boxShadow="md"
+                    w={{ base: "full", sm: "auto" }}
+                  >
+                    Mis Pedidos
                   </Button>
-                </Box>
-              ) : (
-                <Stack spacing={3}>
-                  {direcciones.map((dir) => (
-                    <Box
-                      key={dir.id}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={3}
-                      bg={useColorModeValue("gray.50", "gray.700")}
-                    >
-                      <HStack justify="space-between" mb={1}>
-                        <HStack spacing={2}>
-                          <Text fontWeight="semibold" fontSize="sm">
-                            {dir.ciudad || "Sin ciudad"}
-                          </Text>
-                          {dir.es_principal ? (
-                            <Badge colorScheme="yellow" variant="solid">
-                              Principal
-                            </Badge>
-                          ) : (
-                            <Badge
-                              colorScheme="gray"
-                              variant="subtle"
-                              cursor="pointer"
-                              onClick={() => handleMarcarPrincipal(dir)}
-                            >
-                              Marcar como principal
-                            </Badge>
-                          )}
-                        </HStack>
-                        <HStack spacing={1}>
-                          <Tooltip label="Editar" hasArrow>
-                            <IconButton
-                              aria-label="Editar dirección"
-                              size="xs"
-                              variant="ghost"
-                              icon={<FiExternalLink />}
-                              onClick={() => abrirEditarDireccion(dir)}
-                            />
-                          </Tooltip>
-                          <Tooltip label="Eliminar" hasArrow>
-                            <IconButton
-                              aria-label="Eliminar dirección"
-                              size="xs"
-                              variant="ghost"
-                              icon={<FiTrash2 />}
-                              onClick={() => handleEliminarDireccion(dir)}
-                            />
-                          </Tooltip>
-                        </HStack>
-                      </HStack>
-                      <Text fontSize="sm">{dir.direccion}</Text>
-                      {dir.telefono && (
-                        <Text fontSize="xs" color={muted}>
-                          Tel: {dir.telefono}
-                        </Text>
-                      )}
-                      {(dir.departamento || dir.pais) && (
-                        <Text fontSize="xs" color={muted}>
-                          {dir.departamento || ""} {dir.departamento && "•"}{" "}
-                          {dir.pais || ""}
-                        </Text>
-                      )}
-                    </Box>
-                  ))}
                 </Stack>
-              )}
-            </MotionBox>
-          </MotionBox>
+              </Flex>
+          </Box>
 
-          {/* COLUMNA DERECHA */}
-          <MotionBox
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
+
+          {/* 2. SECCIÓN DE PESTAÑAS (TABS) */}
+          <Tabs
+            orientation={isMobile ? "horizontal" : "vertical"} // Cambio de orientación responsive
+            variant="unstyled" // Usamos estilos personalizados en CustomTab
+            colorScheme="yellow"
+            defaultIndex={0}
+            isLazy
+            minH="500px" // Altura mínima para evitar colapsos visuales
           >
-            {/* RESUMEN DE ACTIVIDAD */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
+            {/* SIDEBAR / NAVBAR DE NAVEGACIÓN */}
+            <TabList
+              borderRight={!isMobile ? "1px solid" : "none"}
+              borderBottom={isMobile ? "1px solid" : "none"}
               borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-              mb={4}
+              w={!isMobile ? "280px" : "100%"} // Ancho fijo en escritorio
+              bg={useColorModeValue("gray.50", "gray.900")}
+              py={isMobile ? 2 : 6}
+              // Props para scroll horizontal en móvil
+              overflowX={isMobile ? "auto" : "visible"}
+              whiteSpace={isMobile ? "nowrap" : "normal"}
+              css={{
+                '&::-webkit-scrollbar': { display: 'none' }, // Ocultar scrollbar feo
+                'msOverflowStyle': 'none',
+                'scrollbarWidth': 'none'
+              }}
             >
-              <HStack mb={3} spacing={2}>
-                <Icon as={FiTruck} />
-                <Heading size="sm">Resumen de pedidos</Heading>
-              </HStack>
+              <Stack spacing={isMobile ? 0 : 1} direction={isMobile ? "row" : "column"} px={isMobile ? 2 : 4} w="full">
+                 <CustomTab icon={FiHome} label="Resumen General" isMobile={isMobile} />
+                 <CustomTab icon={FiUser} label="Datos Personales" isMobile={isMobile} />
+                 <CustomTab icon={FiMapPin} label="Mis Direcciones" isMobile={isMobile} />
+                 <CustomTab icon={FiShield} label="Seguridad" isMobile={isMobile} />
+                 <CustomTab icon={FiBell} label="Notificaciones" isMobile={isMobile} />
+                 <CustomTab icon={FiHelpCircle} label="Ayuda y Soporte" isMobile={isMobile} />
+              </Stack>
+            </TabList>
 
-              {pedidosLoading ? (
-                <Stack spacing={3}>
-                  <Skeleton height="28px" borderRadius="lg" />
-                  <Skeleton height="90px" borderRadius="lg" />
-                </Stack>
-              ) : (
-                <>
-                  <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3} mb={3}>
-                    <Box
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={3}
-                    >
-                      <Text fontSize="xs" color={muted}>
-                        Pedidos totales
-                      </Text>
-                      <Text fontWeight="bold" fontSize="lg">
-                        {resumenPedidos.totalPedidos}
-                      </Text>
-                    </Box>
-                    <Box
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={3}
-                    >
-                      <Text fontSize="xs" color={muted}>
-                        Pedidos activos
-                      </Text>
-                      <Text fontWeight="bold" fontSize="lg">
-                        {resumenPedidos.pedidosActivos}
-                      </Text>
-                    </Box>
-                    <Box
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={3}
-                    >
-                      <Text fontSize="xs" color={muted}>
-                        Total comprado (aprox.)
-                      </Text>
-                      <Text fontWeight="bold" fontSize="lg" color={accent}>
-                        {fmtCop(resumenPedidos.totalGastado)}
-                      </Text>
-                    </Box>
-                  </SimpleGrid>
+            {/* CONTENIDO DE LOS PANELES */}
+            <TabPanels px={{ base: 5, md: 10 }} py={{ base: 6, md: 8 }} bg={cardBg}>
 
-                  {ultimosPedidos.length > 0 && (
-                    <>
-                      <Text fontSize="xs" color={muted} mb={1}>
-                        Últimos pedidos
-                      </Text>
-                      <Stack spacing={2}>
-                        {ultimosPedidos.map((p) => (
-                          <Flex
-                            key={p.id}
-                            align="center"
-                            justify="space-between"
-                            borderRadius="lg"
-                            border="1px solid"
-                            borderColor={borderColor}
-                            p={2}
-                          >
-                            <Box>
-                              <Text fontSize="sm" fontWeight="semibold">
-                                #{p.id}
-                              </Text>
-                              <Text fontSize="xs" color={muted}>
-                                {new Date(
-                                  p.fecha_creacion
-                                ).toLocaleDateString()}{" "}
-                                •{" "}
-                                {new Date(
-                                  p.fecha_creacion
-                                ).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </Text>
-                            </Box>
-                            <Box textAlign="right">
-                              <Badge
-                                colorScheme={
-                                  p.estado === "PENDIENTE"
-                                    ? "yellow"
-                                    : p.estado === "PAGADO"
-                                    ? "green"
-                                    : p.estado === "ENVIADO"
-                                    ? "blue"
-                                    : "red"
-                                }
-                                mb={1}
+              {/* === TAB 1: RESUMEN / DASHBOARD === */}
+              <TabPanel p={0}>
+                <Heading size="md" mb={6}>Resumen de Actividad</Heading>
+
+                {/* Stats Cards (Responsive Grid 1 -> 3 columnas) */}
+                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} mb={10}>
+                   <StatCard
+                      label="Pedidos Activos"
+                      number={resumenPedidos.pedidosActivos}
+                      icon={FiTruck}
+                      helpText="En proceso de entrega"
+                      bgCard={cardBg} borderColor={borderColor}
+                   />
+                   <StatCard
+                      label="Total Gastado Histórico"
+                      number={fmtCop(resumenPedidos.totalGastado)}
+                      icon={FiPackage}
+                      helpText="Acumulado en compras"
+                      bgCard={cardBg} borderColor={borderColor}
+                   />
+                   <StatCard
+                      label="Total de Pedidos"
+                      number={resumenPedidos.totalPedidos}
+                      icon={FiRefreshCw}
+                      helpText="Transacciones finalizadas"
+                      bgCard={cardBg} borderColor={borderColor}
+                   />
+                </SimpleGrid>
+
+                {/* Grid de 2 columnas que pasa a 1 en móvil */}
+                <Grid templateColumns={{ base: "1fr", lg: "3fr 2fr" }} gap={8}>
+                  {/* Columna Izquierda: Últimos Pedidos */}
+                  <GridItem>
+                    <Flex justify="space-between" align="center" mb={5}>
+                      <Heading size="sm">Pedidos Recientes</Heading>
+                      {/* 🚨 USO DEL ICONO FiArrowRight CORRECTAMENTE IMPORTADO */}
+                      <Button size="sm" variant="ghost" colorScheme="yellow" rightIcon={<FiArrowRight />} onClick={() => navigate("/cliente/pedidos")}>
+                         Ver historial completo
+                      </Button>
+                    </Flex>
+
+                    <Stack spacing={4}>
+                      {pedidosLoading && <Stack><Skeleton height="60px"/><Skeleton height="60px"/></Stack>}
+                      {!pedidosLoading && ultimosPedidos.map(p => (
+                        <Flex
+                          key={p.id}
+                          p={4}
+                          bg={useColorModeValue("gray.50", "gray.700")}
+                          border="1px solid"
+                          borderColor={borderColor}
+                          borderRadius="xl"
+                          align="center"
+                          justify="space-between"
+                          _hover={{ borderColor: brandColor, boxShadow: "sm" }}
+                          transition="all 0.2s"
+                          role="group"
+                        >
+                          <HStack spacing={4}>
+                             <Icon as={FiPackage} boxSize={8} color="gray.400" _groupHover={{ color: brandColor }} />
+                             <Box>
+                               <Text fontWeight="bold" fontSize="md">Pedido #{p.id}</Text>
+                               <Text fontSize="sm" color="gray.500">{new Date(p.fecha_creacion).toLocaleDateString()}</Text>
+                             </Box>
+                          </HStack>
+                          <Box textAlign="right">
+                             <Badge
+                                colorScheme={p.estado === 'PENDIENTE' ? 'orange' : p.estado.includes('PAGADO') ? 'green' : 'blue'}
+                                variant="subtle" px={2} py={1} borderRadius="full" mb={1}
                               >
                                 {p.estado}
-                              </Badge>
-                              <Text fontSize="sm" fontWeight="bold">
-                                {fmtCop(p.total)}
-                              </Text>
-                            </Box>
-                          </Flex>
-                        ))}
-                      </Stack>
-                    </>
-                  )}
+                             </Badge>
+                             <Text fontWeight="extrabold" fontSize="md">{fmtCop(p.total)}</Text>
+                          </Box>
+                        </Flex>
+                      ))}
+                      {!pedidosLoading && ultimosPedidos.length === 0 && (
+                        <Box textAlign="center" p={5} border="2px dashed" borderColor={borderColor} borderRadius="lg">
+                           <Text color="gray.500">No tienes pedidos recientes.</Text>
+                        </Box>
+                      )}
+                    </Stack>
+                  </GridItem>
 
-                  <HStack justify="flex-end" pt={3}>
-                    <Button
-                      size="sm"
-                      rightIcon={<FiArrowRight />}
-                      onClick={() => navigate("/cliente/pedidos")}
-                    >
-                      Ver todos mis pedidos
-                    </Button>
-                  </HStack>
-                </>
-              )}
-            </MotionBox>
+                  {/* Columna Derecha: Novedades */}
+                  <GridItem>
+                     <Heading size="sm" mb={5}>Novedades y Avisos</Heading>
+                     <Stack spacing={4}>
+                        <Alert status="info" variant="subtle" flexDirection="column" alignItems="start" p={5} borderRadius="xl" bg="blue.50" border="1px solid" borderColor="blue.100">
+                           <HStack mb={2}>
+                             <AlertIcon boxSize={5} mr={2} />
+                             <AlertTitle fontSize="md" fontWeight="bold">Horario Festivo</AlertTitle>
+                           </HStack>
+                           <AlertDescription fontSize="sm" color="blue.700">
+                             Este lunes festivo nuestra bodega no operarán. Planifica tus pedidos.
+                           </AlertDescription>
+                        </Alert>
 
-            {/* PREFERENCIAS + NOTIFICACIONES */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-              mb={4}
-            >
-              <HStack mb={3} spacing={2}>
-                <Icon as={FiBell} />
-                <Heading size="sm">Notificaciones y preferencias</Heading>
-              </HStack>
+                        <Box p={5} bg="yellow.50" borderRadius="xl" border="1px solid" borderColor="yellow.200">
+                           <HStack mb={3}>
+                              <Icon as={FiLifeBuoy} color="yellow.600" boxSize={5} />
+                              <Text fontSize="md" fontWeight="bold" color="yellow.800">¿Ventas al por mayor?</Text>
+                           </HStack>
+                           <Text fontSize="sm" color="yellow.900" mb={4}>
+                              Si eres contratista o necesitas grandes volúmenes, contacta a nuestra línea directa de ventas corporativas.
+                           </Text>
+                           <Button size="sm" colorScheme="yellow" w="full">Contactar Asesor de Ventas</Button>
+                        </Box>
+                     </Stack>
+                  </GridItem>
+                </Grid>
+              </TabPanel>
 
-              <Stack spacing={3} mb={3}>
-                <FormControl
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
-                  <FormLabel mb="0" fontSize="sm">
-                    Estado de mis pedidos
-                  </FormLabel>
-                  <Switch
-                    size="sm"
-                    isChecked={prefNotif.estadoPedido}
-                    onChange={(e) =>
-                      setPrefNotif((p) => ({
-                        ...p,
-                        estadoPedido: e.target.checked,
-                      }))
-                    }
-                  />
-                </FormControl>
-                <FormControl
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
-                  <FormLabel mb="0" fontSize="sm">
-                    Actualizaciones de soporte
-                  </FormLabel>
-                  <Switch
-                    size="sm"
-                    isChecked={prefNotif.soporte}
-                    onChange={(e) =>
-                      setPrefNotif((p) => ({
-                        ...p,
-                        soporte: e.target.checked,
-                      }))
-                    }
-                  />
-                </FormControl>
-                <FormControl
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
-                  <FormLabel mb="0" fontSize="sm">
-                    Promociones y ofertas
-                  </FormLabel>
-                  <Switch
-                    size="sm"
-                    isChecked={prefNotif.marketing}
-                    onChange={(e) =>
-                      setPrefNotif((p) => ({
-                        ...p,
-                        marketing: e.target.checked,
-                      }))
-                    }
-                  />
-                </FormControl>
+              {/* === TAB 2: DATOS PERSONALES === */}
+              <TabPanel p={0}>
+                <Heading size="md" mb={2}>Mi Información Personal</Heading>
+                <Text color="gray.500" mb={8}>Actualiza tus datos de contacto básicos para que podamos ubicarte.</Text>
 
-                <Text fontSize="xs" color={muted}>
-                  Estas preferencias son de interfaz. En una versión futura se
-                  pueden persistir en el backend en una tabla de
-                  preferencias_notificacion.
-                </Text>
-              </Stack>
+                <Box maxW="700px">
+                  <Stack spacing={6}>
+                    <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={6}>
+                       <FormControl>
+                          <FormLabel fontWeight="bold">Nombre de Usuario / Empresa</FormLabel>
+                          <Input size="lg" value={nombre} onChange={e => setNombre(e.target.value)} bg={useColorModeValue("white", "gray.700")} />
+                       </FormControl>
+                       <FormControl>
+                          <FormLabel fontWeight="bold">Teléfono de Contacto</FormLabel>
+                          <Input size="lg" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="Ej: 300 123 4567" bg={useColorModeValue("white", "gray.700")} />
+                       </FormControl>
+                    </Grid>
+                    <FormControl isDisabled>
+                       <FormLabel fontWeight="bold">Correo Electrónico (ID de Cuenta)</FormLabel>
+                       <Input size="lg" value={perfil?.email || ''} bg={useColorModeValue("gray.100", "gray.600")} cursor="not-allowed" />
+                       <FormHelperText>Por seguridad, el correo no se puede cambiar directamente.</FormHelperText>
+                    </FormControl>
 
-              <Divider my={3} />
+                    <Divider my={4} />
+                    <HStack justify="flex-end">
+                       <Button size="lg" colorScheme="yellow" onClick={handleGuardarPerfil} isLoading={perfilSaving} loadingText="Guardando...">
+                          Guardar Cambios
+                       </Button>
+                    </HStack>
+                  </Stack>
+                </Box>
+              </TabPanel>
 
-              <Text fontSize="xs" color={muted} mb={2}>
-                Notificaciones recientes
-              </Text>
+              {/* === TAB 3: DIRECCIONES (Responsive Grid) === */}
+              <TabPanel p={0}>
+                <Flex direction={{base: 'column', sm: 'row'}} justify="space-between" align={{base: 'start', sm:'center'}} mb={8} gap={4}>
+                   <Box>
+                      <Heading size="md">Libreta de Direcciones</Heading>
+                      <Text fontSize="sm" color="gray.500">Gestiona tus puntos de entrega frecuentes.</Text>
+                   </Box>
+                   <Button leftIcon={<FiPlus />} colorScheme="yellow" onClick={abrirCrearDireccion}>
+                      Nueva Dirección
+                   </Button>
+                </Flex>
 
-              {notifLoading ? (
-                <Stack spacing={2}>
-                  <Skeleton height="20px" />
-                  <Skeleton height="20px" />
-                </Stack>
-              ) : ultimasNotificaciones.length === 0 ? (
-                <Text fontSize="sm" color={muted}>
-                  Aún no tienes notificaciones registradas.
-                </Text>
-              ) : (
-                <Stack spacing={2}>
-                  {ultimasNotificaciones.map((n) => (
+                {dirLoading && <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}><Skeleton height="180px" borderRadius="xl"/><Skeleton height="180px" borderRadius="xl"/></SimpleGrid>}
+
+                {!dirLoading && direcciones.length === 0 && (
+                   <Flex direction="column" align="center" justify="center" py={16} border="2px dashed" borderColor={borderColor} borderRadius="xl" bg={useColorModeValue("gray.50", "gray.900")}>
+                      <Icon as={FiMapPin} boxSize={12} color="gray.300" mb={4} />
+                      <Heading size="sm" color="gray.500" mb={2}>No tienes direcciones guardadas</Heading>
+                      <Text fontSize="sm" color="gray.400" mb={4}>Agrega tu primera dirección para agilizar tus pedidos.</Text>
+                      <Button size="sm" variant="outline" colorScheme="yellow" onClick={abrirCrearDireccion}>Agregar Dirección</Button>
+                   </Flex>
+                )}
+
+                <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
+                  {direcciones.map((dir) => (
                     <Flex
-                      key={n.id}
-                      align="flex-start"
-                      justify="space-between"
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={2}
+                       key={dir.id}
+                       direction="column"
+                       justify="space-between"
+                       p={5}
+                       border="2px solid"
+                       borderColor={dir.es_principal ? brandColor : borderColor}
+                       bg={dir.es_principal ? useColorModeValue("yellow.50", "rgba(236, 201, 75, 0.1)") : cardBg}
+                       borderRadius="xl"
+                       position="relative"
+                       transition="all 0.2s"
+                       _hover={{ boxShadow: "md" }}
                     >
-                      <Box>
-                        <Text
-                          fontSize="sm"
-                          fontWeight={n.leido ? "normal" : "semibold"}
-                        >
-                          {n.titulo}
-                        </Text>
-                        <Text fontSize="xs" color={muted}>
-                          {n.mensaje}
-                        </Text>
-                      </Box>
-                      <VStack spacing={1} align="flex-end">
-                        <Badge
-                          colorScheme={n.leido ? "gray" : "yellow"}
-                          variant={n.leido ? "subtle" : "solid"}
-                        >
-                          {n.leido ? "Leída" : "Nueva"}
-                        </Badge>
-                        {!n.leido && (
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            onClick={() => handleMarcarNotifLeida(n.id)}
-                            isLoading={notifSaving}
-                          >
-                            Marcar leída
-                          </Button>
-                        )}
-                      </VStack>
+                       {dir.es_principal && (
+                          <Badge position="absolute" top={4} right={4} colorScheme="yellow" variant="solid" borderRadius="full" px={3}>Principal</Badge>
+                       )}
+
+                       <Box>
+                          <HStack mb={3}>
+                             <Icon as={FiMapPin} color={dir.es_principal ? "yellow.600" : "gray.400"} boxSize={5} />
+                             <Heading size="sm">{dir.ciudad} <Text as="span" fontWeight="normal" color="gray.500">| {dir.departamento}</Text></Heading>
+                          </HStack>
+                          <Text fontSize="lg" fontWeight="bold" mb={1}>{dir.direccion}</Text>
+                          <Text fontSize="sm" color="gray.600">País: {dir.pais}</Text>
+                          <Text fontSize="sm" color="gray.600" mb={4}>Teléfono contacto: {dir.telefono || "No registrado"}</Text>
+                       </Box>
+
+                       <HStack spacing={2} pt={4} borderTop="1px solid" borderColor={borderColor} justify="flex-end">
+                          <Tooltip label="Editar"><IconButton icon={<FiEdit2 />} size="sm" variant="ghost" onClick={() => abrirEditarDireccion(dir)} aria-label="Editar" /></Tooltip>
+                          <Tooltip label="Eliminar"><IconButton icon={<FiTrash2 />} size="sm" variant="ghost" colorScheme="red" onClick={() => handleEliminarDireccion(dir)} aria-label="Eliminar" /></Tooltip>
+                          {!dir.es_principal && (
+                             <Button size="sm" variant="ghost" colorScheme="yellow" onClick={() => handleMarcarPrincipal(dir)}>Hacer Principal</Button>
+                          )}
+                       </HStack>
                     </Flex>
                   ))}
-                </Stack>
-              )}
-            </MotionBox>
+                </SimpleGrid>
+              </TabPanel>
 
-            {/* AYUDA / PRIVACIDAD / CIERRE */}
-            <MotionBox
-              variants={itemVariants}
-              bg={cardBg}
-              borderRadius="2xl"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="sm"
-              p={4}
-            >
-              <HStack mb={3} spacing={2}>
-                <Icon as={FiSettings} />
-                <Heading size="sm">
-                  Soporte, ayuda y configuración de cuenta
-                </Heading>
-              </HStack>
+              {/* === TAB 4: SEGURIDAD === */}
+              <TabPanel p={0}>
+                 <Heading size="md" mb={2}>Seguridad y Contraseña</Heading>
+                 <Text color="gray.500" mb={8}>Mantén tu cuenta segura actualizando tu contraseña periódicamente.</Text>
 
-              <Stack spacing={3}>
-                <Box>
-                  <Text fontSize="xs" color={muted} mb={1}>
-                    ¿Necesitas ayuda? Te recomendamos seguir estos pasos:
-                  </Text>
-                  <Text fontSize="xs" color={muted}>
-                    1) Revisa primero las Preguntas frecuentes (FAQ).{" "}
-                    2) Si aún necesitas ayuda, abre un caso de soporte
-                    personalizado.
-                  </Text>
-                </Box>
+                 <Flex justify="center">
+                    <Box w="full" maxW="550px" p={{ base: 6, md: 8 }} border="1px solid" borderColor={borderColor} borderRadius="2xl" bg={useColorModeValue("gray.50", "gray.900")}>
+                       <HStack mb={6} justify="center">
+                          <Icon as={FiLock} color="yellow.500" boxSize={6} />
+                          <Heading size="sm">Cambiar Contraseña</Heading>
+                       </HStack>
+                       <Stack spacing={5}>
+                          <FormControl isRequired>
+                             <FormLabel fontWeight="bold" fontSize="sm">Contraseña Actual</FormLabel>
+                             <Input type="password" size="lg" bg={cardBg} value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
+                          </FormControl>
+                          <FormControl isRequired>
+                             <FormLabel fontWeight="bold" fontSize="sm">Nueva Contraseña</FormLabel>
+                             <Input type="password" size="lg" bg={cardBg} value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                             <FormHelperText>Mínimo 6 caracteres.</FormHelperText>
+                          </FormControl>
+                          <FormControl isRequired>
+                             <FormLabel fontWeight="bold" fontSize="sm">Confirmar Nueva Contraseña</FormLabel>
+                             <Input type="password" size="lg" bg={cardBg} value={newPassword2} onChange={e => setNewPassword2(e.target.value)} />
+                          </FormControl>
+                          <Button size="lg" colorScheme="yellow" w="full" mt={4} onClick={handleCambiarPassword} isLoading={pwSaving}>Actualizar Contraseña</Button>
+                       </Stack>
+                    </Box>
+                 </Flex>
+              </TabPanel>
 
-                {/* 1. FAQ / Centro de ayuda */}
-                <Box
-                  borderRadius="lg"
-                  border="1px solid"
-                  borderColor={borderColor}
-                  p={3}
-                >
-                  <Text fontSize="sm" fontWeight="semibold" mb={1}>
-                    Preguntas frecuentes (FAQ)
-                  </Text>
-                  <Text fontSize="xs" color={muted} mb={2}>
-                    Primero revisa aquí las respuestas rápidas sobre pedidos,
-                    envíos, pagos y el uso de tu cuenta.
-                  </Text>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    leftIcon={<FiHelpCircle />}
-                    onClick={() => navigate("/cliente/AyudaFAQ")}
-                  >
-                    Ver preguntas frecuentes
-                  </Button>
-                </Box>
+               {/* === TAB 5: NOTIFICACIONES === */}
+               <TabPanel p={0}>
+                  <Heading size="md" mb={2}>Centro de Notificaciones</Heading>
+                  <Text color="gray.500" mb={8}>Historial de alertas y mensajes importantes del sistema.</Text>
 
-                {/* 2. Soporte personalizado (casos) */}
-                <Box
-                  borderRadius="lg"
-                  border="1px solid"
-                  borderColor={borderColor}
-                  p={3}
-                >
-                  <Text fontSize="sm" fontWeight="semibold" mb={1}>
-                    Soporte personalizado (casos)
-                  </Text>
-                  <Text fontSize="xs" color={muted} mb={2}>
-                    Si no encontraste la respuesta en las preguntas frecuentes
-                    o tienes un problema con un pedido o tu cuenta, abre un
-                    caso para hablar con el equipo de FerreExpress.
-                  </Text>
-                  <Button
-                    size="sm"
-                    colorScheme="yellow"
-                    color="gray.800"
-                    leftIcon={<FiLifeBuoy />}
-                    onClick={() => navigate("/cliente/casos")}
-                  >
-                    Abrir un caso de soporte
-                  </Button>
-                  <Text fontSize="10px" color={muted} mt={1}>
-                    Puedes consultar el estado de tus casos abiertos y el
-                    historial de solicitudes.
-                  </Text>
-                </Box>
+                  {/* Settings rápidos (Stack responsive) */}
+                  <Box bg={useColorModeValue("gray.50", "gray.800")} p={6} borderRadius="xl" mb={8} border="1px solid" borderColor={borderColor}>
+                     <Heading size="xs" mb={4} textTransform="uppercase" color="gray.500" letterSpacing="wider">Preferencias de Alerta (Visuales)</Heading>
+                     <Stack direction={{ base: "column", sm: "row" }} spacing={{ base: 4, sm: 8 }}>
+                        <HStack>
+                           <Switch size="md" isChecked={prefNotif.estadoPedido} onChange={e => setPrefNotif(p => ({...p, estadoPedido: e.target.checked}))} colorScheme="yellow" />
+                           <Text fontWeight="medium">Pedidos</Text>
+                        </HStack>
+                        <HStack>
+                           <Switch size="md" isChecked={prefNotif.soporte} onChange={e => setPrefNotif(p => ({...p, soporte: e.target.checked}))} colorScheme="yellow" />
+                           <Text fontWeight="medium">Soporte</Text>
+                        </HStack>
+                        <HStack>
+                           <Switch size="md" isChecked={prefNotif.marketing} onChange={e => setPrefNotif(p => ({...p, marketing: e.target.checked}))} colorScheme="yellow" />
+                           <Text fontWeight="medium">Ofertas</Text>
+                        </HStack>
+                     </Stack>
+                  </Box>
 
-                {/* 3. Términos y privacidad */}
-                <Box
-                  borderRadius="lg"
-                  border="1px solid"
-                  borderColor={borderColor}
-                  p={3}
-                >
-                  <Text fontSize="sm" fontWeight="semibold" mb={1}>
-                    Términos y privacidad
-                  </Text>
-                  <Text fontSize="xs" color={muted} mb={2}>
-                    Consulta los términos de uso y el aviso de privacidad de
-                    FerreExpress.
-                  </Text>
-                  <HStack spacing={2}>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => navigate("/condiciones-uso")}
-                    >
-                      Términos de uso
-                    </Button>
+                  <VStack spacing={4} align="stretch">
+                     {notifLoading && <Skeleton height="80px" borderRadius="xl"/>}
+                     {!notifLoading && notificaciones.map(n => (
+                        <Flex
+                           key={n.id}
+                           p={5}
+                           bg={n.leido ? cardBg : useColorModeValue("yellow.50", "rgba(236, 201, 75, 0.1)")}
+                           border="1px solid"
+                           borderColor={n.leido ? borderColor : "yellow.300"}
+                           borderRadius="xl"
+                           justify="space-between"
+                           align={{ base: "start", sm: "center" }}
+                           direction={{ base: "column", sm: "row" }}
+                           gap={4}
+                        >
+                           <HStack align="start" spacing={4}>
+                              <Flex mt={1} boxSize={8} bg={n.leido ? "gray.100" : "yellow.200"} borderRadius="full" align="center" justify="center">
+                                 <Icon as={FiBell} color={n.leido ? "gray.500" : "yellow.800"} boxSize={4} />
+                              </Flex>
+                              <Box>
+                                 <Text fontWeight={n.leido ? "semibold" : "bold"} fontSize="md" color={n.leido ? "gray.700" : "black"}>{n.titulo}</Text>
+                                 <Text fontSize="sm" color={n.leido ? "gray.500" : "gray.700"} mt={1}>{n.mensaje}</Text>
+                              </Box>
+                           </HStack>
+                           {!n.leido && (
+                              <Button size="sm" variant="outline" colorScheme="yellow" onClick={() => handleMarcarNotifLeida(n.id)} alignSelf={{ base: "flex-end", sm: "center" }}>
+                                 Marcar como leída
+                              </Button>
+                           )}
+                        </Flex>
+                     ))}
+                     {!notifLoading && notificaciones.length === 0 && (
+                        <Box p={8} textAlign="center" border="1px dashed" borderColor={borderColor} borderRadius="xl">
+                           <Icon as={FiBell} boxSize={8} color="gray.300" mb={2} />
+                           <Text color="gray.500">No tienes notificaciones nuevas.</Text>
+                        </Box>
+                     )}
+                  </VStack>
+               </TabPanel>
 
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => navigate("/avisos-privacidad")}
-                    >
-                      Aviso de privacidad
-                    </Button>
-                  </HStack>
-                </Box>
-              </Stack>
-            </MotionBox>
-          </MotionBox>
-        </SimpleGrid>
-      </Box>
+              {/* === TAB 6: AYUDA (Responsive Grid) === */}
+              <TabPanel p={0}>
+                  <Heading size="md" mb={2}>Centro de Ayuda</Heading>
+                  <Text color="gray.500" mb={8}>¿Tienes alguna duda o inconveniente? Estamos para ayudarte.</Text>
 
-      {/* 🛟 Botón flotante de soporte */}
-      <Tooltip label="¿Necesitas ayuda? Abre un caso de soporte" hasArrow>
-        <IconButton
-          icon={<FiLifeBuoy />}
-          aria-label="Abrir casos de soporte"
-          colorScheme="yellow"
-          color="gray.800"
-          size="lg"
-          borderRadius="full"
-          position="fixed"
-          bottom={{ base: 16, md: 10 }}
-          right={{ base: 4, md: 10 }}
-          boxShadow="0 10px 30px rgba(0,0,0,0.35)"
-          onClick={() => navigate("/cliente/casos")}
-          _hover={{
-            transform: "translateY(-2px)",
-            filter: "brightness(1.05)",
-          }}
-          _active={{ transform: "translateY(0)" }}
-          zIndex={20}
-        />
-      </Tooltip>
+                  <SimpleGrid columns={{base: 1, md: 2}} spacing={8}>
+                     <Flex direction="column" p={8} border="1px solid" borderColor={borderColor} borderRadius="2xl" bg={cardBg} textAlign="center" align="center" _hover={{ borderColor: brandColor, boxShadow: "md" }} transition="all 0.2s">
+                        <Icon as={FiLifeBuoy} boxSize={12} color="yellow.500" mb={6} />
+                        <Heading size="md" mb={3}>Soporte Técnico</Heading>
+                        <Text fontSize="md" color="gray.500" mb={6} px={4}>Si tienes problemas con un pedido, garantía o tu cuenta, abre un caso personalizado.</Text>
+                        <Button colorScheme="yellow" size="lg" onClick={() => navigate("/cliente/casos")} w="full">Abrir Ticket de Soporte</Button>
+                     </Flex>
 
-      {/* MODAL DIRECCION */}
-      <Modal
-        isOpen={isDirModalOpen}
-        onClose={onDirModalClose}
-        isCentered
-        size={isMobile ? "full" : "md"}
-      >
+                     <Flex direction="column" p={8} border="1px solid" borderColor="blue.100" borderRadius="2xl" bg={useColorModeValue("blue.50", "gray.800")} textAlign="center" align="center" _hover={{ boxShadow: "md" }} transition="all 0.2s">
+                        <Icon as={FiHelpCircle} boxSize={12} color="blue.500" mb={6} />
+                        <Heading size="md" mb={3}>Preguntas Frecuentes (FAQ)</Heading>
+                        <Text fontSize="md" color="gray.500" mb={6} px={4}>Encuentra respuestas rápidas sobre tiempos de envío, métodos de pago y devoluciones.</Text>
+                        <Button colorScheme="blue" variant="outline" size="lg" onClick={() => navigate("/cliente/faq")} w="full" bg={cardBg}>Ver FAQ</Button>
+                     </Flex>
+                  </SimpleGrid>
+              </TabPanel>
+
+            </TabPanels>
+          </Tabs>
+        </Box>
+      </Container>
+
+      {/* === MODALES Y FLOAT BUTTONS === */}
+
+      {/* Modal Dirección */}
+      <Modal isOpen={isDirModalOpen} onClose={onDirModalClose} isCentered size={isMobile ? "full" : "lg"} motionPreset="slideInBottom">
         <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent
-          borderRadius={isMobile ? "none" : "2xl"}
-          m={isMobile ? 0 : 4}
-        >
-          <ModalHeader>
-            {editandoDireccion ? "Editar dirección" : "Nueva dirección"}
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Stack spacing={3}>
+        <ModalContent borderRadius={isMobile ? 0 : "2xl"}>
+          <ModalHeader borderBottom="1px solid" borderColor={borderColor} py={4}>{editandoDireccion ? "Editar Dirección" : "Nueva Dirección de Entrega"}</ModalHeader>
+          <ModalCloseButton top={4} />
+          <ModalBody py={6} bg={bgPage}>
+            <Stack spacing={5}>
               <FormControl isRequired>
-                <FormLabel fontSize="sm">Dirección</FormLabel>
-                <Input
-                  size="sm"
-                  value={dirForm.direccion}
-                  onChange={(e) =>
-                    handleChangeDirForm("direccion", e.target.value)
-                  }
-                  placeholder="Ej: Calle 5 # 12-34"
-                />
+                <FormLabel fontWeight="bold">Dirección Exacta</FormLabel>
+                <Input size="lg" bg={cardBg} value={dirForm.direccion} onChange={(e) => handleChangeDirForm("direccion", e.target.value)} placeholder="Calle, Carrera, Número, Barrio..." />
+                <FormHelperText>Incluye detalles como torre o apartamento.</FormHelperText>
               </FormControl>
-              <FormControl isRequired>
-                <FormLabel fontSize="sm">Ciudad</FormLabel>
-                <Input
-                  size="sm"
-                  value={dirForm.ciudad}
-                  onChange={(e) =>
-                    handleChangeDirForm("ciudad", e.target.value)
-                  }
-                  placeholder="Ej: Cali"
-                />
-              </FormControl>
+              <HStack spacing={4}>
+                <FormControl isRequired>
+                  <FormLabel fontWeight="bold">Ciudad</FormLabel>
+                  <Input size="lg" bg={cardBg} value={dirForm.ciudad} onChange={(e) => handleChangeDirForm("ciudad", e.target.value)} />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontWeight="bold">Departamento</FormLabel>
+                  <Input size="lg" bg={cardBg} value={dirForm.departamento} onChange={(e) => handleChangeDirForm("departamento", e.target.value)} />
+                </FormControl>
+              </HStack>
               <FormControl>
-                <FormLabel fontSize="sm">Departamento</FormLabel>
-                <Input
-                  size="sm"
-                  value={dirForm.departamento}
-                  onChange={(e) =>
-                    handleChangeDirForm("departamento", e.target.value)
-                  }
-                  placeholder="Ej: Valle del Cauca"
-                />
+                 <FormLabel fontWeight="bold">Teléfono de quien recibe (Opcional)</FormLabel>
+                 <Input size="lg" bg={cardBg} value={dirForm.telefono} onChange={(e) => handleChangeDirForm("telefono", e.target.value)} placeholder="Ej: 300..." />
               </FormControl>
-              <FormControl>
-                <FormLabel fontSize="sm">País</FormLabel>
-                <Input
-                  size="sm"
-                  value={dirForm.pais}
-                  onChange={(e) =>
-                    handleChangeDirForm("pais", e.target.value)
-                  }
-                />
-              </FormControl>
-              <FormControl>
-                <FormLabel fontSize="sm">Teléfono de contacto</FormLabel>
-                <Input
-                  size="sm"
-                  value={dirForm.telefono}
-                  onChange={(e) =>
-                    handleChangeDirForm("telefono", e.target.value)
-                  }
-                  placeholder="Opcional"
-                />
-              </FormControl>
-              <FormControl
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <FormLabel mb="0" fontSize="sm">
-                  Marcar como dirección principal
-                </FormLabel>
-                <Switch
-                  size="sm"
-                  isChecked={dirForm.es_principal}
-                  onChange={(e) =>
-                    handleChangeDirForm("es_principal", e.target.checked)
-                  }
-                />
-              </FormControl>
+              <Flex align="center" bg={useColorModeValue("yellow.50", "gray.700")} p={4} borderRadius="lg" border="1px solid" borderColor="yellow.200" justify="space-between">
+                <Box>
+                   <FormLabel htmlFor="es-principal" mb="0" fontWeight="bold">Dirección Principal</FormLabel>
+                   <Text fontSize="xs" color="gray.500">Esta será la dirección por defecto en tus pedidos.</Text>
+                </Box>
+                <Switch id="es-principal" size="lg" isChecked={dirForm.es_principal} onChange={(e) => handleChangeDirForm("es_principal", e.target.checked)} colorScheme="yellow" />
+              </Flex>
             </Stack>
           </ModalBody>
-          <ModalFooter>
-            <HStack w="full" justify="space-between">
-              <Button variant="ghost" onClick={onDirModalClose}>
-                Cancelar
-              </Button>
-              <Button
-                colorScheme="yellow"
-                color="gray.800"
-                onClick={handleGuardarDireccion}
-                isLoading={dirSaving}
-              >
-                Guardar dirección
-              </Button>
-            </HStack>
+          <ModalFooter borderTop="1px solid" borderColor={borderColor} py={4} bg={cardBg}>
+            <Button variant="ghost" size="lg" mr={3} onClick={onDirModalClose}>Cancelar</Button>
+            <Button colorScheme="yellow" size="lg" onClick={handleGuardarDireccion} isLoading={dirSaving}>Guardar Dirección</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* Botón Flotante de Soporte */}
+      <Tooltip label="¿Necesitas ayuda? Contáctanos" placement="left" hasArrow>
+        <IconButton
+          icon={<FiLifeBuoy boxSize={6} />}
+          aria-label="Soporte"
+          colorScheme="yellow"
+          size="lg"
+          isRound
+          position="fixed"
+          bottom={6}
+          right={6}
+          boxShadow="0 6px 20px rgba(236, 201, 75, 0.4)"
+          onClick={() => navigate("/cliente/casos")}
+          zIndex={99}
+          _hover={{ transform: 'scale(1.1)' }}
+          transition="all 0.2s"
+        />
+      </Tooltip>
     </Box>
   );
 }

@@ -124,11 +124,4 @@ const feedbackFAQ = async (req, res) => {
   }
 };
 
-module.exports = {
-  listarFAQ,
-  crearFAQ,
-  actualizarFAQ,
-  eliminarFAQ,
-  reordenarFAQ,
-  feedbackFAQ,
-};
+module.exports = {listarFAQ, crearFAQ, actualizarFAQ, eliminarFAQ, reordenarFAQ, feedbackFAQ};

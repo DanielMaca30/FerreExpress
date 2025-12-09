@@ -717,13 +717,8 @@ const detallePedidoPropio = async (req, res) => {
 
 module.exports = {
   // ADMIN
-  listarPedidos,
-  detallePedido,
+  listarPedidos, detallePedido,
   // FLUJOS
-  crearPedidoDirecto,
-  crearPedidoDesdeCotizacion,
-  actualizarEstado,
+  crearPedidoDirecto, crearPedidoDesdeCotizacion, actualizarEstado,
   // CLIENTE
-  listarMisPedidos,
-  detallePedidoPropio,
-};
+  listarMisPedidos, detallePedidoPropio};

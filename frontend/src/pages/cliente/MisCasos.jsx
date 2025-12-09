@@ -1,7 +1,8 @@
 // src/pages/cliente/MisCasos.jsx
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  Avatar,
   Box,
   Heading,
   Text,
@@ -37,6 +38,9 @@ import {
   Textarea,
   SimpleGrid,
   Stack,
+  InputGroup,
+  InputLeftElement,
+  useBreakpointValue,
 } from "@chakra-ui/react";
 import {
   FiLifeBuoy,
@@ -49,7 +53,14 @@ import {
   FiRefreshCw,
   FiSearch,
   FiInfo,
+  FiHelpCircle,
+  FiTruck,
+  FiUser,
+  FiChevronRight,
+  FiX,
+  FiZap,
 } from "react-icons/fi";
+import { motion } from "framer-motion";
 import api from "../../utils/axiosInstance";
 
 /* ==== helpers ==== */
@@ -83,17 +94,17 @@ const formatDateTime = (iso) => {
 
 const norm = (s) => (s || "").toString().toLowerCase();
 
+const MotionBox = motion(Box);
+
 /* ==== componente principal ==== */
 
 export default function MisCasos() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
-  const cardBg = useColorModeValue(
-    "rgba(255,255,255,0.98)",
-    "rgba(23,25,35,0.92)"
-  );
+  const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "whiteAlpha.200");
   const muted = useColorModeValue("gray.600", "gray.300");
   const title = useColorModeValue("gray.900", "gray.100");
@@ -101,8 +112,14 @@ export default function MisCasos() {
     "0 6px 18px rgba(31,38,135,0.10)",
     "0 6px 18px rgba(0,0,0,0.35)"
   );
-
   const comentarioBg = useColorModeValue("gray.50", "whiteAlpha.100");
+
+  const isMobile = useBreakpointValue({ base: true, md: false });
+  const stickyOffset = useBreakpointValue({ base: "64px", md: "72px" });
+
+  const focusRing = {
+    boxShadow: "0 0 0 3px rgba(249,191,32,0.7)",
+  };
 
   // datos principales
   const [casos, setCasos] = useState([]);
@@ -129,6 +146,18 @@ export default function MisCasos() {
 
   // para abrir automáticamente desde ?casoId=
   const [autoOpenedId, setAutoOpenedId] = useState(null);
+
+  // ✅ Siempre que entro aquí, me llevo al inicio de la página
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch {
+        // no-op
+      }
+    }, 40);
+    return () => clearTimeout(t);
+  }, []);
 
   /* ==== cargar casos ==== */
 
@@ -179,6 +208,11 @@ export default function MisCasos() {
     });
   }, [casos, fEstado, fPrioridad, search]);
 
+  const hasFilters = useMemo(
+    () => Boolean(fEstado || fPrioridad || search.trim()),
+    [fEstado, fPrioridad, search]
+  );
+
   /* ==== stats pequeños ==== */
 
   const stats = useMemo(() => {
@@ -194,6 +228,39 @@ export default function MisCasos() {
 
     return { total, abiertos, enProgreso, resueltos };
   }, [filteredCasos]);
+
+  /* ==== meta de última respuesta (si el backend la expone) ==== */
+
+  const getRespuestaMeta = (caso) => {
+    const rawRol =
+      (caso && (caso.ultima_respuesta_rol || caso.ultima_respuesta_role)) ||
+      "";
+    const rol = rawRol.toUpperCase();
+    const tieneDatos = Boolean(rawRol);
+
+    if (rol === "ADMIN") {
+      return {
+        label: "Equipo respondió",
+        colorScheme: "purple",
+      };
+    }
+    if (rol === "CLIENTE") {
+      return {
+        label: "Esperando respuesta",
+        colorScheme: "gray",
+      };
+    }
+    if (!tieneDatos) {
+      return {
+        label: "Sin respuestas aún",
+        colorScheme: "gray",
+      };
+    }
+    return {
+      label: "Actualizado",
+      colorScheme: "blue",
+    };
+  };
 
   /* ==== comentarios ==== */
 
@@ -256,6 +323,18 @@ export default function MisCasos() {
       setSendingComentario(false);
     }
   };
+
+  // ✅ Autoscroll al último mensaje cuando se abre o se actualiza el hilo
+  useEffect(() => {
+    if (!selected || comentarios.length === 0) return;
+    const timer = setTimeout(() => {
+      const el = document.getElementById("comentarios-container");
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [selected, comentarios]);
 
   /* ==== crear caso ==== */
 
@@ -326,6 +405,12 @@ export default function MisCasos() {
     }
   };
 
+  const limpiarFiltros = () => {
+    setFEstado("");
+    setFPrioridad("");
+    setSearch("");
+  };
+
   /* ==== abrir automáticamente si viene de notificación: ?casoId=123 ==== */
 
   useEffect(() => {
@@ -343,248 +428,530 @@ export default function MisCasos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, casos]);
 
+  /* ==== animaciones suaves ==== */
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 8 },
+    show: { opacity: 1, y: 0, transition: { duration: 0.2 } },
+  };
+
+  /* ==== copia de título de caso (modal) ==== */
+
+  const handleCopyTituloCaso = () => {
+    if (!selected) return;
+    const text = `Caso #${selected.id} · ${selected.titulo}`;
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+      toast({
+        status: "success",
+        title: "Título copiado",
+        description: "El identificador del caso se copió al portapapeles.",
+        duration: 2000,
+      });
+    }
+  };
+
+  /* ==== render principal ==== */
+
   return (
-    <Box
-      bg={pageBg}
-      px={{ base: 3, md: 6, lg: 8 }}
-      py={{ base: 4, md: 6 }}
-      minH="100%"
-    >
-      {/* Header */}
-      <HStack
-        justify="space-between"
-        align="flex-start"
-        mb={4}
-        flexWrap="wrap"
-        gap={3}
-      >
-        <VStack align="flex-start" spacing={1}>
-          <HStack spacing={2}>
-            <Heading size="lg" color={title}>
-              Soporte y casos
-            </Heading>
-            <Tag size="sm" variant="subtle" colorScheme="purple">
-              <TagLeftIcon as={FiLifeBuoy} />
-              <TagLabel>Tus solicitudes</TagLabel>
-            </Tag>
-          </HStack>
-          <Text fontSize="sm" color={muted}>
-            Aquí puedes crear casos de soporte, revisar su estado y ver el hilo
-            de conversación con el equipo de FerreExpress.
-          </Text>
-        </VStack>
-
-        <HStack spacing={2}>
-          <Tooltip label="Recargar">
-            <IconButton
-              aria-label="Recargar casos"
-              icon={<FiRefreshCw />}
-              size="sm"
-              variant="ghost"
-              onClick={() => fetchCasos()}
-            />
-          </Tooltip>
-          <Button
-            size="sm"
-            leftIcon={<FiPlus />}
-            colorScheme="yellow"
-            color="black"
-            onClick={handleOpenCreate}
-          >
-            Nuevo caso
-          </Button>
-        </HStack>
-      </HStack>
-
-      {/* Resumen rápido */}
-      <Box
-        bg={cardBg}
-        border="1px solid"
-        borderColor={border}
-        borderRadius="2xl"
-        boxShadow={shadowSm}
-        p={4}
-        mb={4}
-      >
-        <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
-          <Kpi
-            label="Casos (vista actual)"
-            value={stats.total}
-            icon={FiLifeBuoy}
-          />
-          <Kpi
-            label="Abiertos"
-            value={stats.abiertos}
-            icon={FiAlertCircle}
-            colorScheme="blue"
-          />
-          <Kpi
-            label="En progreso"
-            value={stats.enProgreso}
-            icon={FiClock}
-            colorScheme="orange"
-          />
-          <Kpi
-            label="Resueltos"
-            value={stats.resueltos}
-            icon={FiCheckCircle}
-            colorScheme="green"
-          />
-        </SimpleGrid>
-      </Box>
-
-      {/* Filtros + listado */}
-      <Box
-        bg={cardBg}
-        border="1px solid"
-        borderColor={border}
-        borderRadius="2xl"
-        boxShadow={shadowSm}
-        p={4}
-      >
-        {/* Filtros */}
-        <Stack
-          direction={{ base: "column", md: "row" }}
-          spacing={3}
-          mb={3}
-          align="stretch"
+    <Box bg={pageBg} minH="100vh" py={{ base: 4, md: 6 }} pb={10}>
+      <Box px={{ base: 3, md: 6, lg: 8 }}>
+        <MotionBox
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          maxW="960px"
+          mx="auto"
         >
-          <Input
-            size="sm"
-            placeholder="Buscar por título o descripción"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            leftElement={<FiSearch />}
-          />
-          <HStack spacing={3}>
-            <Box minW="150px">
-              <Text fontSize="xs" mb={1} color={muted}>
-                Estado
-              </Text>
-              <Select
-                size="sm"
-                value={fEstado}
-                onChange={(e) => setFEstado(e.target.value)}
-              >
-                <option value="">Todos</option>
-                {ESTADOS.map((e) => (
-                  <option key={e} value={e}>
-                    {estadoMeta[e]?.label ?? e}
-                  </option>
-                ))}
-              </Select>
-            </Box>
-            <Box minW="150px">
-              <Text fontSize="xs" mb={1} color={muted}>
-                Prioridad
-              </Text>
-              <Select
-                size="sm"
-                value={fPrioridad}
-                onChange={(e) => setFPrioridad(e.target.value)}
-              >
-                <option value="">Todas</option>
-                {PRIORIDADES.map((p) => (
-                  <option key={p} value={p}>
-                    {prioridadMeta[p]?.label ?? p}
-                  </option>
-                ))}
-              </Select>
-            </Box>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setFEstado("");
-                setFPrioridad("");
-                setSearch("");
-              }}
-            >
-              Limpiar
-            </Button>
-          </HStack>
-        </Stack>
+          {/* =================== CARD DE CONTEXTO / BREADCRUMB / KPIs =================== */}
+          <MotionBox
+            variants={itemVariants}
+            bg={cardBg}
+            border="1px solid"
+            borderColor={border}
+            borderRadius="2xl"
+            boxShadow={shadowSm}
+            p={{ base: 4, md: 5 }}
+            mb={4}
+            role="region"
+            aria-labelledby="mis-casos-header"
+          >
+            <Stack spacing={4}>
+              {/* Breadcrumb suave: Mi cuenta > Soporte y casos */}
+              <HStack spacing={1} fontSize="xs" color={muted}>
+                <Text>Estás en</Text>
+                <Tag size="sm" variant="subtle" colorScheme="yellow">
+                  <TagLabel>Mi cuenta</TagLabel>
+                </Tag>
+                <FiChevronRight size={12} />
+                <Tag size="sm" variant="outline" colorScheme="yellow">
+                  <TagLabel>Soporte y casos</TagLabel>
+                </Tag>
+              </HStack>
 
-        <Divider mb={3} />
-
-        {loading ? (
-          <VStack align="stretch" spacing={3}>
-            {[1, 2, 3].map((i) => (
-              <Box
-                key={i}
-                p={3}
-                borderRadius="lg"
-                border="1px solid"
-                borderColor={border}
+              {/* Título + acciones principales */}
+              <HStack
+                justify="space-between"
+                align="flex-start"
+                flexWrap="wrap"
+                spacing={4}
               >
-                <Skeleton height="18px" mb={2} />
-                <SkeletonText noOfLines={2} spacing="2" />
+                <HStack spacing={3} align="center">
+                  <Box
+                    w={10}
+                    h={10}
+                    borderRadius="full"
+                    bg={useColorModeValue("yellow.100", "yellow.900")}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <FiLifeBuoy size={20} color="#F5A623" />
+                  </Box>
+                  <VStack align="flex-start" spacing={0}>
+                    <Heading id="mis-casos-header" size="lg" color={title}>
+                      Soporte y casos
+                    </Heading>
+                    <Text fontSize="sm" color={muted}>
+                      Crea solicitudes, consulta su estado y revisa el hilo de
+                      conversación con el equipo de FerreExpress.
+                    </Text>
+                  </VStack>
+                </HStack>
+
+                <HStack spacing={2}>
+                  <Tooltip label="Recargar lista de casos">
+                    <IconButton
+                      aria-label="Recargar casos"
+                      icon={<FiRefreshCw />}
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => fetchCasos()}
+                      _focus={focusRing}
+                    />
+                  </Tooltip>
+                  {!isMobile && (
+                    <Button
+                      size="sm"
+                      leftIcon={<FiPlus />}
+                      colorScheme="yellow"
+                      color="black"
+                      onClick={handleOpenCreate}
+                      _focus={focusRing}
+                    >
+                      Nuevo caso
+                    </Button>
+                  )}
+                </HStack>
+              </HStack>
+
+              {/* Atajos rápidos para contexto */}
+              <HStack spacing={2} flexWrap="wrap">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  leftIcon={<FiHelpCircle />}
+                  onClick={() => navigate("/cliente/ayuda")}
+                  _focus={focusRing}
+                >
+                  Ir al Centro de ayuda
+                </Button>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  leftIcon={<FiTruck />}
+                  onClick={() => navigate("/cliente/pedidos")}
+                  _focus={focusRing}
+                >
+                  Ver mis pedidos
+                </Button>
+                <Button
+                  size="xs"
+                  variant="outline"
+                  leftIcon={<FiUser />}
+                  onClick={() => navigate("/cliente/perfil")}
+                  _focus={focusRing}
+                >
+                  Ir a mi perfil
+                </Button>
+              </HStack>
+
+              <Divider />
+
+              {/* Resumen rápido (KPIs) */}
+              <Box>
+                <Text fontSize="xs" mb={2} color={muted}>
+                  Resumen de tus casos en la vista actual
+                </Text>
+                <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+                  <Tooltip label="Incluye solo casos visibles con los filtros actuales">
+                    <Box>
+                      <Kpi
+                        label="Casos (vista actual)"
+                        value={stats.total}
+                        icon={FiLifeBuoy}
+                      />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip label="Casos con estado Abierto">
+                    <Box>
+                      <Kpi
+                        label="Abiertos"
+                        value={stats.abiertos}
+                        icon={FiAlertCircle}
+                        colorScheme="blue"
+                      />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip label="Casos que estamos gestionando actualmente">
+                    <Box>
+                      <Kpi
+                        label="En progreso"
+                        value={stats.enProgreso}
+                        icon={FiClock}
+                        colorScheme="orange"
+                      />
+                    </Box>
+                  </Tooltip>
+                  <Tooltip label="Casos marcados como resueltos">
+                    <Box>
+                      <Kpi
+                        label="Resueltos"
+                        value={stats.resueltos}
+                        icon={FiCheckCircle}
+                        colorScheme="green"
+                      />
+                    </Box>
+                  </Tooltip>
+                </SimpleGrid>
               </Box>
-            ))}
-          </VStack>
-        ) : filteredCasos.length === 0 ? (
-          <VStack py={6} spacing={2}>
-            <FiInfo />
-            <Text fontSize="sm" color={muted}>
-              Aún no tienes casos de soporte con los filtros actuales.
-            </Text>
-            <Button
-              size="sm"
-              leftIcon={<FiPlus />}
-              colorScheme="yellow"
-              color="black"
-              onClick={handleOpenCreate}
-            >
-              Crear primer caso
-            </Button>
-          </VStack>
-        ) : (
-          <Box overflowX="auto">
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>Fecha</Th>
-                  <Th>Estado</Th>
-                  <Th>Prioridad</Th>
-                  <Th>Título</Th>
-                  <Th>Acciones</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {filteredCasos.map((c) => (
-                  <Tr key={c.id} _hover={{ bg: "blackAlpha.50" }}>
-                    <Td>{formatDateTime(c.fecha_creacion)}</Td>
-                    <Td>
-                      <EstadoPill estado={c.estado} />
-                    </Td>
-                    <Td>
-                      <PrioridadPill prioridad={c.prioridad} />
-                    </Td>
-                    <Td maxW="320px">
-                      <Text noOfLines={2}>{c.titulo}</Text>
-                    </Td>
-                    <Td>
-                      <HStack spacing={2}>
-                        <Tooltip label="Ver hilo de soporte">
-                          <IconButton
-                            size="xs"
-                            aria-label="Ver hilo de soporte"
-                            icon={<FiMessageSquare />}
-                            onClick={() => openDetalle(c)}
-                          />
-                        </Tooltip>
-                      </HStack>
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Box>
-        )}
+            </Stack>
+          </MotionBox>
+
+          {/* =================== CARD DE LISTADO / FILTROS (con sticky) =================== */}
+          <MotionBox
+            variants={itemVariants}
+            bg={cardBg}
+            border="1px solid"
+            borderColor={border}
+            borderRadius="2xl"
+            boxShadow={shadowSm}
+            p={4}
+            role="region"
+            aria-labelledby="mis-casos-listado"
+          >
+            <Box position="relative">
+              {/* Header + filtros sticky */}
+              <Box
+                position="sticky"
+                top={stickyOffset}
+                bg={cardBg}
+                zIndex="10"
+                pt={3}
+                pb={3}
+                borderBottom="1px solid"
+                borderColor={border}
+                backdropFilter="blur(8px)"
+              >
+                {/* Encabezado de listado */}
+                <HStack
+                  justify="space-between"
+                  align="center"
+                  mb={3}
+                  flexWrap="wrap"
+                >
+                  <Heading id="mis-casos-listado" size="sm">
+                    Tus casos de soporte
+                  </Heading>
+                  <HStack spacing={2}>
+                    <Badge
+                      colorScheme="yellow"
+                      variant="subtle"
+                      aria-live="polite"
+                    >
+                      {filteredCasos.length} CASO
+                      {filteredCasos.length === 1 ? "" : "S"}
+                    </Badge>
+                    {hasFilters && (
+                      <Tag size="sm" variant="subtle" colorScheme="blue">
+                        <TagLabel>Filtros activos</TagLabel>
+                      </Tag>
+                    )}
+                  </HStack>
+                </HStack>
+
+                {/* Filtros */}
+                <Stack
+                  direction={{ base: "column", md: "row" }}
+                  spacing={3}
+                  align="stretch"
+                >
+                  <Box flex="1">
+                    <Text fontSize="xs" mb={1} color={muted}>
+                      Buscar
+                    </Text>
+                    <InputGroup size="sm">
+                      <InputLeftElement pointerEvents="none">
+                        <FiSearch size={14} />
+                      </InputLeftElement>
+                      <Input
+                        placeholder="Buscar por título, descripción o ID"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </InputGroup>
+                  </Box>
+
+                  <HStack spacing={3} align="flex-end">
+                    <Box minW="150px">
+                      <Text fontSize="xs" mb={1} color={muted}>
+                        Estado
+                      </Text>
+                      <Select
+                        size="sm"
+                        value={fEstado}
+                        onChange={(e) => setFEstado(e.target.value)}
+                      >
+                        <option value="">Todos</option>
+                        {ESTADOS.map((e) => (
+                          <option key={e} value={e}>
+                            {estadoMeta[e]?.label ?? e}
+                          </option>
+                        ))}
+                      </Select>
+                    </Box>
+                    <Box minW="150px">
+                      <Text fontSize="xs" mb={1} color={muted}>
+                        Prioridad
+                      </Text>
+                      <Select
+                        size="sm"
+                        value={fPrioridad}
+                        onChange={(e) => setFPrioridad(e.target.value)}
+                      >
+                        <option value="">Todas</option>
+                        {PRIORIDADES.map((p) => (
+                          <option key={p} value={p}>
+                            {prioridadMeta[p]?.label ?? p}
+                          </option>
+                        ))}
+                      </Select>
+                    </Box>
+                    {hasFilters && (
+                      <Button
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        leftIcon={<FiX />}
+                        onClick={limpiarFiltros}
+                        _focus={focusRing}
+                      >
+                        Limpiar filtros
+                      </Button>
+                    )}
+                  </HStack>
+                </Stack>
+              </Box>
+
+              {/* Listado debajo del header sticky */}
+              <Box pt={4}>
+                {loading ? (
+                  isMobile ? (
+                    <VStack align="stretch" spacing={3}>
+                      {[1, 2, 3].map((i) => (
+                        <Box
+                          key={i}
+                          p={3}
+                          borderRadius="lg"
+                          border="1px solid"
+                          borderColor={border}
+                        >
+                          <Skeleton height="18px" mb={2} />
+                          <SkeletonText noOfLines={2} spacing="2" />
+                        </Box>
+                      ))}
+                    </VStack>
+                  ) : (
+                    <Table size="sm">
+                      <Thead>
+                        <Tr role="row">
+                          <Th>Fecha</Th>
+                          <Th>Estado</Th>
+                          <Th>Prioridad</Th>
+                          <Th>Atención</Th>
+                          <Th>Título</Th>
+                          <Th>Acciones</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {[1, 2, 3].map((i) => (
+                          <Tr key={i} role="row">
+                            <Td role="cell">
+                              <Skeleton height="16px" />
+                            </Td>
+                            <Td role="cell">
+                              <Skeleton height="16px" />
+                            </Td>
+                            <Td role="cell">
+                              <Skeleton height="16px" />
+                            </Td>
+                            <Td role="cell">
+                              <Skeleton height="16px" />
+                            </Td>
+                            <Td role="cell">
+                              <SkeletonText noOfLines={1} spacing="2" />
+                            </Td>
+                            <Td role="cell">
+                              <Skeleton height="16px" />
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  )
+                ) : filteredCasos.length === 0 ? (
+                  <VStack py={6} spacing={2}>
+                    <FiInfo />
+                    <Text fontSize="sm" color={muted} textAlign="center">
+                      {hasFilters
+                        ? "No hay casos que coincidan con los filtros aplicados."
+                        : "Aún no tienes casos de soporte creados."}
+                    </Text>
+                    {hasFilters && (
+                      <Button
+                        size="sm"
+                        variant="link"
+                        onClick={limpiarFiltros}
+                      >
+                        Limpiar filtros y ver todos los casos
+                      </Button>
+                    )}
+                    {!hasFilters && (
+                      <Button
+                        size="sm"
+                        leftIcon={<FiPlus />}
+                        colorScheme="yellow"
+                        color="black"
+                        onClick={handleOpenCreate}
+                        _focus={focusRing}
+                      >
+                        Crear primer caso
+                      </Button>
+                    )}
+                  </VStack>
+                ) : isMobile ? (
+                  // ✅ Cards en mobile
+                  <VStack align="stretch" spacing={3}>
+                    {filteredCasos.map((c) => (
+                      <CasoCard
+                        key={c.id}
+                        caso={c}
+                        border={border}
+                        muted={muted}
+                        comentarioBg={comentarioBg}
+                        onOpen={openDetalle}
+                        getRespuestaMeta={getRespuestaMeta}
+                      />
+                    ))}
+                  </VStack>
+                ) : (
+                  // ✅ Tabla solo en desktop
+                  <Table size="sm">
+                    <Thead>
+                      <Tr role="row">
+                        <Th>Fecha</Th>
+                        <Th>Estado</Th>
+                        <Th>Prioridad</Th>
+                        <Th>Atención</Th>
+                        <Th>Título</Th>
+                        <Th>Acciones</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredCasos.map((c) => {
+                        const respuestaMeta = getRespuestaMeta(c);
+                        const tieneSinLeer = Boolean(c.tiene_sin_leer);
+                        return (
+                          <Tr key={c.id} _hover={{ bg: "blackAlpha.50" }} role="row">
+                            <Td role="cell">{formatDateTime(c.fecha_creacion)}</Td>
+                            <Td role="cell">
+                              <EstadoPill estado={c.estado} />
+                            </Td>
+                            <Td role="cell">
+                              <PrioridadPill prioridad={c.prioridad} />
+                            </Td>
+                            <Td role="cell">
+                              <Badge
+                                colorScheme={respuestaMeta.colorScheme}
+                                variant={
+                                  respuestaMeta.colorScheme === "purple"
+                                    ? "solid"
+                                    : "subtle"
+                                }
+                                fontSize="2xs"
+                              >
+                                {respuestaMeta.label}
+                              </Badge>
+                            </Td>
+                            <Td role="cell" maxW="320px">
+                              <Text noOfLines={2}>{c.titulo}</Text>
+                            </Td>
+                            <Td role="cell">
+                              <HStack spacing={2}>
+                                <Tooltip label="Ver hilo de soporte">
+                                  <IconButton
+                                    size="xs"
+                                    aria-label="Ver hilo de soporte"
+                                    icon={<FiMessageSquare />}
+                                    onClick={() => openDetalle(c)}
+                                    variant={tieneSinLeer ? "solid" : "outline"}
+                                    colorScheme={tieneSinLeer ? "red" : "gray"}
+                                    _focus={focusRing}
+                                  />
+                                </Tooltip>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        );
+                      })}
+                    </Tbody>
+                  </Table>
+                )}
+              </Box>
+            </Box>
+          </MotionBox>
+        </MotionBox>
       </Box>
+
+      {/* ✅ FAB para nuevo caso en mobile */}
+      {isMobile && (
+        <Button
+          position="fixed"
+          bottom="20px"
+          right="20px"
+          borderRadius="full"
+          colorScheme="yellow"
+          color="black"
+          size="lg"
+          boxShadow="lg"
+          onClick={handleOpenCreate}
+          leftIcon={<FiPlus />}
+          _focus={focusRing}
+        >
+          Nuevo caso
+        </Button>
+      )}
 
       {/* Modal crear caso */}
-      <Modal isOpen={isCreateOpen} onClose={handleCloseCreate} isCentered>
+      <Modal isOpen={isCreateOpen} onClose={handleCloseCreate} isCentered trapFocus>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Nuevo caso de soporte</ModalHeader>
@@ -599,6 +966,8 @@ export default function MisCasos() {
                   value={formTitulo}
                   onChange={(e) => setFormTitulo(e.target.value)}
                   placeholder="Ej: Problema con mi pedido, error en la factura..."
+                  isInvalid={!formTitulo.trim() && formTitulo !== ""}
+                  errorBorderColor="red.300"
                 />
               </Box>
               <Box>
@@ -623,6 +992,8 @@ export default function MisCasos() {
                   value={formDescripcion}
                   onChange={(e) => setFormDescripcion(e.target.value)}
                   placeholder="Cuéntanos qué pasó, qué esperabas que ocurriera y cualquier dato que creas importante (número de pedido, fecha, etc.)."
+                  isInvalid={!formDescripcion.trim() && formDescripcion !== ""}
+                  errorBorderColor="red.300"
                 />
               </Box>
             </VStack>
@@ -644,13 +1015,28 @@ export default function MisCasos() {
       </Modal>
 
       {/* Modal detalle/hilo */}
-      <Modal isOpen={!!selected} onClose={closeDetalle} size="xl" isCentered>
+      <Modal
+        isOpen={!!selected}
+        onClose={closeDetalle}
+        size="xl"
+        isCentered
+        trapFocus
+      >
         <ModalOverlay />
         <ModalContent maxH="80vh" display="flex">
-          <ModalHeader>
-            {selected
-              ? `Caso #${selected.id} · ${selected.titulo}`
-              : "Detalle de caso"}
+          <ModalHeader id="caso-detalle-titulo">
+            {selected ? (
+              <Text
+                as="span"
+                cursor="pointer"
+                onClick={handleCopyTituloCaso}
+                title="Click para copiar el identificador del caso"
+              >
+                {`Caso #${selected.id} · ${selected.titulo}`}
+              </Text>
+            ) : (
+              "Detalle de caso"
+            )}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody overflowY="auto">
@@ -703,6 +1089,7 @@ export default function MisCasos() {
                     </Text>
                   </HStack>
                   <Box
+                    id="comentarios-container"
                     border="1px solid"
                     borderColor={border}
                     borderRadius="md"
@@ -723,37 +1110,53 @@ export default function MisCasos() {
                       </Text>
                     ) : (
                       <VStack align="stretch" spacing={2}>
-                        {comentarios.map((com) => (
-                          <Box
-                            key={com.id}
-                            borderRadius="md"
-                            bg={comentarioBg}
-                            p={2}
-                          >
-                            <HStack justify="space-between" mb={1}>
-                              <Tag
-                                size="xs"
-                                variant="subtle"
-                                colorScheme={
-                                  com.role === "ADMIN" ? "purple" : "blue"
-                                }
-                              >
-                                <TagLeftIcon as={FiMessageSquare} />
-                                <TagLabel>
-                                  {com.role === "ADMIN"
-                                    ? "Equipo FerreExpress"
-                                    : com.username || "Tú"}
-                                </TagLabel>
-                              </Tag>
-                              <Text fontSize="xs" color={muted}>
-                                {formatDateTime(com.fecha_creacion)}
-                              </Text>
+                        {comentarios.map((com) => {
+                          const esAdmin = com.role === "ADMIN";
+                          const nombre = esAdmin
+                            ? "Equipo FerreExpress"
+                            : com.username || "Tú";
+                          return (
+                            <HStack
+                              key={com.id}
+                              align="flex-start"
+                              spacing={3}
+                              borderRadius="md"
+                              bg={comentarioBg}
+                              p={2}
+                            >
+                              <Avatar
+                                size="sm"
+                                name={nombre}
+                                bg={esAdmin ? "purple.500" : "blue.500"}
+                                color="white"
+                              />
+                              <Box flex="1">
+                                <HStack
+                                  justify="space-between"
+                                  align="center"
+                                  mb={1}
+                                  spacing={2}
+                                >
+                                  <Text
+                                    fontWeight="semibold"
+                                    fontSize="sm"
+                                  >
+                                    {nombre}
+                                  </Text>
+                                  <Text fontSize="xs" color={muted}>
+                                    {formatDateTime(com.fecha_creacion)}
+                                  </Text>
+                                </HStack>
+                                <Text
+                                  fontSize="sm"
+                                  whiteSpace="pre-wrap"
+                                >
+                                  {com.mensaje}
+                                </Text>
+                              </Box>
                             </HStack>
-                            <Text fontSize="sm" whiteSpace="pre-wrap">
-                              {com.mensaje}
-                            </Text>
-                          </Box>
-                        ))}
+                          );
+                        })}
                       </VStack>
                     )}
                   </Box>
@@ -770,13 +1173,21 @@ export default function MisCasos() {
                       value={nuevoComentario}
                       onChange={(e) => setNuevoComentario(e.target.value)}
                       placeholder="Escribe una actualización, pregunta o respuesta para el equipo de soporte."
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAddComentario();
+                        }
+                      }}
                     />
                     <HStack justify="flex-end" spacing={2}>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setNuevoComentario("")}
-                        isDisabled={!nuevoComentario.trim() || sendingComentario}
+                        isDisabled={
+                          !nuevoComentario.trim() || sendingComentario
+                        }
                       >
                         Limpiar
                       </Button>
@@ -791,6 +1202,10 @@ export default function MisCasos() {
                         Enviar mensaje
                       </Button>
                     </HStack>
+                    <Text fontSize="xs" color={muted}>
+                      Consejo: puedes presionar <b>Enter</b> para enviar y{" "}
+                      <b>Shift + Enter</b> para saltar de línea.
+                    </Text>
                   </VStack>
                 </Box>
               </VStack>
@@ -853,9 +1268,73 @@ function PrioridadPill({ prioridad }) {
     label: prioridad || "—",
     color: "gray",
   };
+
+  const icon =
+    prioridad === "ALTA"
+      ? FiZap
+      : prioridad === "MEDIA"
+      ? FiAlertCircle
+      : FiClock;
+
   return (
     <Tag size="sm" colorScheme={meta.color} borderRadius="full">
+      <TagLeftIcon as={icon} />
       <TagLabel>{meta.label}</TagLabel>
     </Tag>
+  );
+}
+
+/* ==== Card de caso para mobile ==== */
+
+function CasoCard({ caso, border, muted, comentarioBg, onOpen, getRespuestaMeta }) {
+  const respuestaMeta = getRespuestaMeta(caso);
+  const tieneSinLeer = Boolean(caso.tiene_sin_leer);
+
+  return (
+    <Box
+      border="1px solid"
+      borderColor={border}
+      borderRadius="lg"
+      p={3}
+      bg={comentarioBg}
+    >
+      <HStack justify="space-between" align="flex-start" mb={1}>
+        <HStack spacing={2}>
+          <EstadoPill estado={caso.estado} />
+          <PrioridadPill prioridad={caso.prioridad} />
+        </HStack>
+        <Badge
+          colorScheme={respuestaMeta.colorScheme}
+          variant={
+            respuestaMeta.colorScheme === "purple" ? "solid" : "subtle"
+          }
+          fontSize="2xs"
+        >
+          {respuestaMeta.label}
+        </Badge>
+      </HStack>
+
+      <Text fontSize="sm" fontWeight="semibold" noOfLines={2} mb={1}>
+        {caso.titulo}
+      </Text>
+      <Text fontSize="xs" color={muted} mb={2}>
+        Creado: {formatDateTime(caso.fecha_creacion)}
+      </Text>
+
+      <HStack justify="space-between" align="center">
+        <Text fontSize="xs" color={muted}>
+          ID: #{caso.id}
+        </Text>
+        <Button
+          size="xs"
+          rightIcon={<FiMessageSquare />}
+          onClick={() => onOpen(caso)}
+          variant={tieneSinLeer ? "solid" : "outline"}
+          colorScheme={tieneSinLeer ? "red" : "gray"}
+        >
+          Ver hilo
+        </Button>
+      </HStack>
+    </Box>
   );
 }

@@ -165,10 +165,6 @@ const actualizarEstadoCaso = async (req, res) => {
   }
 };
 
-/* =========================
-   💬 HILO DE COMENTARIOS
-   ========================= */
-
 // GET /casos/:id/comentarios
 const listarComentariosCaso = async (req, res) => {
   try {
@@ -271,11 +267,4 @@ const agregarComentarioCaso = async (req, res) => {
   }
 };
 
-module.exports = {
-  crearCaso,
-  listarCasos,
-  detalleCaso,
-  actualizarEstadoCaso,
-  listarComentariosCaso,
-  agregarComentarioCaso,
-};
+module.exports = {crearCaso, listarCasos, detalleCaso, actualizarEstadoCaso, listarComentariosCaso, agregarComentarioCaso};

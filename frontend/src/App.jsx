@@ -34,7 +34,6 @@ import MisCasos from "./pages/cliente/MisCasos";
 import AyudaFAQ from "./pages/cliente/AyudaFAQ";
 
 // ================== ZONA PRIVADA EMPRESA / CONTRATISTA ==================
-import Empresa from "./pages/empresa/Empresa"; // Panel de empresa (tabs)
 import EmpresaCatalogo from "./pages/empresa/EmpresaCatalogo"; // Catálogo tipo cliente
 import EmpresaAbout from "./pages/empresa/About";
 import EmpresaPuntosFisicos from "./pages/empresa/PuntosFisicos";
@@ -46,6 +45,8 @@ import CarritoEmpresa from "./pages/empresa/CarritoEmpresa";
 import CheckoutEmpresa from "./pages/empresa/checkoutEmpresa";
 import PedidoProcesandoEmpresa from "./pages/empresa/PedidoProcesandoEmpresa";
 import PedidoResultadoEmpresa from "./pages/empresa/PedidoResultadoEmpresa";
+import PerfilEmpresa from "./pages/empresa/PerfilEmpresa";
+import MisCasosEmpresa from "./pages/empresa/MisCasosEmpresa";
 
 // ================== ZONA PRIVADA ADMIN ==================
 import AdminDashboard from "./pages/admin/Dashboard";        // Resumen
@@ -108,6 +109,7 @@ export default function App() {
           <Route path="carrito" element={<Carrito />} />
           <Route path="checkout" element={<Checkout />} />
           <Route path="producto/:id" element={<ClienteProductDetail />} />
+          <Route path="faq" element={<AyudaFAQ/>} />          
 
           {/* Perfil del cliente */}
           <Route path="perfil" element={<Perfil />} />
@@ -138,11 +140,12 @@ export default function App() {
           <Route path="producto/:id" element={<EmpresaProductDetail />} />
           <Route path="cotizaciones" element={<MisCotizaciones />} />
           <Route path="mis-pedidos" element={<MisPedidosEmpresa />} />
-          <Route path="panel" element={<Empresa />} />
           <Route path="carrito-empresa" element={<CarritoEmpresa />} />
           <Route path="checkout-empresa" element={<CheckoutEmpresa />} />
           <Route path="pedido-procesando" element={<PedidoProcesandoEmpresa />} />
           <Route path="pedido-resultado" element={<PedidoResultadoEmpresa />} />
+          <Route path="perfil-empresa" element={<PerfilEmpresa/>} />
+          <Route path="casos-empresa" element={<MisCasosEmpresa />} />
 
         </Route>
       </Route>

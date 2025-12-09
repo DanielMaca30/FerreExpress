@@ -40,13 +40,16 @@ const fmtCop = (n) =>
 
 const norm = (s) => (s || "").toString().toLowerCase();
 
-/* ================= Home ================= */
+/* ================= Home (catálogo público) ================= */
 export default function Home() {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
+  const cardBg = useColorModeValue("white", "gray.800");
+  const borderCo = useColorModeValue("gray.200", "gray.700");
+  const mutedHeader = useColorModeValue("gray.600", "gray.300");
 
   useEffect(() => {
     (async () => {
@@ -90,9 +93,7 @@ export default function Home() {
     return arr.slice(0, 12);
   }, [productos]);
 
-  /* ===== Map de categorías solicitado =====
-     Puedes ajustar los keywords si lo ves necesario.
-  */
+  /* ===== Mapa de categorías ===== */
   const CATEGORY_MAP = [
     { title: "Ferretería general", keys: ["ferreter", "general", "obra"] },
     {
@@ -154,12 +155,32 @@ export default function Home() {
 
   // acciones (catálogo público):
   const onView = (p) => navigate(`/producto/${p.id}`); // detalle público
-  const onAdd = () => navigate("/login");
+  const onAdd = () => navigate("/login"); // invita a iniciar sesión
   const onBuy = () => navigate("/login");
 
   return (
     <Box bg={pageBg} px={{ base: 3, md: 6, lg: 10 }} py={{ base: 4, md: 6 }}>
-      {/* ===== Publicidad (6 imágenes con carrusel animado) ===== */}
+      {/* ===== Header tipo Cliente (pero público) ===== */}
+      <Box
+        bg={cardBg}
+        border="1px solid"
+        borderColor={borderCo}
+        borderRadius="xl"
+        boxShadow="sm"
+        px={{ base: 3, md: 4 }}
+        py={{ base: 3, md: 4 }}
+        mb={5}
+      >
+        <Heading size="md" mb={1}>
+          Bienvenido a FerreExpress
+        </Heading>
+        <Text color={mutedHeader} fontSize="sm">
+          Explora el catálogo, descubre ofertas y encuentra todo para tus
+          proyectos de ferretería, electricidad y más.
+        </Text>
+      </Box>
+
+      {/* ===== Publicidad (6 imágenes con carrusel animado tipo Cliente) ===== */}
       <PromoHeroFadeBanner
         images={[
           "/Publicidad1.png",
@@ -173,7 +194,7 @@ export default function Home() {
       />
 
       {/* ===== Ofertas y Recién llegado ===== */}
-      <Section title="Ofertas">
+      <Section title="Ofertas especiales" mt={5}>
         <RowScroller
           loading={loading}
           items={ofertas}
@@ -233,14 +254,13 @@ export default function Home() {
 
 /* =================== Subcomponentes =================== */
 
-/* ---- Carrusel de publicidad con auto-scroll ---- */
+/* ---- Carrusel de promociones (queda disponible si lo quieres usar luego) ---- */
 function PromoCarousel({ images = [] }) {
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
   const trackRef = useRef(null);
   const hoverRef = useRef(false);
-  const visibleAtOnce = useBreakpointValue({ base: 1, sm: 2, md: 3 });
-  const step = useBreakpointValue({ base: 1, sm: 1, md: 1 }); // cuántas tarjetas avanza
+  const step = useBreakpointValue({ base: 1, sm: 1, md: 1 });
 
   // Duplicamos para efecto infinito suave
   const loopImages = [...images, ...images];
@@ -251,16 +271,14 @@ function PromoCarousel({ images = [] }) {
     if (!el) return;
 
     const tick = () => {
-      if (hoverRef.current) return; // pausa al pasar el mouse
+      if (hoverRef.current) return;
       const card = el.querySelector("[data-card='promo']");
       if (!card) return;
-      const cardWidth = card.getBoundingClientRect().width + 16; // ancho + gap
+      const cardWidth = card.getBoundingClientRect().width + 16;
       el.scrollBy({ left: (step ?? 1) * cardWidth, behavior: "smooth" });
 
-      // reset suave al llegar casi al final de la lista duplicada
-      const maxScroll = el.scrollWidth / 2; // mitad (lista original)
+      const maxScroll = el.scrollWidth / 2;
       if (el.scrollLeft >= maxScroll) {
-        // saltamos atrás la mitad para mantener loop
         el.scrollLeft = el.scrollLeft - maxScroll;
       }
     };
@@ -281,7 +299,6 @@ function PromoCarousel({ images = [] }) {
   const scrollBy = (px) =>
     trackRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
-  // ancho de tarjeta responsivo
   const cardW = useBreakpointValue({
     base: "100%",
     sm: "calc(50% - 12px)",
@@ -497,7 +514,7 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   );
 }
 
-/* ---- Card de producto con imagen en 4:3 y sin solaparse con precio ---- */
+/* ---- Card de producto con estilo tipo Cliente pero soportando ofertas ---- */
 function ProductCard({
   producto,
   loading,
@@ -538,7 +555,7 @@ function ProductCard({
       scrollSnapAlign="start"
       role="group"
     >
-      {/* Imagen con relación 4:3 y contain */}
+      {/* Imagen con relación 4:3 y oferta en la esquina (como en Home original) */}
       <Box position="relative" borderBottom="1px solid" borderColor={borderCo}>
         {showDealBadge &&
           (Number(producto.descuento) > 0 || producto.precio_oferta) && (

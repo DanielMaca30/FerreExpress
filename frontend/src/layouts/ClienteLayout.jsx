@@ -1010,7 +1010,7 @@ export default function ClienteLayout() {
           >
             <HStack justify={{ base: "center", md: "flex-start" }}>
               <Image
-                src="/ferreexpress.png"
+                src="/LOGOFERREEXPRESS.png"
                 alt="FerreExpress S.A.S."
                 h={{ base: "36px", sm: "42px", md: "48px" }}
                 objectFit="contain"

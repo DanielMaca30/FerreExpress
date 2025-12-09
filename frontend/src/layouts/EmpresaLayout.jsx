@@ -307,7 +307,7 @@ export default function EmpresaLayout() {
     { to: `${basePath}/cotizaciones`, label: "Mis Cotizaciones", icon: FiFileText },
     { to: `${basePath}/mis-pedidos`, label: "Mis Pedidos", icon: FiTruck },
     { to: `${basePath}/carrito-empresa`, label: "Carrito", icon: FiShoppingCart },
-    { to: `${basePath}/perfil`, label: profileLabel, icon: FiUser },
+    { to: `${basePath}/perfil-empresa`, label: profileLabel, icon: FiUser },
   ];
 
   const headerShadow = useMemo(() => "0 3px 14px rgba(0,0,0,0.25)", []);
@@ -852,7 +852,7 @@ export default function EmpresaLayout() {
                         py={1.5}
                         borderRadius="full"
                         bg={
-                          isActive(`${basePath}/perfil`)
+                          isActive(`${basePath}/perfil-empresa`)
                             ? navActiveBg
                             : "transparent"
                         }
@@ -898,7 +898,7 @@ export default function EmpresaLayout() {
                           variant="ghost"
                           justifyContent="flex-start"
                           leftIcon={<FiUser />}
-                          onClick={() => navigate(`${basePath}/perfil`)}
+                          onClick={() => navigate(`${basePath}/perfil-empresa`)}
                           color={navInactive}
                           _hover={{ bg: panelSubtleBg, color: "gray.900" }}
                           borderRadius="md"

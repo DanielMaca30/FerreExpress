@@ -5,6 +5,8 @@ const pool = require("../db");
 const crypto = require("crypto");
 const { sendMail } = require("../utils/mailer");
 const { logAuditoria } = require("../utils/auditoria");
+
+
 const generarToken = (usuario) => {
   return jwt.sign(
     {
