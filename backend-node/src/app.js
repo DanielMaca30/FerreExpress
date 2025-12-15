@@ -23,9 +23,13 @@ app.use(express.json());
 // __dirname = src → ../uploads = <root>/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
+/* ===== CORS (Vercel previews + prod + local) ===== */
 // ✅ Permite producción + previews del mismo proyecto + local
+// Ajustado a tu nombre de proyecto en Vercel: ferre-express*.vercel.app
 const vercelFerreRegex = /^https:\/\/ferre-express(-[a-z0-9-]+)?\.vercel\.app$/i;
 
+// Lista manual (separada por comas) para permitir orígenes específicos
+// Ej: http://localhost:5173,https://ferre-express.vercel.app
 const allowedOrigins = (process.env.FRONTEND_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -33,18 +37,27 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS || "")
 
 const corsOptions = {
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // Postman/health checks
+    // Permitir requests sin Origin (Postman/health checks/server-to-server)
+    if (!origin) return cb(null, true);
 
+    // Permitir por lista explícita
     if (allowedOrigins.includes(origin)) return cb(null, true);
+
+    // Permitir previews + prod de tu proyecto en Vercel
     if (vercelFerreRegex.test(origin)) return cb(null, true);
 
-    return cb(null, false); // bloquea sin tumbar el server
+    // Bloquear el resto (sin tumbar el server)
+    return cb(null, false);
   },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  exposedHeaders: ["Authorization"],
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // ✅ preflight para todas
+// ✅ Preflight global
+app.options("*", cors(corsOptions));
 
 /* ===== Autenticación Google (si la usas) ===== */
 app.use(
@@ -52,6 +65,8 @@ app.use(
     secret: process.env.SESSION_SECRET || "ferreexpress",
     resave: false,
     saveUninitialized: true,
+    // En producción, si llegas a usar cookies cross-site, toca sameSite/secure.
+    // cookie: { sameSite: "lax", secure: true }
   })
 );
 app.use(passport.initialize());
