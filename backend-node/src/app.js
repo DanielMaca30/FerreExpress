@@ -24,25 +24,30 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // CORS para el frontend (Vite en localhost:5173)
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+const cors = require("cors");
+
+// ✅ Permite producción + previews del mismo proyecto + local
+const vercelFerreRegex = /^https:\/\/ferre-express(-[a-z0-9-]+)?\.vercel\.app$/i;
+
+const allowedOrigins = (process.env.FRONTEND_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-app.use(
-  cors({
-    origin: function (origin, cb) {
-      // Permitir requests sin Origin (ej: Postman/Health checks)
-      if (!origin) return cb(null, true);
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // Postman/health checks
 
-      // Permitir si está en la lista
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (vercelFerreRegex.test(origin)) return cb(null, true);
 
-      return cb(new Error(`CORS blocked for origin: ${origin}`));
-    },
-    credentials: true,
-  })
-);
+    return cb(null, false); // bloquea sin tumbar el server
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions)); // ✅ preflight para todas
 
 /* ===== Autenticación Google (si la usas) ===== */
 app.use(
