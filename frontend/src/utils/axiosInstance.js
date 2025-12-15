@@ -1,17 +1,17 @@
 // utils/axiosInstance.js
 import axios from "axios";
 
-// URL base de tu backend (centralizada)
-export const API_BASE_URL = "http://localhost:3000";
+// URL base del backend (prod via Vercel env, local fallback)
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
-// Instancia de Axios con baseURL común
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
   timeout: 15000,
   headers: {
-    // 👇 Dejamos SOLO estos, sin Content-Type global
     Accept: "application/json",
     "X-Requested-With": "XMLHttpRequest",
+    // ❌ NO poner Content-Type global
   },
 });
 
@@ -48,7 +48,7 @@ function logoutAndRedirect(err) {
   return Promise.reject(err);
 }
 
-// --- Interceptor de REQUEST: agrega Bearer token si existe ---
+// --- Interceptor REQUEST: agrega Bearer token ---
 api.interceptors.request.use(
   (config) => {
     const token = getToken();
@@ -58,14 +58,12 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
-    // 👀 IMPORTANTE: NO tocar Content-Type aquí.
-    // Axios decide: JSON para objetos, multipart/form-data para FormData.
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// --- Interceptor de RESPONSE: maneja 401 (sesión expirada/no válida) ---
+// --- Interceptor RESPONSE: maneja 401 ---
 api.interceptors.response.use(
   (response) => response,
   (error) => {
