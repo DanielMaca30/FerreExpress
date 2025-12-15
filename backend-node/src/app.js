@@ -23,9 +23,6 @@ app.use(express.json());
 // __dirname = src → ../uploads = <root>/uploads
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-// CORS para el frontend (Vite en localhost:5173)
-const cors = require("cors");
-
 // ✅ Permite producción + previews del mismo proyecto + local
 const vercelFerreRegex = /^https:\/\/ferre-express(-[a-z0-9-]+)?\.vercel\.app$/i;
 
