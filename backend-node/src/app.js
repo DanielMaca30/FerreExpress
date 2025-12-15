@@ -24,9 +24,22 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // CORS para el frontend (Vite en localhost:5173)
+const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:5173",
+    origin: function (origin, cb) {
+      // Permitir requests sin Origin (ej: Postman/Health checks)
+      if (!origin) return cb(null, true);
+
+      // Permitir si está en la lista
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+
+      return cb(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
   })
 );
