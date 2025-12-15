@@ -9,6 +9,7 @@ import { FaWhatsapp, FaInstagram, FaFacebook, FaXTwitter } from "react-icons/fa6
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import api from "../../utils/axiosInstance";
+import { API_BASE_URL } from "../../utils/axiosInstance"; // ajusta ruta
 
 export default function RegisterCliente() {
     const bgPage = useColorModeValue("#f6f7f9", "0f1117")
@@ -384,7 +385,7 @@ export default function RegisterCliente() {
                                 {/* Google */}
                                 <Button
                                     type="button"
-                                    onClick={() => (window.location.href = "http://localhost:3000/api/v1/auth/google")}
+                                    onClick={() => (window.location.href = `${API_BASE_URL}/api/v1/auth/google`)}
                                     w="full"
                                     h={{ base: "45px", sm: "50px" }}
                                     rounded="lg"

@@ -31,6 +31,8 @@ import ForgotPasswordModal from "../../components/auth/ForgotPasswordModal";
 import VerifyResetCodeModal from "../../components/auth/VerifyResetCodeModal";
 import ResetPasswordModal from "../../components/auth/ResetPasswordModal";
 
+import { API_BASE_URL } from "../../utils/axiosInstance"; // ajusta ruta
+
 export default function Login() {
   const { login, setUserFromToken } = useAuth(); // ← incluye setUserFromToken
   const navigate = useNavigate();
@@ -78,10 +80,10 @@ export default function Login() {
       (role === "CLIENTE"
         ? "/cliente"
         : role === "CONTRATISTA"
-        ? "/empresa"
-        : role === "ADMIN"
-        ? "/admin"
-        : "/");
+          ? "/empresa"
+          : role === "ADMIN"
+            ? "/admin"
+            : "/");
 
     // limpia el query param visualmente
     const url = new URL(window.location.href);
@@ -123,10 +125,10 @@ export default function Login() {
           role === "CLIENTE"
             ? "Bienvenido, Cliente"
             : role === "CONTRATISTA"
-            ? "Bienvenido, Empresa"
-            : role === "ADMIN"
-            ? "Bienvenido, Admin"
-            : "Bienvenido";
+              ? "Bienvenido, Empresa"
+              : role === "ADMIN"
+                ? "Bienvenido, Admin"
+                : "Bienvenido";
 
         setSuccessMsg(roleMsg);
         setSuccessOpen(true);
@@ -137,10 +139,10 @@ export default function Login() {
           (role === "CLIENTE"
             ? "/cliente"
             : role === "CONTRATISTA"
-            ? "/empresa"
-            : role === "ADMIN"
-            ? "/admin"
-            : "/");
+              ? "/empresa"
+              : role === "ADMIN"
+                ? "/admin"
+                : "/");
 
         const delay = prefersReducedMotion ? 400 : 1600;
         setTimeout(() => {
@@ -187,16 +189,16 @@ export default function Login() {
   const pulseProps = prefersReducedMotion
     ? {}
     : {
-        initial: { boxShadow: "0 0 0 0 rgba(72,187,120,0.0)" },
-        animate: {
-          boxShadow: [
-            "0 0 0 0 rgba(72,187,120,0.0)",
-            "0 0 0 12px rgba(72,187,120,0.12)",
-            "0 0 0 0 rgba(72,187,120,0.0)",
-          ],
-        },
-        transition: { duration: 1.2, repeat: Infinity, ease: "easeInOut" },
-      };
+      initial: { boxShadow: "0 0 0 0 rgba(72,187,120,0.0)" },
+      animate: {
+        boxShadow: [
+          "0 0 0 0 rgba(72,187,120,0.0)",
+          "0 0 0 12px rgba(72,187,120,0.12)",
+          "0 0 0 0 rgba(72,187,120,0.0)",
+        ],
+      },
+      transition: { duration: 1.2, repeat: Infinity, ease: "easeInOut" },
+    };
 
   return (
     <>
@@ -302,10 +304,7 @@ export default function Login() {
               </Button>
 
               <Button
-                onClick={() =>
-                  (window.location.href =
-                    "http://localhost:3000/api/v1/auth/google")
-                }
+                onClick={() => (window.location.href = `${API_BASE_URL}/api/v1/auth/google`)}
                 w="full"
                 bg="white"
                 color="gray.900"
@@ -367,7 +366,7 @@ export default function Login() {
       />
 
       {/* Modal Éxito */}
-      <Modal isOpen={successOpen} onClose={() => {}} isCentered>
+      <Modal isOpen={successOpen} onClose={() => { }} isCentered>
         <ModalOverlay bg="blackAlpha.400" />
         <ModalContent
           bg={cardBg}

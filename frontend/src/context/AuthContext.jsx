@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import axios from "axios";
+import api from "../utils/axiosInstance"; // ajusta la ruta real
 
-const API_URL = "http://localhost:3000/api/v1";
 const LS_KEY = "user";
 
 const AuthContext = createContext();
@@ -40,9 +39,9 @@ function isExpired(payload) {
 
 function setAxiosAuthHeader(token) {
   if (token) {
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
   } else {
-    delete axios.defaults.headers.common["Authorization"];
+    delete api.defaults.headers.common["Authorization"];
   }
 }
 // -----------------------------------------
@@ -111,7 +110,7 @@ export function AuthProvider({ children }) {
   // API -----------------------------------------------------
   const login = async (email, password) => {
     try {
-      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      const res = await api.post("/auth/login", { email, password });
       // Esperamos: { token, role, email, username }
       const token = res.data?.token;
       const payload = decodeJwt(token);
