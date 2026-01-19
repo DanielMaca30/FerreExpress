@@ -2,7 +2,7 @@ services:
   db:
     image: mysql:8.0
     container_name: ferreexpress_db
-    restart: always
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: ferreexpress
@@ -12,42 +12,51 @@ services:
       - "3306:3306"
     volumes:
       - ./mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
 
   adminer:
     image: adminer
     container_name: ferreexpress_adminer
-    restart: always
+    restart: unless-stopped
     depends_on:
       - db
     ports:
       - "8080:8080"
 
   backend:
-    build:
-      context: ../backend-node
-      dockerfile: Dockerfile
-    container_name: ferreexpress_backend
-    restart: always
+    image: node:20-alpine
+    container_name: ferreexpress_backend_dev
+    working_dir: /app
+    volumes:
+      - ../backend-node:/app
+      - /app/node_modules
+    env_file:
+      - ../backend-node/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      NODE_ENV: development
     depends_on:
       - db
-    env_file:
-      - ../backend-node/.env   # 👈 leerá el mismo .env que usas en local
-    environment:
-      DB_HOST: db              # 👈 SOBREESCRIBIMOS el host
-      DB_PORT: 3306
     ports:
       - "3000:3000"
-
+    command: sh -c "npm install && npm run dev"
 
   frontend:
-    build:
-      context: ../frontend        # 👈 también subimos un nivel
-      dockerfile: Dockerfile
-    container_name: ferreexpress_frontend
-    restart: always
+    image: node:20-alpine
+    container_name: ferreexpress_frontend_dev
+    working_dir: /app
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+      VITE_API_BASE_URL: "http://localhost:3000"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
+      WATCHPACK_POLLING: "true"
     depends_on:
       - backend
     ports:
-      - "5173:80"
-    # environment:
-    #   VITE_API_BASE_URL: "http://localhost:3000"
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"

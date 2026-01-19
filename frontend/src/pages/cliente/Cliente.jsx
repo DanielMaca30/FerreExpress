@@ -1,4 +1,16 @@
-// src/pages/cliente/Cliente.jsx - VERSIÓN FINAL CORREGIDA UI/UX (Flechas Seguras y Tarjeta Limpia)
+// src/pages/cliente/Cliente.jsx — UI/UX + Responsive (Cards minimal + iOS filter + zoom desktop)
+// ✅ FIXES incluidos:
+// - Sin cambios de orden de hooks (no hooks dentro de JSX/condiciones)
+// - Sin kebab-case en css objects (msOverflowStyle)
+// - Sin prop inválido scrollPaddingInline en DOM (va en css)
+// - Sin preventDefault en listener passive (wheel listener manual { passive:false })
+//
+// ✅ Responsive UI FIX (NUEVO):
+// - En MOBILE: layout “full-bleed” (sin efecto modal/popup), sin sombras y sin bordes redondeados en contenedores
+// - Menos padding lateral acumulado (se aprovecha mejor el ancho)
+// - Cards más anchas en mobile para llenar mejor la pantalla (2 cards se ven más “full”)
+// - Hint y títulos alineados con el mismo padding del scroller
+
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box,
@@ -9,7 +21,6 @@ import {
   VStack,
   Image,
   Skeleton,
-  SkeletonText,
   useBreakpointValue,
   useColorModeValue,
   IconButton,
@@ -17,18 +28,18 @@ import {
   Kbd,
   useToast,
   AspectRatio,
-  Flex,
   Tabs,
   TabList,
   Tab,
+  Drawer,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerBody,
+  Divider,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  FiShoppingCart,
-  FiZap,
-  FiChevronLeft,
-  FiChevronRight,
-} from "react-icons/fi"; 
+import { FiChevronLeft, FiChevronRight, FiChevronDown, FiCheck } from "react-icons/fi";
 import api, { API_BASE_URL } from "../../utils/axiosInstance";
 import { useAuth } from "../../context/AuthContext";
 import PromoHeroFadeBanner from "../public/PromoHeroFadeBanner";
@@ -50,16 +61,19 @@ export default function Cliente() {
   const toast = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [activeSection, setActiveSection] = useState("recientes"); 
-  
-  const stickyNavRef = useRef(null); 
-  const sectionRefs = useRef({}); 
-  
-  // Colores y Espacios
+  const [activeSection, setActiveSection] = useState("recientes");
+
+  const stickyNavRef = useRef(null);
+  const sectionRefs = useRef({});
+
+  // ✅ Responsive: “full-bleed” en mobile
+  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+
+  // Colores base
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
   const cardBg = useColorModeValue("white", "gray.800");
-  const borderCo = useColorModeValue("gray.200", "gray.700");
-  const subtextColor = useColorModeValue("gray.500", "gray.400"); 
+  const borderCo = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
+  const subtextColor = useColorModeValue("gray.600", "gray.400");
 
   const rawSearch = searchParams.get("search") || "";
   const searchTerm = rawSearch.trim().toLowerCase();
@@ -77,15 +91,13 @@ export default function Cliente() {
     })();
   }, []);
 
-  // --- Lógica de filtrado (sin cambios) ---
+  // --- Lógica de filtrado ---
   const byCat = (needleArr, fallbackSlice = 10) => {
     const norm = (s) => (s || "").toString().toLowerCase();
     const hit = productos.filter((p) => {
       const c1 = norm(p.categoria);
       const cs = Array.isArray(p.categorias) ? p.categorias.map(norm) : [];
-      return needleArr.some(
-        (n) => c1.includes(n) || cs.some((x) => x.includes(n))
-      );
+      return needleArr.some((n) => c1.includes(n) || cs.some((x) => x.includes(n)));
     });
     return (hit.length ? hit : productos).slice(0, fallbackSlice);
   };
@@ -118,48 +130,18 @@ export default function Cliente() {
     });
   }, [productos, searchTerm]);
 
-  const tuberias = useMemo(
-    () => byCat(["tuber", "pvc", "cpvc", "hidraul"], 10),
-    [productos]
-  );
-  const cables = useMemo(
-    () => byCat(["cable", "conductor", "alambr"], 10),
-    [productos]
-  );
-  const electrico = useMemo(
-    () => byCat(["eléctr", "breaker", "tomacorr", "ilumin", "led"], 10),
-    [productos]
-  );
-  const adhesivos = useMemo(
-    () => byCat(["adhes", "pegante", "silicon", "soldadura en frío"], 10),
-    [productos]
-  );
-  const pinturas = useMemo(
-    () => byCat(["pintur", "esmalte", "látex", "rodillo"], 10),
-    [productos]
-  );
-  const seguridad = useMemo(
-    () => byCat(["seguridad", "guante", "casc", "protección"], 10),
-    [productos]
-  );
-  const jardineria = useMemo(
-    () => byCat(["jardín", "poda", "manguera"], 10),
-    [productos]
-  );
-  const plomeria = useMemo(
-    () => byCat(["plomer", "válvula", "mezclador", "sifón"], 10),
-    [productos]
-  );
-  const tornilleria = useMemo(
-    () => byCat(["tornillo", "tuerca", "arandela", "fijación"], 10),
-    [productos]
-  );
-  const soldadura = useMemo(
-    () => byCat(["sold", "electrodo", "estaño", "soplete"], 10),
-    [productos]
-  );
+  const tuberias = useMemo(() => byCat(["tuber", "pvc", "cpvc", "hidraul"], 10), [productos]);
+  const cables = useMemo(() => byCat(["cable", "conductor", "alambr"], 10), [productos]);
+  const electrico = useMemo(() => byCat(["eléctr", "breaker", "tomacorr", "ilumin", "led"], 10), [productos]);
+  const adhesivos = useMemo(() => byCat(["adhes", "pegante", "silicon", "soldadura en frío"], 10), [productos]);
+  const pinturas = useMemo(() => byCat(["pintur", "esmalte", "látex", "rodillo"], 10), [productos]);
+  const seguridad = useMemo(() => byCat(["seguridad", "guante", "casc", "protección"], 10), [productos]);
+  const jardineria = useMemo(() => byCat(["jardín", "poda", "manguera"], 10), [productos]);
+  const plomeria = useMemo(() => byCat(["plomer", "válvula", "mezclador", "sifón"], 10), [productos]);
+  const tornilleria = useMemo(() => byCat(["tornillo", "tuerca", "arandela", "fijación"], 10), [productos]);
+  const soldadura = useMemo(() => byCat(["sold", "electrodo", "estaño", "soplete"], 10), [productos]);
 
-  /* ===== Lista de secciones para el renderizado y la navegación sticky ===== */
+  /* ===== Lista de secciones ===== */
   const categorySections = useMemo(
     () => [
       { id: "recientes", title: "Recién llegado", data: recientes },
@@ -174,100 +156,98 @@ export default function Cliente() {
       { id: "tornilleria", title: "Tornillería & Fijación", data: tornilleria },
       { id: "soldadura", title: "Soldadura", data: soldadura },
     ],
-    [
-      recientes, tuberias, cables, electrico, adhesivos, pinturas, seguridad,
-      jardineria, plomeria, tornilleria, soldadura,
-    ]
+    [recientes, tuberias, cables, electrico, adhesivos, pinturas, seguridad, jardineria, plomeria, tornilleria, soldadura]
   );
 
+  const navIds = useMemo(() => new Set(categorySections.map((s) => s.id)), [categorySections]);
+
   /* ===== Acciones ===== */
-  const onView = (p) => navigate(`/cliente/producto/${p.id}`); 
+  const onView = (p) => navigate(`/cliente/producto/${p.id}`);
   const onAdd = (p) => {
     addToCart(p, 1);
     toast({
       title: "Agregado al carrito",
       description: p?.nombre ?? "Producto",
       status: "success",
-      duration: 1800,
+      duration: 1600,
       isClosable: true,
     });
   };
-  const onBuy = (p) => {
-    addToCart(p, 1);
-    navigate("/cliente/carrito"); 
-  };
 
-  /* 🛠️ Intersection Observer y función de scroll */
+  /* ===== Intersection Observer ===== */
   const setSectionRef = useCallback((node, id) => {
     if (node) sectionRefs.current[id] = node;
   }, []);
 
   useEffect(() => {
     const navHeight = stickyNavRef.current ? stickyNavRef.current.offsetHeight : 80;
-    const observerOptions = {
-      root: null,
-      rootMargin: `-${navHeight}px 0px -90% 0px`, 
-      threshold: 0,
-    };
 
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) setActiveSection(entry.target.id);
-      });
-    }, observerOptions);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const id = entry.target.id;
+          if (navIds.has(id)) setActiveSection(id);
+        });
+      },
+      {
+        root: null,
+        rootMargin: `-${navHeight}px 0px -90% 0px`,
+        threshold: 0,
+      }
+    );
 
     Object.values(sectionRefs.current).forEach((ref) => {
       if (ref) observer.observe(ref);
     });
 
     return () => observer.disconnect();
-  }, [categorySections]);
+  }, [navIds]);
 
   const scrollToSection = (id) => {
     const element = document.getElementById(id);
-    if (element) {
-      const navHeight = stickyNavRef.current ? stickyNavRef.current.offsetHeight : 80;
-      const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-      
-      const offsetFromTop = window.innerHeight * 0.40;
-      const targetScroll = elementPosition - offsetFromTop + navHeight;
-      
-      window.scrollTo({
-        top: Math.max(0, targetScroll), 
-        behavior: "smooth",
-      });
+    if (!element) return;
 
-      setActiveSection(id);
-    }
+    const navHeight = stickyNavRef.current ? stickyNavRef.current.offsetHeight : 80;
+    const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+    const offsetFromTop = window.innerHeight * 0.4;
+    const targetScroll = elementPosition - offsetFromTop + navHeight;
+
+    window.scrollTo({ top: Math.max(0, targetScroll), behavior: "smooth" });
+    setActiveSection(id);
   };
 
-
   return (
-    <Box bg={pageBg} px={{ base: 3, md: 6, lg: 10 }} py={{ base: 4, md: 6 }}>
-      {/* ===== 1. Header del cliente (Bienvenida) ===== */}
+    <Box
+      bg={pageBg}
+      // ✅ MOBILE full-bleed: sin padding externo (evita “tarjeta flotante”)
+      px={{ base: 0, md: 6, lg: 10 }}
+      py={{ base: 3, md: 6 }}
+      minH="100vh"
+    >
+      {/* ===== 1. Header del cliente ===== */}
       <Box
         bg={cardBg}
         border="1px solid"
         borderColor={borderCo}
-        borderRadius="xl"
-        boxShadow="sm"
-        px={{ base: 3, md: 4 }}
-        py={{ base: 3, md: 4 }}
-        mb={5}
+        borderRadius={{ base: "0", md: "xl" }}
+        boxShadow={{ base: "none", md: "sm" }}
+        // ✅ en mobile: sin borde lateral para que sea full width “clean”
+        borderLeftWidth={{ base: 0, md: 1 }}
+        borderRightWidth={{ base: 0, md: 1 }}
+        px={{ base: 4, md: 4 }}
+        py={{ base: 3.5, md: 4 }}
+        mb={{ base: 3, md: 5 }}
       >
-        <Heading size="md" mb={1}>
-          ¡Hola
-          {user
-            ? `, ${user.nombre || user.name || user.username || user.email}`
-            : ""}
-          !
+        <Heading fontSize={{ base: "lg", md: "xl" }} mb={1}>
+          ¡Hola{user ? `, ${user.nombre || user.name || user.username || user.email}` : ""}!
         </Heading>
-        <Text color={subtextColor}>
+        <Text color={subtextColor} fontSize={{ base: "sm", md: "md" }}>
           Explora el catálogo y continúa con tus compras.
         </Text>
       </Box>
 
-      {/* ===== 2. Resultados de búsqueda (Prioridad de Flujo UX) ===== */}
+      {/* ===== 2. Resultados de búsqueda ===== */}
       {searchTerm && (
         <Section
           id="search-results"
@@ -276,7 +256,7 @@ export default function Cliente() {
               ? `Resultados para “${rawSearch.trim()}” (${resultadosBusqueda.length})`
               : `No encontramos resultados para “${rawSearch.trim()}”`
           }
-          mt={0} 
+          mt={0}
           setRef={(node) => setSectionRef(node, "search-results")}
         >
           {resultadosBusqueda.length ? (
@@ -290,53 +270,45 @@ export default function Cliente() {
                   loading={!p}
                   onView={() => onView(p)}
                   onAdd={() => onAdd(p)}
-                  onBuy={() => onBuy(p)}
                   subtextColor={subtextColor}
                 />
               )}
             />
           ) : (
-            <Text
-              fontSize="sm"
-              color={subtextColor}
-            >
-              Prueba buscando por otra palabra clave, por ejemplo una marca o
-              tipo de producto.
-            </Text>
+            <Box px={{ base: 4, md: 0 }}>
+              <Text fontSize="sm" color={subtextColor}>
+                Prueba buscando por otra palabra clave (marca, medida o referencia).
+              </Text>
+            </Box>
           )}
         </Section>
       )}
 
-      {/* ===== 3. Banner publicitario delgado (6 imágenes) ===== */}
+      {/* ===== 3. Banner ===== */}
       <PromoHeroFadeBanner
-        images={[
-          "/Publicidad1.png",
-          "/Publicidad2.png",
-          "/publicidad3.jpg",
-          "/Publicidad4.png",
-          "/publicidad5.jpg",
-          "/publicidad6.jpg",
-        ]}
-        height={{ base: "110px", md: "150px", lg: "400px" }}
-        mt={searchTerm ? 5 : 0} 
-        mb={5}
+        images={["/Publicidad1.png", "/Publicidad2.png", "/publicidad3.jpg", "/Publicidad4.png"]}
+        mt={searchTerm ? 4 : 0}
+        mb={{ base: 3, md: 5 }}
+        ratio={{ base: 16 / 7, md: 16 / 7, lg: 4 / 1 }}
+        // ✅ mobile full-bleed: sin redondeo
+        rounded={{ base: "0", md: "2xl" }}
       />
 
-      {/* 4. Navegación Sticky (Corregida UX de Flechas) */}
+      {/* ===== 4. Navegación Sticky ===== */}
       <StickyCategoryNav
-        ref={stickyNavRef} 
+        ref={stickyNavRef}
         sections={categorySections}
         scrollToSection={scrollToSection}
         activeSection={activeSection}
       />
 
-      {/* ===== 5. Secciones del Catálogo (Renderizado) ===== */}
+      {/* ===== 5. Secciones del Catálogo ===== */}
       {categorySections.map((section, index) => (
         <Section
           key={section.id}
-          id={section.id} 
+          id={section.id}
           title={section.title}
-          mt={index === 0 ? 0 : 5} 
+          mt={index === 0 ? 0 : { base: 3, md: 5 }}
           setRef={(node) => setSectionRef(node, section.id)}
         >
           <RowScroller
@@ -349,7 +321,6 @@ export default function Cliente() {
                 loading={!p}
                 onView={() => onView(p)}
                 onAdd={() => onAdd(p)}
-                onBuy={() => onBuy(p)}
                 subtextColor={subtextColor}
               />
             )}
@@ -360,27 +331,32 @@ export default function Cliente() {
   );
 }
 
-/* =================== SUBCOMPONENTES REVISADOS Y CORREGIDOS V5 (Flechas Seguras y Tarjeta Limpia) =================== */
-
+/* =================== SUBCOMPONENTES =================== */
 
 function Section({ id, title, children, mt = 0, setRef }) {
   const cardBg = useColorModeValue("white", "gray.800");
-  const border = useColorModeValue("gray.200", "gray.700");
+  const border = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
+
+  // ✅ padding interno alineado con el scroller (menos “doble padding”)
+  const innerPx = useBreakpointValue({ base: 4, md: 4 }) ?? 4;
 
   return (
     <Box
-      id={id} 
+      id={id}
       ref={setRef}
       bg={cardBg}
       border="1px solid"
       borderColor={border}
-      borderRadius="xl"
-      boxShadow="sm"
-      px={{ base: 3, md: 4 }}
+      borderRadius={{ base: "0", md: "xl" }}
+      boxShadow={{ base: "none", md: "sm" }}
+      borderLeftWidth={{ base: 0, md: 1 }}
+      borderRightWidth={{ base: 0, md: 1 }}
+      // ✅ en mobile evitamos padding externo: full-bleed
+      px={{ base: 0, md: 4 }}
       py={{ base: 3, md: 4 }}
       mt={mt}
     >
-      <Heading size="md" mb={3}>
+      <Heading px={{ base: innerPx, md: 0 }} fontSize={{ base: "md", md: "lg" }} mb={3}>
         {title}
       </Heading>
       {children}
@@ -388,81 +364,214 @@ function Section({ id, title, children, mt = 0, setRef }) {
   );
 }
 
-
-/* 🛠️ FIX: StickyCategoryNav con flechas de scroll SEGURAS */
+/* ===== StickyCategoryNav (mobile: iOS Action Sheet / desktop: tabs + flechas) ===== */
 const StickyCategoryNav = React.forwardRef(({ sections, scrollToSection, activeSection }, ref) => {
+  // ✅ Hooks arriba (SIEMPRE)
   const navBg = useColorModeValue("white", "gray.800");
-  const borderCo = useColorModeValue("gray.200", "gray.700");
-  const activeIndex = sections.findIndex(s => s.id === activeSection);
-  
-  const tabListRef = useRef(null); 
+  const borderCo = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
+  const subtle = useColorModeValue("blackAlpha.50", "whiteAlpha.100");
+  const muted = useColorModeValue("gray.600", "gray.300");
+
+  const mobileBtnBg = useColorModeValue("whiteAlpha.900", "whiteAlpha.100");
+  const overlayBg = useColorModeValue("blackAlpha.400", "blackAlpha.600");
+
+  const sheetBg = useColorModeValue("rgba(255,255,255,0.92)", "rgba(17,19,25,0.92)");
+  const handleBg = useColorModeValue("blackAlpha.300", "whiteAlpha.300");
+
+  const selectedChipBg = useColorModeValue("yellow.400", "yellow.300");
+  const closeBtnBg = useColorModeValue("blackAlpha.50", "whiteAlpha.100");
+  const closeBtnHoverBg = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
+
+  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
+
+  const { isOpen, onOpen, onClose } = useDisclosure();
+
+  // ✅ FIX: colores de flechas (NO hooks dentro del JSX condicional)
+  const desktopArrowBg = useColorModeValue("white", "gray.700");
+  const desktopArrowHoverBg = useColorModeValue("blackAlpha.100", "whiteAlpha.100");
+
+  // seguridad del active
+  const safeActive = sections.some((s) => s.id === activeSection) ? activeSection : sections[0]?.id;
+
+  const activeTitle = sections.find((s) => s.id === safeActive)?.title || "Explorar";
+
+  // Desktop tabs index
+  const activeIndexRaw = sections.findIndex((s) => s.id === safeActive);
+  const activeIndex = activeIndexRaw >= 0 ? activeIndexRaw : 0;
+
+  // Desktop arrows
+  const tabListRef = useRef(null);
   const [showLeft, setShowLeft] = useState(false);
   const [showRight, setShowRight] = useState(false);
-  const arrowSize = useBreakpointValue({ base: "sm", md: "md" });
-  
-  // Constantes UX para asegurar el espacio de la flecha
-  const SAFE_ZONE_PADDING = { base: "45px", md: "60px" }; // Añade espacio seguro al TabList
-  const ARROW_FADE_WIDTH = { base: "35px", md: "45px" }; 
-  const ARROW_POS = { base: "0px", md: "5px" }; 
 
-  const fadeStart = useColorModeValue(
-    `linear-gradient(to right, white 50%, transparent 100%)`, 
-    `linear-gradient(to right, #0f1117 50%, transparent 100%)`
-  );
-  const fadeEnd = useColorModeValue(
-    `linear-gradient(to left, white 50%, transparent 100%)`,
-    `linear-gradient(to left, #0f1117 50%, transparent 100%)`
-  );
+  const SAFE_ZONE_PADDING = "52px";
 
   const handleScroll = useCallback(() => {
-    if (!tabListRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = tabListRef.current;
-    
-    const isScrollable = scrollWidth > clientWidth + 5; 
+    const el = tabListRef.current;
+    if (!el) return;
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+
+    const isScrollable = scrollWidth > clientWidth + 5;
     const isStart = scrollLeft < 5;
-    const isEnd = scrollWidth - clientWidth - scrollLeft < 5; 
+    const isEnd = scrollWidth - clientWidth - scrollLeft < 5;
 
     setShowLeft(isScrollable && !isStart);
     setShowRight(isScrollable && !isEnd);
   }, []);
-  
+
   useEffect(() => {
-    handleScroll(); 
-    const currentRef = tabListRef.current;
-    if (currentRef) {
-      currentRef.addEventListener("scroll", handleScroll);
-      window.addEventListener("resize", handleScroll);
-    }
+    if (isMobile) return;
+
+    handleScroll();
+    const el = tabListRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
     return () => {
-      if (currentRef) {
-        currentRef.removeEventListener("scroll", handleScroll);
-        window.removeEventListener("resize", handleScroll);
-      }
+      el.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
     };
-  }, [handleScroll]);
+  }, [handleScroll, isMobile]);
 
   const scrollBy = (px) => tabListRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
-
   return (
     <Box
-      ref={ref} 
+      ref={ref}
       position="sticky"
       top="0px"
-      zIndex={10} 
+      zIndex={10}
       bg={navBg}
       border="1px solid"
       borderColor={borderCo}
-      borderRadius="xl"
-      boxShadow="md"
-      mb={5}
-      px={{ base: 1, md: 4 }} 
-      py={2}
+      borderRadius={{ base: "0", md: "xl" }}
+      boxShadow={{ base: "none", md: "md" }}
+      borderLeftWidth={{ base: 0, md: 1 }}
+      borderRightWidth={{ base: 0, md: 1 }}
+      mb={{ base: 3, md: 5 }}
+      px={{ base: 4, md: 4 }}
+      py={{ base: 3, md: 2 }}
     >
-      <Box position="relative">
-        
-        {/* Flecha Izquierda (Posición Ajustada) */}
-        {showLeft && (
+      {/* ✅ MOBILE: selector iOS */}
+      {isMobile ? (
+        <>
+          <HStack justify="space-between" align="center" spacing={3}>
+            <VStack align="flex-start" spacing={0} minW={0}>
+              <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                Categorías
+              </Text>
+              <Text fontSize="xs" color={muted} noOfLines={1}>
+                Toca para cambiar
+              </Text>
+            </VStack>
+
+            <Button
+              onClick={onOpen}
+              size="sm"
+              variant="outline"
+              rightIcon={<FiChevronDown />}
+              borderRadius="full"
+              bg={mobileBtnBg}
+              backdropFilter="blur(12px)"
+              borderColor={borderCo}
+              boxShadow="sm"
+              px={4}
+              minH="40px"
+              maxW="65%"
+              w="auto"
+            >
+              <Text noOfLines={1}>{activeTitle}</Text>
+            </Button>
+          </HStack>
+
+          <Drawer isOpen={isOpen} onClose={onClose} placement="bottom">
+            <DrawerOverlay bg={overlayBg} />
+            <DrawerContent
+              bg={sheetBg}
+              borderTopRadius="2xl"
+              overflow="hidden"
+              boxShadow="2xl"
+              backdropFilter="blur(18px)"
+            >
+              <Box w="44px" h="5px" bg={handleBg} borderRadius="full" mx="auto" mt={3} mb={2} />
+
+              <DrawerBody p={0}>
+                <Box px={4} pb={3}>
+                  <Text fontWeight="semibold" fontSize="md">
+                    Explorar categorías
+                  </Text>
+                  <Text fontSize="sm" color={muted}>
+                    Selecciona una para saltar al catálogo
+                  </Text>
+                </Box>
+
+                <Divider borderColor={borderCo} />
+
+                <Box maxH="55vh" overflowY="auto" px={2} py={2}>
+                  {sections.map((s) => {
+                    const selected = s.id === safeActive;
+                    return (
+                      <Button
+                        key={s.id}
+                        w="full"
+                        variant="ghost"
+                        justifyContent="space-between"
+                        borderRadius="xl"
+                        px={4}
+                        py={6}
+                        mb={1}
+                        bg={selected ? subtle : "transparent"}
+                        _hover={{ bg: subtle }}
+                        onClick={() => {
+                          scrollToSection(s.id);
+                          onClose();
+                        }}
+                      >
+                        <Text fontSize="md" noOfLines={1}>
+                          {s.title}
+                        </Text>
+
+                        <Box
+                          display="inline-flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          w="28px"
+                          h="28px"
+                          borderRadius="full"
+                          bg={selected ? selectedChipBg : "transparent"}
+                          color={selected ? "black" : muted}
+                          border={selected ? "none" : "1px solid"}
+                          borderColor={borderCo}
+                        >
+                          {selected ? <FiCheck /> : null}
+                        </Box>
+                      </Button>
+                    );
+                  })}
+                </Box>
+
+                <Box px={3} pb={3} pt={1}>
+                  <Button
+                    w="full"
+                    borderRadius="xl"
+                    bg={closeBtnBg}
+                    _hover={{ bg: closeBtnHoverBg }}
+                    onClick={onClose}
+                  >
+                    Cerrar
+                  </Button>
+                </Box>
+              </DrawerBody>
+            </DrawerContent>
+          </Drawer>
+        </>
+      ) : (
+        /* ✅ DESKTOP: tabs + flechas */
+        <Box position="relative">
+          {showLeft && (
             <IconButton
               aria-label="Scroll left"
               icon={<FiChevronLeft />}
@@ -470,18 +579,20 @@ const StickyCategoryNav = React.forwardRef(({ sections, scrollToSection, activeS
               variant="solid"
               isRound
               position="absolute"
-              left={ARROW_POS} 
+              left="6px"
               top="50%"
               transform="translateY(-50%)"
               zIndex={2}
-              onClick={() => scrollBy(-150)}
-              boxShadow="md"
-              bg={useColorModeValue("white", "gray.700")}
+              onClick={() => scrollBy(-180)}
+              bg={desktopArrowBg}
+              border="1px solid"
+              borderColor={borderCo}
+              _hover={{ bg: desktopArrowHoverBg }}
+              boxShadow="sm"
             />
-        )}
-        
-        {/* Flecha Derecha (Posición Ajustada) */}
-        {showRight && (
+          )}
+
+          {showRight && (
             <IconButton
               aria-label="Scroll right"
               icon={<FiChevronRight />}
@@ -489,396 +600,385 @@ const StickyCategoryNav = React.forwardRef(({ sections, scrollToSection, activeS
               variant="solid"
               isRound
               position="absolute"
-              right={ARROW_POS} 
+              right="6px"
               top="50%"
               transform="translateY(-50%)"
               zIndex={2}
-              onClick={() => scrollBy(150)}
-              boxShadow="md"
-              bg={useColorModeValue("white", "gray.700")}
+              onClick={() => scrollBy(180)}
+              bg={desktopArrowBg}
+              border="1px solid"
+              borderColor={borderCo}
+              _hover={{ bg: desktopArrowHoverBg }}
+              boxShadow="sm"
             />
-        )}
+          )}
 
-
-        {/* Indicador visual de scroll Izquierda (Ancho Ajustado) */}
-        <Box
-          position="absolute"
-          left={0}
-          top={0}
-          bottom={0}
-          w={ARROW_FADE_WIDTH} 
-          bgImage={fadeStart}
-          zIndex={1}
-          pointerEvents="none"
-        />
-
-        {/* Indicador visual de scroll Derecha (Ancho Ajustado) */}
-        <Box
-          position="absolute"
-          right={0}
-          top={0}
-          bottom={0}
-          w={ARROW_FADE_WIDTH} 
-          bgImage={fadeEnd}
-          zIndex={1}
-          pointerEvents="none"
-        />
-
-        <Tabs 
-          variant="soft-rounded" 
-          colorScheme="yellow" 
-          index={activeIndex}
-        >
-          {/* 🚨 FIX CLAVE: Añadir padding lateral al TabList para crear la zona segura */}
-          <TabList 
-            ref={tabListRef} 
-            overflowX="scroll" 
-            py={1} 
-            px={SAFE_ZONE_PADDING} // <<<<<<<<<<<< ESTE ES EL CAMBIO CLAVE
-            css={{
-              "&::-webkit-scrollbar": { display: "none" },
-              "-ms-overflow-style": "none",
-              "scrollbar-width": "none",
-              "scroll-behavior": "smooth",
-            }}
-          >
-            {sections.map((section) => (
-              <Tab
-                key={section.id}
-                size="sm"
-                mx={1}
-                flexShrink={0} 
-                onClick={() => scrollToSection(section.id)}
-              >
-                {section.title}
-              </Tab>
-            ))}
-          </TabList>
-        </Tabs>
-      </Box>
+          <Tabs variant="soft-rounded" colorScheme="yellow" index={activeIndex}>
+            <TabList
+              ref={tabListRef}
+              overflowX="auto"
+              py={1}
+              px={SAFE_ZONE_PADDING}
+              css={{
+                "&::-webkit-scrollbar": { display: "none" },
+                msOverflowStyle: "none",
+                scrollbarWidth: "none",
+                scrollBehavior: "smooth",
+              }}
+            >
+              {sections.map((section) => (
+                <Tab
+                  key={section.id}
+                  size="sm"
+                  mx={1}
+                  flexShrink={0}
+                  onClick={() => scrollToSection(section.id)}
+                >
+                  {section.title}
+                </Tab>
+              ))}
+            </TabList>
+          </Tabs>
+        </Box>
+      )}
     </Box>
   );
 });
 
-
-/* 🛠️ FIX: RowScroller con flechas de scroll SEGURAS */
+/* ===== RowScroller (mobile: SIN flechas; desktop: flechas + padding seguro) ===== */
 function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
-  const ref = useRef(null);
-  const [showLeft, setShowLeft] = useState(false); 
-  const [showRight, setShowRight] = useState(false); 
-  const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
+  const scrollerRef = useRef(null);
 
-  // Constantes UX para asegurar el espacio de la flecha
-  const SAFE_ZONE_PADDING = { base: "45px", md: "60px" }; // Añade espacio seguro al HStack (para separar productos)
-  const ARROW_FADE_WIDTH = { base: "35px", md: "50px" }; 
-  const ARROW_POS = { base: "0px", md: "0px" }; 
+  // ✅ Hooks siempre arriba
+  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
 
-  const fadeStart = useColorModeValue(
-    `linear-gradient(to right, ${pageBg} 50%, rgba(246, 247, 249, 0) 100%)`, 
-    `linear-gradient(to right, ${pageBg} 50%, rgba(15, 17, 23, 0) 100%)` 
-  );
-  const fadeEnd = useColorModeValue(
-    `linear-gradient(to left, ${pageBg} 50%, rgba(246, 247, 249, 0) 100%)`,
-    `linear-gradient(to left, ${pageBg} 50%, rgba(15, 17, 23, 0) 100%)` 
-  );
+  const [showLeft, setShowLeft] = useState(false);
+  const [showRight, setShowRight] = useState(false);
 
+  // ✅ MENOS padding acumulado + mejor alineación con títulos (mobile)
+  const SAFE_ZONE_PADDING = useBreakpointValue({ base: "16px", md: "64px" }) ?? "16px";
+
+  const arrowBg = useColorModeValue("white", "gray.700");
+  const arrowHoverBg = useColorModeValue("blackAlpha.100", "whiteAlpha.100");
+  const arrowBorder = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
 
   const content =
     loading || !items?.length
-      ? Array.from({ length: placeholderCount }).map((_, i) => (
-          <SkeletonCard key={`sk-${i}`} />
-        ))
+      ? Array.from({ length: placeholderCount }).map((_, i) => <SkeletonCard key={`sk-${i}`} />)
       : items.map((p, i) => renderItem(p, i));
 
   const handleScroll = useCallback(() => {
-    if (!ref.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = ref.current;
-    
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+
     const isScrollable = scrollWidth > clientWidth + 10;
-    
     const isStart = scrollLeft < 10;
-    const isEnd = scrollWidth - clientWidth - scrollLeft < 10; 
+    const isEnd = scrollWidth - clientWidth - scrollLeft < 10;
 
     setShowLeft(isScrollable && !isStart);
     setShowRight(isScrollable && !isEnd);
   }, []);
-  
+
   useEffect(() => {
-    handleScroll(); 
-    const currentRef = ref.current;
-    if (currentRef) {
-      currentRef.addEventListener("scroll", handleScroll);
-      window.addEventListener("resize", handleScroll);
-    }
+    handleScroll();
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
     return () => {
-      if (currentRef) {
-        currentRef.removeEventListener("scroll", handleScroll);
-        window.removeEventListener("resize", handleScroll);
-      }
+      el.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
     };
   }, [handleScroll, loading, items]);
 
-  const onWheel = (e) => {
-    if (!ref.current) return;
-    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) {
-        ref.current.scrollLeft += e.deltaY;
-    } else {
-        ref.current.scrollLeft += e.deltaX;
-    }
-    // Prevenir scroll vertical de la página al scrollear horizontalmente
-    if(Math.abs(e.deltaX) > 5 || e.shiftKey) {
-        e.preventDefault();
-    }
-  };
+  // ✅ FIX: wheel horizontal con listener NO passive (para que preventDefault funcione)
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
 
-  const arrowSize = useBreakpointValue({ base: "sm", md: "md" });
-  const scrollBy = (px) =>
-    ref.current?.scrollBy({ left: px, behavior: "smooth" });
+    if (isMobile) return;
+
+    const wheel = (e) => {
+      // Scroll vertical -> horizontal
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY;
+      }
+    };
+
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [isMobile]);
+
+  const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
   return (
     <Box position="relative">
-      
-      {/* Sombras de desvanecimiento para indicar scroll (Ancho Ajustado) */}
-      {showLeft && (
-        <Box
-          pointerEvents="none"
-          position="absolute"
-          top={0}
-          bottom={0}
-          left={0}
-          w={ARROW_FADE_WIDTH}
-          bgImage={fadeStart}
-          zIndex={1}
-        />
-      )}
-      {showRight && (
-        <Box
-          pointerEvents="none"
-          position="absolute"
-          top={0}
-          bottom={0}
-          right={0}
-          w={ARROW_FADE_WIDTH}
-          bgImage={fadeEnd}
-          zIndex={1}
-        />
-      )}
-
-      {/* Botón Izquierda Condicional (Posición Ajustada) */}
-      {showLeft && (
+      {/* ✅ En MOBILE: sin flechas */}
+      {!isMobile && showLeft && (
         <Tooltip label="Anterior">
           <IconButton
             aria-label="Anterior"
             icon={<FiChevronLeft />}
             size={arrowSize}
-            variant="ghost"
+            variant="solid"
+            isRound
             position="absolute"
-            left={ARROW_POS} 
+            left="6px"
             top="50%"
             transform="translateY(-50%)"
             zIndex={2}
-            onClick={() => scrollBy(-260)}
+            bg={arrowBg}
+            border="1px solid"
+            borderColor={arrowBorder}
+            _hover={{ bg: arrowHoverBg }}
+            boxShadow="sm"
+            onClick={() => scrollBy(-280)}
           />
         </Tooltip>
       )}
 
-      {/* Botón Derecha Condicional (Posición Ajustada) */}
-      {showRight && (
+      {!isMobile && showRight && (
         <Tooltip label="Siguiente">
           <IconButton
             aria-label="Siguiente"
             icon={<FiChevronRight />}
             size={arrowSize}
-            variant="ghost"
+            variant="solid"
+            isRound
             position="absolute"
-            right={ARROW_POS} 
+            right="6px"
             top="50%"
             transform="translateY(-50%)"
             zIndex={2}
-            onClick={() => scrollBy(260)}
+            bg={arrowBg}
+            border="1px solid"
+            borderColor={arrowBorder}
+            _hover={{ bg: arrowHoverBg }}
+            boxShadow="sm"
+            onClick={() => scrollBy(280)}
           />
         </Tooltip>
       )}
 
-      {/* 🚨 FIX CLAVE: Añadir padding lateral al HStack para crear la zona segura */}
       <HStack
-        ref={ref}
+        ref={scrollerRef}
         spacing={{ base: 3, md: 4 }}
         overflowX="auto"
         py={1}
-        px={SAFE_ZONE_PADDING} // <<<<<<<<<<<< ESTE ES EL CAMBIO CLAVE
-        css={{ scrollbarWidth: "thin" }}
-        onWheel={onWheel}
-        scrollSnapType="x mandatory"
+        px={SAFE_ZONE_PADDING}
+        css={{
+          scrollPaddingInline: SAFE_ZONE_PADDING, // ✅ no prop DOM
+          scrollSnapType: "x mandatory", // ✅ evita prop raro en DOM
+          "&::-webkit-scrollbar": { display: "none" },
+          msOverflowStyle: "none", // ✅ camelCase
+          scrollbarWidth: "none",
+        }}
       >
         {content}
       </HStack>
 
-      <HintHint />
+      <HintHint px={SAFE_ZONE_PADDING} />
     </Box>
   );
 }
 
-
-/* 🛠️ ProductCard Simplificado y Clickeable */
-function ProductCard({ producto, loading, onView, onAdd, onBuy, subtextColor }) {
+/* ===== ProductCard (minimal, centrada, responsive + zoom SOLO desktop) ===== */
+function ProductCard({ producto, loading, onView, onAdd, subtextColor }) {
   const cardBg = useColorModeValue("white", "gray.800");
-  const borderCo = useColorModeValue("gray.200", "gray.700");
+  const borderCo = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
+  const titleColor = useColorModeValue("gray.900", "gray.100");
+  const priceColor = useColorModeValue("gray.900", "gray.50");
+
+  const ctaBorder = useColorModeValue("red.300", "red.400");
+  const ctaColor = useColorModeValue("red.600", "red.300");
+  const ctaHoverBg = useColorModeValue("red.50", "whiteAlpha.100");
+  const ctaHoverBorder = useColorModeValue("red.400", "red.300");
 
   if (loading || !producto) return <SkeletonCard />;
 
   const img = producto.imagen_principal
     ? `${API_BASE_URL}${producto.imagen_principal}`
-    : "https://via.placeholder.com/600x400?text=Sin+Imagen";
+    : "https://via.placeholder.com/600x600?text=Sin+Imagen";
 
-  const price = Number(producto.precio ?? 0); 
-  const brandText = producto.marca || ""; 
+  const price = Number(producto.precio ?? 0);
+  const brandText = (producto.marca || "").trim();
 
   return (
     <Box
-      minW={{ base: "220px", md: "240px" }}
-      maxW={{ base: "220px", md: "240px" }}
+      // ✅ MÁS ancho en mobile para aprovechar pantalla (2 cards casi llenan el viewport)
+      minW={{ base: "170px", sm: "190px", md: "210px" }}
+      maxW={{ base: "170px", sm: "190px", md: "210px" }}
       bg={cardBg}
       border="1px solid"
       borderColor={borderCo}
-      borderRadius="xl"
+      borderRadius={{ base: "xl", md: "2xl" }}
       overflow="hidden"
       boxShadow="xs"
+      transition="transform .16s ease, box-shadow .16s ease"
       _hover={{ boxShadow: "md", transform: "translateY(-1px)" }}
-      transition="all .15s ease"
-      scrollSnapAlign="start"
-      role="group"
+      role="button"
+      tabIndex={0}
+      cursor="pointer"
+      onClick={() => onView(producto)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onView(producto);
+        }
+      }}
       display="flex"
       flexDirection="column"
-      cursor="pointer" 
-      onClick={() => onView(producto)} 
+      sx={{
+        scrollSnapAlign: "start", // ✅ evita prop raro en DOM
+        "@media (hover: hover) and (pointer: fine)": {
+          "&:hover .fe-product-img": { transform: "scale(1.06)" },
+        },
+      }}
     >
-      <Box borderBottom="1px solid" borderColor={borderCo}>
-        <AspectRatio ratio={4 / 3} w="100%" bg="white">
-          <Image
-            src={img}
-            alt={producto.nombre}
-            objectFit="contain"
-            loading="lazy"
-          />
+      <Box bg="white" borderBottom="1px solid" borderColor={borderCo}>
+        <AspectRatio ratio={1} w="100%">
+          <Box overflow="hidden" w="100%" h="100%">
+            <Image
+              className="fe-product-img"
+              src={img}
+              alt={producto.nombre}
+              w="100%"
+              h="100%"
+              objectFit="contain"
+              objectPosition="center"
+              loading="lazy"
+              transform="scale(1)"
+              transition="transform .22s ease"
+            />
+          </Box>
         </AspectRatio>
       </Box>
 
-      {/* Zona de texto/botones */}
-      <VStack align="stretch" spacing={1} p={3} flex="1">
-        
-        {/* Marca (Solo si existe para un look más limpio) */}
-        <Text 
-          fontSize="xs" 
-          fontWeight="bold" 
-          color={subtextColor} 
-          textTransform="uppercase" 
-          noOfLines={1}
-          minH="15px" 
-        >
+      <VStack align="stretch" spacing={{ base: 1.5, md: 2 }} p={{ base: 2.5, md: 3 }} flex="1">
+        {brandText ? (
+          <Text
+            fontSize={{ base: "2xs", md: "xs" }}
+            color={subtextColor}
+            fontWeight="semibold"
+            textTransform="uppercase"
+            letterSpacing="0.06em"
+            textAlign="center"
+            noOfLines={1}
+          >
             {brandText}
-        </Text>
+          </Text>
+        ) : (
+          <Box h={{ base: "8px", md: "10px" }} />
+        )}
 
-        <Text noOfLines={2} fontWeight="semibold" minH="40px">
+        <Text
+          color={titleColor}
+          fontWeight="600"
+          textAlign="center"
+          fontSize={{ base: "sm", md: "sm" }}
+          lineHeight="1.2"
+          noOfLines={2}
+          minH={{ base: "34px", md: "36px" }}
+        >
           {producto.nombre}
         </Text>
 
-        <Text fontWeight="bold" fontSize="lg" color="yellow.500" pt={1}>
-            {fmtCop(price)}
-        </Text>
-        <Text fontSize="xs" color={subtextColor} mt="-5px !important">
-            IVA Incluido | Unidad
-        </Text>
-        
-        {/* Botones (UX: Stop propagation para que no se active onView) */}
-        <Flex 
-            pt={2} 
-            gap={2} 
-            alignItems="center" 
-            flexWrap="nowrap"
-            // Clave: Prevenir que el clic suba al Box principal (evita navegación)
-            onClick={(e) => e.stopPropagation()} 
+        <Text
+          textAlign="center"
+          color={priceColor}
+          fontWeight="600"
+          fontSize={{ base: "md", md: "lg" }}
+          letterSpacing="-0.01em"
+          mt={1}
         >
-            {/* 1. Añadir (Acción secundaria) */}
-            <Button
-                size="sm"
-                variant="outline" 
-                colorScheme="gray" 
-                leftIcon={<FiShoppingCart />}
-                onClick={() => onAdd(producto)}
-                minH="40px"
-                flexGrow={1}
-            >
-                Añadir
-            </Button>
-            
-            {/* 2. Comprar (Acción primaria) */}
-            <Button
-                size="sm"
-                variant="solid" 
-                leftIcon={<FiZap />}
-                colorScheme="yellow"
-                color="black"
-                onClick={() => onBuy(producto)}
-                minH="40px"
-                flexGrow={1}
-            >
-                Comprar
-            </Button>
-        </Flex>
+          {fmtCop(price)}
+        </Text>
+
+        <Text textAlign="center" fontSize={{ base: "2xs", md: "xs" }} color={subtextColor} mt="-6px">
+          IVA incluido • Unidad
+        </Text>
+
+        <Box pt={{ base: 1, md: 2 }} onClick={(e) => e.stopPropagation()}>
+          <Button
+            w="full"
+            size="sm"
+            variant="outline"
+            borderColor={ctaBorder}
+            color={ctaColor}
+            _hover={{ bg: ctaHoverBg, borderColor: ctaHoverBorder }}
+            onClick={() => onAdd(producto)}
+            minH={{ base: "34px", md: "40px" }}
+          >
+            Agregar al carrito
+          </Button>
+        </Box>
       </VStack>
     </Box>
   );
 }
 
+/* ===== Skeleton Card ===== */
 function SkeletonCard() {
   const cardBg = useColorModeValue("white", "gray.800");
-  const border = useColorModeValue("gray.200", "gray.700");
+  const border = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
+
   return (
     <Box
-      minW={{ base: "220px", md: "240px" }}
-      maxW={{ base: "220px", md: "240px" }}
+      minW={{ base: "170px", sm: "190px", md: "210px" }}
+      maxW={{ base: "170px", sm: "190px", md: "210px" }}
       bg={cardBg}
-      borderRadius="xl"
+      borderRadius={{ base: "xl", md: "2xl" }}
       overflow="hidden"
       boxShadow="xs"
       border="1px solid"
       borderColor={border}
-      scrollSnapAlign="start"
       display="flex"
       flexDirection="column"
+      sx={{ scrollSnapAlign: "start" }} // ✅ evita prop raro en DOM
     >
-      <AspectRatio ratio={4 / 3} w="100%">
+      <AspectRatio ratio={1} w="100%">
         <Skeleton w="100%" h="100%" />
       </AspectRatio>
-      <Box p={3}>
-        <Skeleton height="12px" w="40%" mb={1} /> 
-        <Skeleton height="16px" mb={2} />
-        <Skeleton height="16px" w="60%" mb={3} />
-        <Skeleton height="14px" w="40%" mb={4} />
-        <HStack mt={3} spacing={2}>
-          <Skeleton h="40px" flex="1" borderRadius="md" />
-          <Skeleton h="40px" flex="1" borderRadius="md" />
-        </HStack>
+
+      <Box p={{ base: 2.5, md: 3 }}>
+        <Skeleton height="10px" w="45%" mx="auto" mb={2} />
+        <Skeleton height="14px" mb={2} />
+        <Skeleton height="14px" w="70%" mx="auto" mb={3} />
+        <Skeleton height="16px" w="60%" mx="auto" mb={2} />
+        <Skeleton height="10px" w="55%" mx="auto" mb={3} />
+        <Skeleton h={{ base: "34px", md: "40px" }} borderRadius="md" />
       </Box>
     </Box>
   );
 }
 
-function HintHint() {
+/* ===== Hint ===== */
+function HintHint({ px }) {
   const color = useColorModeValue("gray.500", "gray.400");
+  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+
   return (
-    <HStack mt={2} spacing={2} color={color} fontSize="xs">
+    <HStack mt={2} spacing={2} color={color} fontSize="xs" px={px}>
       <Text>Desliza para ver más</Text>
-      <HStack display={{ base: 'none', md: 'flex' }}>
-        <Kbd>Shift</Kbd>
-        <Text>+</Text>
-        <Kbd>Wheel</Kbd>
-      </HStack>
-      <Text display={{ base: 'none', md: 'block' }}>o usa</Text>
-      <Kbd>←</Kbd>
-      <Text>/</Text>
-      <Kbd>→</Kbd>
+      {!isMobile && (
+        <>
+          <HStack>
+            <Kbd>Shift</Kbd>
+            <Text>+</Text>
+            <Kbd>Wheel</Kbd>
+          </HStack>
+          <Text>o usa</Text>
+          <Kbd>←</Kbd>
+          <Text>/</Text>
+          <Kbd>→</Kbd>
+        </>
+      )}
     </HStack>
   );
 }

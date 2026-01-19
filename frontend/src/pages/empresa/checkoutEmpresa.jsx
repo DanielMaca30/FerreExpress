@@ -2,7 +2,13 @@
 // Checkout para Empresas / Contratistas
 // Flujo: arma un intent y redirige a /empresa/pedido-procesando.
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   Box,
   Heading,
@@ -43,14 +49,10 @@ import {
   Select,
 } from "@chakra-ui/react";
 import { FiCreditCard, FiTruck, FiCheckCircle, FiPlus } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import api from "../../utils/axiosInstance";
-import {
-  readCart,
-  onCartChanged,
-  effectiveUnitPrice,
-} from "../../utils/cartStore";
+import { readCart, onCartChanged, effectiveUnitPrice } from "../../utils/cartStore";
 
 /* =================== Utils =================== */
 
@@ -63,9 +65,34 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
-// Totales con envío dinámico por tipo de entrega
-// entrega UI: "ENVIO_DOMICILIO" | "RECOGER_EN_TIENDA" | "COTIZACION"
-const computeTotals = (items, entrega) => {
+const safeDate = (v) => {
+  const d = v ? new Date(v) : null;
+  return d && !Number.isNaN(d.getTime()) ? d : null;
+};
+
+const getCotTotal = (c) => {
+  const v =
+    c?.total_cotizado ??
+    c?.total ??
+    c?.total_cotizacion ??
+    c?.totalCotizado ??
+    0;
+  return Number(v) || 0;
+};
+
+const getCotProductos = (c) => {
+  const arr =
+    c?.productos ??
+    c?.items ??
+    c?.detalles ??
+    c?.detalle ??
+    c?.cotizacion_detalles ??
+    [];
+  return Array.isArray(arr) ? arr : [];
+};
+
+// Totales para carrito normal (depende de entrega)
+const computeTotalsCarrito = (items, entregaUi) => {
   let subtotal = 0;
   for (const item of items) {
     const unit = effectiveUnitPrice(item);
@@ -73,18 +100,8 @@ const computeTotals = (items, entrega) => {
     subtotal += unit * q;
   }
 
-  let costo_envio = 0;
-  if (entrega === "ENVIO_DOMICILIO") {
-    costo_envio = COSTO_ENVIO_FIJO;
-  }
-
-  let total = subtotal + costo_envio;
-
-  if (entrega === "COTIZACION") {
-    // Para cotización, visualmente dejamos envío en 0
-    total = subtotal;
-    costo_envio = 0;
-  }
+  const costo_envio = entregaUi === "ENVIO_DOMICILIO" ? COSTO_ENVIO_FIJO : 0;
+  const total = subtotal + costo_envio;
 
   return { subtotal, costo_envio, total };
 };
@@ -97,22 +114,19 @@ const formatCard = (v) =>
     .replace(/(\d{4})(?=\d)/g, "$1 ")
     .trim();
 
-// Mapea valores de entrega del UI → backend
-const mapEntregaForBackend = (entregaUi, hasCotizacion) => {
-  if (hasCotizacion) return "COTIZACION";
+// Mapea entrega UI → backend
+const mapEntregaForBackend = (entregaUi) => {
   if (entregaUi === "ENVIO_DOMICILIO") return "DOMICILIO";
-  if (entregaUi === "RECOGER_EN_TIENDA") return "TIENDA";
-  return entregaUi;
+  return "TIENDA"; // RECOGER_EN_TIENDA
 };
 
-// Mapea método de pago del UI → backend
+// Mapea método UI → backend
 const mapMetodoForBackend = (metodoUi) => {
   if (metodoUi === "TARJETA") return "PAGO_LINEA";
-  // Efectivo / transferencia = flujo sin pasarela en línea
   return "CONTRAENTREGA";
 };
 
-// Estado inicial para el formulario de agregar dirección
+// Estado inicial para agregar dirección
 const initialDirForm = {
   descripcion: "",
   calle_principal: "",
@@ -126,20 +140,20 @@ const initialDirForm = {
 
 /* =================== Componentes auxiliares =================== */
 
-const ResumenPedido = ({ items, entrega, selectedCotizacion }) => {
-  const { subtotal, costo_envio, total } = useMemo(
-    () => computeTotals(items, entrega),
-    [items, entrega]
-  );
+const ResumenPedido = ({ items, entregaUi, selectedCotizacion }) => {
   const cardBg = useColorModeValue("white", "gray.800");
 
-  const totalFinal = selectedCotizacion
-    ? selectedCotizacion.total_cotizado
-    : total;
-  const envioFinal = selectedCotizacion ? 0 : costo_envio;
-  const subtotalFinal = selectedCotizacion
-    ? totalFinal - envioFinal
-    : subtotal;
+  const resumen = useMemo(() => {
+    // Si hay cotización: base = total cotización, y si eligen domicilio, sumamos envío fijo
+    if (selectedCotizacion) {
+      const base = getCotTotal(selectedCotizacion);
+      const envio = entregaUi === "ENVIO_DOMICILIO" ? COSTO_ENVIO_FIJO : 0;
+      const total = base + envio;
+      return { subtotal: base, costo_envio: envio, total };
+    }
+    // Carrito normal
+    return computeTotalsCarrito(items, entregaUi);
+  }, [items, entregaUi, selectedCotizacion]);
 
   return (
     <VStack
@@ -153,21 +167,27 @@ const ResumenPedido = ({ items, entrega, selectedCotizacion }) => {
       <Heading size="md" borderBottom="1px" borderColor="gray.200" pb={3}>
         Resumen de Compra
       </Heading>
+
       <VStack align="stretch" spacing={2} fontSize="md">
         <HStack justify="space-between">
-          <Text color="gray.500">Subtotal</Text>
-          <Text fontWeight="medium">{fmtCop(subtotalFinal)}</Text>
+          <Text color="gray.500">
+            {selectedCotizacion ? "Base (Cotización)" : "Subtotal"}
+          </Text>
+          <Text fontWeight="medium">{fmtCop(resumen.subtotal)}</Text>
         </HStack>
+
         <HStack justify="space-between">
           <Text color="gray.500">Costo de Envío</Text>
-          <Text fontWeight="medium">{fmtCop(envioFinal)}</Text>
+          <Text fontWeight="medium">{fmtCop(resumen.costo_envio)}</Text>
         </HStack>
       </VStack>
+
       <Divider />
+
       <HStack justify="space-between">
         <Heading size="sm">Total a Pagar</Heading>
         <Heading size="md" color="yellow.500">
-          {fmtCop(totalFinal)}
+          {fmtCop(resumen.total)}
         </Heading>
       </HStack>
 
@@ -176,11 +196,11 @@ const ResumenPedido = ({ items, entrega, selectedCotizacion }) => {
           <AlertIcon />
           <Box>
             <Heading size="sm" mb={1}>
-              Usando Cotización #{selectedCotizacion.id}
+              Pagando Cotización #{selectedCotizacion.id}
             </Heading>
             <Text fontSize="sm">
-              El total se basa en la cotización aprobada. En este flujo no se
-              cobra envío adicional.
+              Selecciona si deseas <b>recoger en tienda</b> o <b>envío a domicilio</b>.
+              Si eliges domicilio, se suma el envío fijo al total a pagar.
             </Text>
           </Box>
         </Alert>
@@ -208,30 +228,26 @@ const DireccionCard = ({ direccion, isSelected, onSelect }) => {
       transition="all 0.2s"
       _hover={{ shadow: "md" }}
     >
-      <Radio
-        isChecked={isSelected}
-        onChange={() => onSelect(direccion)}
-        pt={1}
-      >
+      <Radio isChecked={isSelected} onChange={() => onSelect(direccion)} pt={1}>
         <Box />
       </Radio>
+
       <VStack align="start" flex={1}>
-        <HStack spacing={2} wrap="wrap">
-          <Text fontWeight="bold">
-            {direccion.descripcion || "Dirección"}
-          </Text>
+        <HStack spacing={2} flexWrap="wrap">
+          <Text fontWeight="bold">{direccion.descripcion || "Dirección"}</Text>
           {direccion.es_principal && (
             <Badge colorScheme="green" size="sm">
               Principal
             </Badge>
           )}
         </HStack>
+
         <Text fontSize="sm" color="gray.500">
-          {direccion.calle_principal} #{direccion.nro},{" "}
-          {direccion.ciudad}
+          {direccion.calle_principal} #{direccion.nro}, {direccion.ciudad}
           {direccion.departamento ? `, ${direccion.departamento}` : ""},{" "}
           {direccion.pais}
         </Text>
+
         <Text fontSize="xs" color="gray.500">
           Tel: {direccion.telefono || "—"}
         </Text>
@@ -246,6 +262,9 @@ export default function CheckoutEmpresa() {
   const navigate = useNavigate();
   const toast = useToast();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const cotizacionIdFromUrl = searchParams.get("cotizacionId");
+
   const [items, setItems] = useState(() => readCart());
   const [loading, setLoading] = useState(true);
 
@@ -255,23 +274,21 @@ export default function CheckoutEmpresa() {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [selectedCotizacion, setSelectedCotizacion] = useState(null);
 
-  // UI: "RECOGER_EN_TIENDA" | "ENVIO_DOMICILIO" | "COTIZACION"
-  const [entrega, setEntrega] = useState("RECOGER_EN_TIENDA");
+  // ✅ Entrega SIEMPRE elegible (inclusive para cotización)
+  // UI: "RECOGER_EN_TIENDA" | "ENVIO_DOMICILIO"
+  const [entregaUi, setEntregaUi] = useState("RECOGER_EN_TIENDA");
 
   // UI: "EFECTIVO" | "TARJETA"
   const [metodoPago, setMetodoPago] = useState("EFECTIVO");
 
-  // Datos de tarjeta demo
+  // Datos tarjeta demo
   const [cardNumber, setCardNumber] = useState("");
   const [cardHolder, setCardHolder] = useState("");
   const [cardExp, setCardExp] = useState("");
   const [cardCvv, setCardCvv] = useState("");
 
-  const {
-    isOpen: showAddModal,
-    onOpen: openAddModal,
-    onClose: closeAddModal,
-  } = useDisclosure();
+  const { isOpen: showAddModal, onOpen: openAddModal, onClose: closeAddModal } =
+    useDisclosure();
   const [formDir, setFormDir] = useState(initialDirForm);
   const [guardandoDir, setGuardandoDir] = useState(false);
 
@@ -280,14 +297,96 @@ export default function CheckoutEmpresa() {
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
   const cardBg = useColorModeValue("white", "gray.800");
 
-  const totals = useMemo(
-    () => computeTotals(items, entrega),
-    [items, entrega]
+  const isCotizacionFlow = !!selectedCotizacion;
+
+  // --- Mensaje de pasarela (viene de PedidoProcesandoEmpresa al rechazar) ---
+  const [paymentError, setPaymentError] = useState("");
+
+  useEffect(() => {
+    const m = sessionStorage.getItem("fe_last_payment_error_empresa");
+    if (m) {
+      setPaymentError(m);
+      // toast (una vez)
+      toast({
+        title: "Pago rechazado",
+        description: m,
+        status: "error",
+        duration: 4500,
+        isClosable: true,
+      });
+      sessionStorage.removeItem("fe_last_payment_error_empresa");
+    }
+  }, [toast]);
+
+  // ---- refs anti race / doble carga ----
+  const cotReqRef = useRef(0);
+  const lastCotIdRef = useRef(null);
+  const selectedCotIdRef = useRef(null);
+
+  useEffect(() => {
+    selectedCotIdRef.current = selectedCotizacion?.id ?? null;
+  }, [selectedCotizacion]);
+
+  const normalizeDetalleCot = (raw) => {
+    const det = raw?.cotizacion ?? raw?.data ?? raw ?? null;
+    if (!det) return null;
+    const productos = getCotProductos(det);
+    return {
+      ...det,
+      productos,
+      total_cotizado: getCotTotal(det),
+    };
+  };
+
+  const loadCotizacionDetalle = useCallback(
+    async (idRaw) => {
+      const id = String(idRaw || "").trim();
+      if (!id) return;
+
+      // evita refetch del mismo id
+      if (
+        lastCotIdRef.current === id &&
+        selectedCotIdRef.current === Number(id)
+      ) {
+        return;
+      }
+      lastCotIdRef.current = id;
+
+      const reqId = ++cotReqRef.current;
+
+      try {
+        const res = await api.get(`/cotizaciones/${id}`);
+        const detalle = normalizeDetalleCot(res.data);
+
+        if (reqId !== cotReqRef.current) return;
+        if (!detalle) throw new Error("Detalle vacío");
+
+        setSelectedCotizacion(detalle);
+
+        // Si estás entrando por cotización, forzamos método tarjeta
+        setMetodoPago("TARJETA");
+        setTabIndex(1);
+      } catch (error) {
+        console.error("Error cargando detalle cotización:", error);
+        toast({
+          title: "No se pudo cargar la cotización",
+          description:
+            "No fue posible cargar el detalle de la cotización seleccionada.",
+          status: "error",
+          duration: 3500,
+          isClosable: true,
+        });
+      }
+    },
+    [toast]
   );
 
   /* ===== Carga inicial ===== */
   useEffect(() => {
-    const off = onCartChanged(() => setItems(readCart()));
+    // ✅ el carrito NO pisa items si estás pagando cotización
+    const off = onCartChanged(() => {
+      if (!selectedCotizacion) setItems(readCart());
+    });
 
     const loadData = async () => {
       try {
@@ -298,16 +397,14 @@ export default function CheckoutEmpresa() {
           ? dirRes.data
           : dirRes.data?.direcciones || [];
         setDirecciones(dirList);
+
         if (dirList.length > 0) {
-          const principal =
-            dirList.find((d) => d.es_principal) || dirList[0];
+          const principal = dirList.find((d) => d.es_principal) || dirList[0];
           setSelectedDir(principal);
         }
 
         try {
-          const cotRes = await api.get(
-            "/cotizaciones/mios?estado=APROBADA"
-          );
+          const cotRes = await api.get("/cotizaciones/mios?estado=APROBADA");
           const listCot = Array.isArray(cotRes.data)
             ? cotRes.data
             : cotRes.data?.cotizaciones || [];
@@ -319,8 +416,7 @@ export default function CheckoutEmpresa() {
         console.error("Error al cargar datos de checkout empresa:", error);
         toast({
           title: "Error de carga",
-          description:
-            "No se pudieron cargar las direcciones o cotizaciones.",
+          description: "No se pudieron cargar las direcciones o cotizaciones.",
           status: "error",
           duration: 3000,
           isClosable: true,
@@ -332,36 +428,66 @@ export default function CheckoutEmpresa() {
 
     loadData();
     return () => off?.();
-  }, [toast]);
+  }, [toast, selectedCotizacion]);
 
-  /* ===== Si seleccionas una cotización, rellenamos con sus productos ===== */
+  /* ===== Si vienes desde MisCotizaciones: /checkout-empresa?cotizacionId= ===== */
+  useEffect(() => {
+    if (cotizacionIdFromUrl) {
+      loadCotizacionDetalle(cotizacionIdFromUrl);
+    }
+  }, [cotizacionIdFromUrl, loadCotizacionDetalle]);
+
+  /* ===== Si seleccionas una cotización, rellenamos items con sus productos ===== */
   useEffect(() => {
     if (selectedCotizacion) {
+      const productos = getCotProductos(selectedCotizacion);
+
       setItems(
-        (selectedCotizacion.productos || []).map((p) => ({
+        productos.map((p) => ({
           ...p,
           id: p.producto_id ?? p.id,
-          nombre: p.nombre,
+          nombre: p.nombre || p.producto_nombre,
           cantidad: p.cantidad,
-          precio: p.precio_unitario,
+          precio: p.precio_unitario ?? p.precio ?? p.valor_unitario,
           precio_oferta: undefined,
           imagen_principal: p.imagen_url || p.imagen_principal || null,
         }))
       );
-      setEntrega("COTIZACION");
-    } else {
-      setItems(readCart());
-      setEntrega("RECOGER_EN_TIENDA");
+
+      // cotización => tarjeta
+      setMetodoPago("TARJETA");
+      return;
     }
+
+    // volver a carrito normal
+    setItems(readCart());
+    setMetodoPago("EFECTIVO");
   }, [selectedCotizacion]);
+
+  /* ===== Si estás en cotización, forzamos tarjeta ===== */
+  useEffect(() => {
+    if (isCotizacionFlow && metodoPago !== "TARJETA") {
+      setMetodoPago("TARJETA");
+    }
+  }, [isCotizacionFlow, metodoPago]);
+
+  // Totales: si hay cotización -> base+envío, si no -> carrito
+  const totals = useMemo(() => {
+    if (selectedCotizacion) {
+      const base = getCotTotal(selectedCotizacion);
+      const envio = entregaUi === "ENVIO_DOMICILIO" ? COSTO_ENVIO_FIJO : 0;
+      const total = base + envio;
+      return { subtotal: base, costo_envio: envio, total };
+    }
+    return computeTotalsCarrito(items, entregaUi);
+  }, [items, entregaUi, selectedCotizacion]);
 
   /* ===== Guardar dirección ===== */
   const saveDireccion = async () => {
     if (!formDir.calle_principal || !formDir.ciudad || !formDir.departamento) {
       toast({
         title: "Datos incompletos",
-        description:
-          "Asegúrate de completar la calle, ciudad y departamento.",
+        description: "Asegúrate de completar la calle, ciudad y departamento.",
         status: "warning",
         duration: 3000,
         isClosable: true,
@@ -386,6 +512,7 @@ export default function CheckoutEmpresa() {
         ? listRes.data
         : listRes.data?.direcciones || [];
       setDirecciones(list);
+
       const nueva =
         list.find((d) => d.id === Number(newId)) ||
         list.find((d) => d.es_principal) ||
@@ -394,6 +521,7 @@ export default function CheckoutEmpresa() {
 
       setFormDir(initialDirForm);
       closeAddModal();
+
       toast({
         title: "Dirección guardada",
         description: "La nueva dirección ha sido añadida.",
@@ -430,7 +558,8 @@ export default function CheckoutEmpresa() {
       return;
     }
 
-    if (entrega === "ENVIO_DOMICILIO" && !selectedDir) {
+    // Dirección requerida si domicilio (incluye cotización + domicilio)
+    if (entregaUi === "ENVIO_DOMICILIO" && !selectedDir) {
       toast({
         title: "Dirección requerida",
         description: "Debes seleccionar una dirección para envío a domicilio.",
@@ -441,8 +570,8 @@ export default function CheckoutEmpresa() {
       return;
     }
 
-    // 🚫 Regla de negocio: domicilio NO puede ser contraentrega
-    if (entrega === "ENVIO_DOMICILIO" && metodoPago === "EFECTIVO") {
+    // 🚫 Regla: domicilio NO puede ser efectivo
+    if (entregaUi === "ENVIO_DOMICILIO" && metodoPago === "EFECTIVO") {
       toast({
         title: "Método de pago no válido",
         description:
@@ -454,27 +583,27 @@ export default function CheckoutEmpresa() {
       return;
     }
 
-    if (metodoPago === "TARJETA" && entrega === "COTIZACION") {
+    // ✅ Si estás pagando cotización, debe ser tarjeta
+    if (isCotizacionFlow && metodoPago !== "TARJETA") {
       toast({
-        title: "Pago no necesario",
+        title: "Pago requerido",
         description:
-          "Para cotizaciones aprobadas, usa los mecanismos de pago acordados. Elige 'Efectivo / Transferencia'.",
+          "Para pagar una cotización en este flujo debes usar tarjeta (demo).",
         status: "warning",
-        duration: 5000,
+        duration: 3500,
         isClosable: true,
       });
       return;
     }
 
-    // Validación de tarjeta si aplica
+    // Validación tarjeta
     let cleanCard = "";
     if (metodoPago === "TARJETA") {
       cleanCard = (cardNumber || "").replace(/\s+/g, "");
       if (cleanCard.length < 12) {
         toast({
           title: "Tarjeta inválida",
-          description:
-            "El número de tarjeta demo debe tener al menos 12 dígitos.",
+          description: "El número de tarjeta demo debe tener al menos 12 dígitos.",
           status: "error",
           duration: 3000,
           isClosable: true,
@@ -513,31 +642,28 @@ export default function CheckoutEmpresa() {
       }
     }
 
-    const entregaBack = mapEntregaForBackend(
-      entrega,
-      !!selectedCotizacion
-    );
-    const metodoBack = mapMetodoForBackend(metodoPago);
+    const entregaBack = mapEntregaForBackend(entregaUi); // "DOMICILIO" | "TIENDA"
+    const metodoBack = mapMetodoForBackend(metodoPago); // "PAGO_LINEA" | "CONTRAENTREGA"
 
     const intentPayload = {
       items,
-      entrega: entregaBack,      // "DOMICILIO" | "TIENDA" | "COTIZACION"
-      entrega_ui: entrega,       // para referencia en front
+      entrega: entregaBack, // ✅ ahora siempre TIENDA/DOMICILIO (aunque sea cotización)
+      entrega_ui: entregaUi,
       direccion_id:
-        entrega === "ENVIO_DOMICILIO" && selectedDir
-          ? Number(selectedDir.id)
-          : null,
-      metodo_pago: metodoBack,   // "PAGO_LINEA" | "CONTRAENTREGA"
+        entregaUi === "ENVIO_DOMICILIO" && selectedDir ? Number(selectedDir.id) : null,
+      metodo_pago: metodoBack,
       metodo_pago_ui: metodoPago,
       nota: null,
+
+      // ✅ si es cotización, esto activa el flujo /pedidos/desde-cotizacion
       cotizacion_id: selectedCotizacion ? selectedCotizacion.id : null,
+
       totales: {
         subtotal: totals.subtotal,
         envio: totals.costo_envio,
-        total: selectedCotizacion
-          ? selectedCotizacion.total_cotizado
-          : totals.total,
+        total: totals.total,
       },
+
       tarjeta: metodoPago === "TARJETA" ? cleanCard : "",
       titular: metodoPago === "TARJETA" ? cardHolder.trim() : "",
       exp: metodoPago === "TARJETA" ? cardExp : "",
@@ -549,11 +675,10 @@ export default function CheckoutEmpresa() {
       JSON.stringify(intentPayload)
     );
 
-    // ✅ Ruta corregida según tu App.jsx
     navigate("/empresa/pedido-procesando");
   }, [
     items,
-    entrega,
+    entregaUi,
     selectedDir,
     metodoPago,
     selectedCotizacion,
@@ -564,6 +689,7 @@ export default function CheckoutEmpresa() {
     cardCvv,
     toast,
     navigate,
+    isCotizacionFlow,
   ]);
 
   /* ===== Render ===== */
@@ -573,10 +699,7 @@ export default function CheckoutEmpresa() {
       <Box p={8} bg={pageBg} minH="100vh">
         <Heading mb={8}>Checkout de Empresa</Heading>
         <SimpleGrid columns={{ base: 1, lg: 3 }} spacing={8}>
-          <Skeleton
-            height="300px"
-            gridColumn={{ base: "auto", lg: "span 2" }}
-          />
+          <Skeleton height="300px" gridColumn={{ base: "auto", lg: "span 2" }} />
           <Skeleton height="300px" />
         </SimpleGrid>
       </Box>
@@ -589,9 +712,20 @@ export default function CheckoutEmpresa() {
   return (
     <Box p={4} bg={pageBg} minH="100vh">
       <Box maxW="1200px" mx="auto">
-        <Heading mb={6} size="xl">
+        <Heading mb={3} size="xl">
           Checkout para Empresas y Contratistas
         </Heading>
+
+        {/* ✅ Mensaje de pasarela / error */}
+        {paymentError && (
+          <Alert status="error" borderRadius="lg" mb={4}>
+            <AlertIcon />
+            <Box>
+              <Text fontWeight="bold">Pago rechazado</Text>
+              <Text fontSize="sm">{paymentError}</Text>
+            </Box>
+          </Alert>
+        )}
 
         {isCarritoEmpty && (
           <Alert status="warning" borderRadius="lg">
@@ -613,6 +747,7 @@ export default function CheckoutEmpresa() {
                 <Heading size="md" mb={4}>
                   1. ¿Carrito o Cotización Aprobada?
                 </Heading>
+
                 <Tabs
                   index={tabIndex}
                   onChange={setTabIndex}
@@ -623,21 +758,26 @@ export default function CheckoutEmpresa() {
                   <TabList mb="1em">
                     <Tab
                       onClick={() => {
+                        setSearchParams({}, { replace: true });
                         setSelectedCotizacion(null);
                       }}
                     >
                       Usar Carrito ({readCart().length} productos)
                     </Tab>
+
                     <Tab
                       onClick={() => {
                         if (!selectedCotizacion && cotizaciones[0]) {
-                          setSelectedCotizacion(cotizaciones[0]);
+                          const id = cotizaciones[0].id;
+                          setSearchParams({ cotizacionId: String(id) }, { replace: true });
+                          loadCotizacionDetalle(id);
                         }
                       }}
                     >
                       Usar Cotización Aprobada ({cotizaciones.length})
                     </Tab>
                   </TabList>
+
                   <TabPanels>
                     <TabPanel>
                       <Alert status="info" borderRadius="lg">
@@ -645,28 +785,37 @@ export default function CheckoutEmpresa() {
                         Estás comprando los ítems de tu carrito actual.
                       </Alert>
                     </TabPanel>
+
                     <TabPanel>
                       <Text mb={3}>Selecciona una cotización aprobada:</Text>
+
                       <Select
                         placeholder="Selecciona una cotización"
                         onChange={(e) => {
-                          const cot = cotizaciones.find(
-                            (c) => c.id === Number(e.target.value)
-                          );
-                          setSelectedCotizacion(cot || null);
+                          const id = Number(e.target.value);
+                          if (!id) return;
+                          setSearchParams({ cotizacionId: String(id) }, { replace: true });
+                          loadCotizacionDetalle(id);
                         }}
                         value={selectedCotizacion?.id || ""}
                       >
-                        {cotizaciones.map((cot) => (
-                          <option key={cot.id} value={cot.id}>
-                            #{cot.id} - Total:{" "}
-                            {fmtCop(cot.total_cotizado)} - (
-                            {new Date(
-                              cot.fecha_creacion
-                            ).toLocaleDateString()}
-                            )
-                          </option>
-                        ))}
+                        {cotizaciones.map((cot) => {
+                          const total = Number(
+                            cot.total_cotizado ??
+                              cot.total ??
+                              cot.total_cotizacion ??
+                              0
+                          );
+                          const d = safeDate(
+                            cot.fecha_creacion || cot.creada_en || cot.created_at
+                          );
+                          return (
+                            <option key={cot.id} value={cot.id}>
+                              #{cot.id} - Total: {fmtCop(total)} - (
+                              {d ? d.toLocaleDateString() : "sin fecha"})
+                            </option>
+                          );
+                        })}
                       </Select>
                     </TabPanel>
                   </TabPanels>
@@ -674,23 +823,14 @@ export default function CheckoutEmpresa() {
               </Box>
             )}
 
-            {/* 2. Opción de entrega */}
+            {/* 2. Entrega (✅ ahora también aplica a cotización) */}
             <Box p={6} bg={cardBg} borderRadius="xl" shadow="lg">
               <Heading size="md" mb={4}>
-                {entrega === "COTIZACION"
-                  ? "2. Entrega (definida por la cotización)"
-                  : "2. Opción de Entrega"}
+                2. Opción de Entrega {isCotizacionFlow ? "(Cotización)" : ""}
               </Heading>
 
-              <RadioGroup
-                onChange={setEntrega}
-                value={entrega}
-                isDisabled={entrega === "COTIZACION"}
-              >
-                <Stack
-                  direction={{ base: "column", md: "row" }}
-                  spacing={6}
-                >
+              <RadioGroup onChange={setEntregaUi} value={entregaUi}>
+                <Stack direction={{ base: "column", md: "row" }} spacing={6}>
                   <HStack
                     p={4}
                     borderWidth="1px"
@@ -701,25 +841,16 @@ export default function CheckoutEmpresa() {
                     <Radio value="RECOGER_EN_TIENDA" pt={1}>
                       <VStack align="start" spacing={0}>
                         <HStack>
-                          <Icon
-                            as={FiCheckCircle}
-                            color="yellow.500"
-                          />
-                          <Text fontWeight="bold">
-                            Recoger en tienda
-                          </Text>
+                          <Icon as={FiCheckCircle} color="yellow.500" />
+                          <Text fontWeight="bold">Recoger en tienda</Text>
                         </HStack>
-                        <Text
-                          fontSize="sm"
-                          color="gray.500"
-                          ml={6}
-                        >
-                          Sin costo de envío. Recoge en nuestro
-                          almacén.
+                        <Text fontSize="sm" color="gray.500" ml={6}>
+                          Sin costo de envío. Recoge en nuestro almacén.
                         </Text>
                       </VStack>
                     </Radio>
                   </HStack>
+
                   <HStack
                     p={4}
                     borderWidth="1px"
@@ -731,17 +862,11 @@ export default function CheckoutEmpresa() {
                       <VStack align="start" spacing={0}>
                         <HStack>
                           <Icon as={FiTruck} color="yellow.500" />
-                          <Text fontWeight="bold">
-                            Envío a domicilio
-                          </Text>
+                          <Text fontWeight="bold">Envío a domicilio</Text>
                         </HStack>
-                        <Text
-                          fontSize="sm"
-                          color="gray.500"
-                          ml={6}
-                        >
-                          Costo fijo: {fmtCop(COSTO_ENVIO_FIJO)} (solo
-                          Colombia). Pago solo con tarjeta.
+                        <Text fontSize="sm" color="gray.500" ml={6}>
+                          Costo fijo: {fmtCop(COSTO_ENVIO_FIJO)} (solo Colombia).
+                          Pago solo con tarjeta.
                         </Text>
                       </VStack>
                     </Radio>
@@ -750,12 +875,13 @@ export default function CheckoutEmpresa() {
               </RadioGroup>
             </Box>
 
-            {/* 3. Direcciones (solo si ENVIO_DOMICILIO) */}
-            {entrega === "ENVIO_DOMICILIO" && (
+            {/* 3. Direcciones (si domicilio, incluso en cotización) */}
+            {entregaUi === "ENVIO_DOMICILIO" && (
               <Box p={6} bg={cardBg} borderRadius="xl" shadow="lg">
                 <Heading size="md" mb={4}>
                   Dirección de Envío
                 </Heading>
+
                 <VStack align="stretch" spacing={4}>
                   <SimpleGrid columns={{ base: 1, sm: 2 }} spacing={4}>
                     {direcciones.map((dir) => (
@@ -767,6 +893,7 @@ export default function CheckoutEmpresa() {
                       />
                     ))}
                   </SimpleGrid>
+
                   <Button
                     leftIcon={<FiPlus />}
                     onClick={openAddModal}
@@ -775,6 +902,7 @@ export default function CheckoutEmpresa() {
                   >
                     Añadir nueva dirección
                   </Button>
+
                   {!selectedDir && (
                     <Alert status="warning" borderRadius="lg">
                       <AlertIcon />
@@ -788,20 +916,11 @@ export default function CheckoutEmpresa() {
             {/* 4. Método de pago */}
             <Box p={6} bg={cardBg} borderRadius="xl" shadow="lg">
               <Heading size="md" mb={4}>
-                {entrega === "COTIZACION"
-                  ? "3. Método de Pago (Cotización)"
-                  : "3. Método de Pago"}
+                3. Método de Pago {isCotizacionFlow ? "(Pago de cotización)" : ""}
               </Heading>
 
-              <RadioGroup
-                onChange={setMetodoPago}
-                value={metodoPago}
-                isDisabled={entrega === "COTIZACION"}
-              >
-                <Stack
-                  direction={{ base: "column", md: "row" }}
-                  spacing={6}
-                >
+              <RadioGroup onChange={setMetodoPago} value={metodoPago}>
+                <Stack direction={{ base: "column", md: "row" }} spacing={6}>
                   <HStack
                     p={4}
                     borderWidth="1px"
@@ -812,29 +931,20 @@ export default function CheckoutEmpresa() {
                     <Radio
                       value="EFECTIVO"
                       pt={1}
-                      isDisabled={entrega === "ENVIO_DOMICILIO"}
+                      isDisabled={entregaUi === "ENVIO_DOMICILIO" || isCotizacionFlow}
                     >
                       <VStack align="start" spacing={0}>
                         <HStack>
-                          <Icon
-                            as={FiCreditCard}
-                            color="yellow.500"
-                          />
-                          <Text fontWeight="bold">
-                            Efectivo / Transferencia
-                          </Text>
+                          <Icon as={FiCreditCard} color="yellow.500" />
+                          <Text fontWeight="bold">Efectivo / Transferencia</Text>
                         </HStack>
-                        <Text
-                          fontSize="sm"
-                          color="gray.500"
-                          ml={6}
-                        >
-                          Pago contra entrega o transferencia posterior
-                          (solo disponible si recoges en tienda).
+                        <Text fontSize="sm" color="gray.500" ml={6}>
+                          Disponible solo si recoges en tienda (no aplica para cotización en este flujo).
                         </Text>
                       </VStack>
                     </Radio>
                   </HStack>
+
                   <HStack
                     p={4}
                     borderWidth="1px"
@@ -845,21 +955,11 @@ export default function CheckoutEmpresa() {
                     <Radio value="TARJETA" pt={1}>
                       <VStack align="start" spacing={0}>
                         <HStack>
-                          <Icon
-                            as={FiCreditCard}
-                            color="yellow.500"
-                          />
-                          <Text fontWeight="bold">
-                            Tarjeta (simulada)
-                          </Text>
+                          <Icon as={FiCreditCard} color="yellow.500" />
+                          <Text fontWeight="bold">Tarjeta (simulada)</Text>
                         </HStack>
-                        <Text
-                          fontSize="sm"
-                          color="gray.500"
-                          ml={6}
-                        >
-                          Pago en línea simulado. La aprobación se decide
-                          con el último dígito.
+                        <Text fontSize="sm" color="gray.500" ml={6}>
+                          Pago en línea simulado. La aprobación se decide con el último dígito.
                         </Text>
                       </VStack>
                     </Radio>
@@ -867,12 +967,8 @@ export default function CheckoutEmpresa() {
                 </Stack>
               </RadioGroup>
 
-              {metodoPago === "TARJETA" && entrega !== "COTIZACION" && (
-                <SimpleGrid
-                  columns={{ base: 1, md: 2 }}
-                  gap={3}
-                  mt={3}
-                >
+              {metodoPago === "TARJETA" && (
+                <SimpleGrid columns={{ base: 1, md: 2 }} gap={3} mt={3}>
                   <FormControl isRequired>
                     <FormLabel>Número de tarjeta (demo)</FormLabel>
                     <Input
@@ -880,13 +976,10 @@ export default function CheckoutEmpresa() {
                       inputMode="numeric"
                       maxLength={19}
                       value={cardNumber}
-                      onChange={(e) =>
-                        setCardNumber(formatCard(e.target.value))
-                      }
+                      onChange={(e) => setCardNumber(formatCard(e.target.value))}
                     />
                     <FormHelperText color="gray.500">
-                      La aprobación (demo) depende del último dígito:
-                      par = aprobado, impar = rechazado.
+                      Aprobación demo: último dígito par = aprobado, impar = rechazado.
                     </FormHelperText>
                   </FormControl>
 
@@ -906,13 +999,8 @@ export default function CheckoutEmpresa() {
                       maxLength={5}
                       value={cardExp}
                       onChange={(e) => {
-                        const v = e.target.value
-                          .replace(/[^\d]/g, "")
-                          .slice(0, 4);
-                        const fm =
-                          v.length <= 2
-                            ? v
-                            : `${v.slice(0, 2)}/${v.slice(2)}`;
+                        const v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+                        const fm = v.length <= 2 ? v : `${v.slice(0, 2)}/${v.slice(2)}`;
                         setCardExp(fm);
                       }}
                     />
@@ -927,34 +1015,27 @@ export default function CheckoutEmpresa() {
                       inputMode="numeric"
                       value={cardCvv}
                       onChange={(e) =>
-                        setCardCvv(
-                          e.target.value
-                            .replace(/\D+/g, "")
-                            .slice(0, 4)
-                        )
+                        setCardCvv(e.target.value.replace(/\D+/g, "").slice(0, 4))
                       }
                     />
                   </FormControl>
                 </SimpleGrid>
               )}
 
-              {entrega === "COTIZACION" && (
+              {isCotizacionFlow && (
                 <Alert status="info" mt={4} borderRadius="lg">
                   <AlertIcon />
-                  Este flujo asume que el pago de la cotización se
-                  realiza por los medios acordados con FerreExpress
-                  (transferencia/crédito). Aquí solo se registra el
-                  pedido.
+                  Este flujo pagará la cotización (demo) y continuará con la conversión a pedido en la pantalla de procesamiento.
                 </Alert>
               )}
             </Box>
           </VStack>
 
-          {/* Columna derecha: resumen + botón */}
+          {/* Columna derecha */}
           <VStack align="stretch" spacing={6}>
             <ResumenPedido
               items={items}
-              entrega={entrega}
+              entregaUi={entregaUi}
               selectedCotizacion={selectedCotizacion}
             />
 
@@ -963,28 +1044,14 @@ export default function CheckoutEmpresa() {
               color="black"
               size="lg"
               py={7}
-              isDisabled={
-                isCarritoEmpty ||
-                (entrega === "ENVIO_DOMICILIO" && !selectedDir)
-              }
+              isDisabled={isCarritoEmpty || (entregaUi === "ENVIO_DOMICILIO" && !selectedDir)}
               onClick={handleCheckout}
             >
-              Confirmar Pedido{" "}
-              {fmtCop(
-                selectedCotizacion
-                  ? selectedCotizacion.total_cotizado
-                  : totals.total
-              )}
+              Confirmar Pedido {fmtCop(totals.total)}
             </Button>
 
-            <Text
-              fontSize="sm"
-              color="gray.500"
-              textAlign="center"
-              pt={2}
-            >
-              Al confirmar aceptas los términos y condiciones de
-              FerreExpress para empresas y contratistas.
+            <Text fontSize="sm" color="gray.500" textAlign="center" pt={2}>
+              Al confirmar aceptas los términos y condiciones de FerreExpress para empresas y contratistas.
             </Text>
           </VStack>
         </SimpleGrid>
@@ -1003,37 +1070,32 @@ export default function CheckoutEmpresa() {
                 <Input
                   value={formDir.descripcion}
                   onChange={(e) =>
-                    setFormDir((s) => ({
-                      ...s,
-                      descripcion: e.target.value,
-                    }))
+                    setFormDir((s) => ({ ...s, descripcion: e.target.value }))
                   }
                   placeholder="Ej: Bodega Principal"
                 />
               </FormControl>
+
               <FormControl isRequired>
                 <FormLabel>Calle principal</FormLabel>
                 <Input
                   value={formDir.calle_principal}
                   onChange={(e) =>
-                    setFormDir((s) => ({
-                      ...s,
-                      calle_principal: e.target.value,
-                    }))
+                    setFormDir((s) => ({ ...s, calle_principal: e.target.value }))
                   }
                   placeholder="Ej: Calle 13"
                 />
               </FormControl>
+
               <FormControl isRequired>
                 <FormLabel>Número / Detalle</FormLabel>
                 <Input
                   value={formDir.nro}
-                  onChange={(e) =>
-                    setFormDir((s) => ({ ...s, nro: e.target.value }))
-                  }
+                  onChange={(e) => setFormDir((s) => ({ ...s, nro: e.target.value }))}
                   placeholder="Ej: 5-30 / Local 101"
                 />
               </FormControl>
+
               <FormControl isRequired>
                 <FormLabel>Ciudad</FormLabel>
                 <Input
@@ -1044,55 +1106,49 @@ export default function CheckoutEmpresa() {
                   placeholder="Ej: Cali"
                 />
               </FormControl>
+
               <FormControl isRequired>
                 <FormLabel>Departamento</FormLabel>
                 <Input
                   value={formDir.departamento}
                   onChange={(e) =>
-                    setFormDir((s) => ({
-                      ...s,
-                      departamento: e.target.value,
-                    }))
+                    setFormDir((s) => ({ ...s, departamento: e.target.value }))
                   }
                   placeholder="Ej: Valle del Cauca"
                 />
               </FormControl>
+
               <FormControl>
                 <FormLabel>País</FormLabel>
                 <Input
                   value={formDir.pais}
-                  onChange={(e) =>
-                    setFormDir((s) => ({ ...s, pais: e.target.value }))
-                  }
+                  onChange={(e) => setFormDir((s) => ({ ...s, pais: e.target.value }))}
                   placeholder="Colombia"
                 />
               </FormControl>
+
               <FormControl>
                 <FormLabel>Teléfono</FormLabel>
                 <Input
                   value={formDir.telefono}
                   onChange={(e) =>
-                    setFormDir((s) => ({
-                      ...s,
-                      telefono: e.target.value,
-                    }))
+                    setFormDir((s) => ({ ...s, telefono: e.target.value }))
                   }
                   placeholder="+57 3xx xxx xxxx"
                 />
               </FormControl>
+
               <Checkbox
                 isChecked={formDir.es_principal}
                 onChange={(e) =>
-                  setFormDir((s) => ({
-                    ...s,
-                    es_principal: e.target.checked,
-                  }))
+                  setFormDir((s) => ({ ...s, es_principal: e.target.checked }))
                 }
               >
                 Marcar como principal
               </Checkbox>
             </VStack>
           </ModalBody>
+
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={closeAddModal}>
               Cancelar

@@ -1,5 +1,5 @@
 // src/pages/admin/Productos.jsx
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useEffect, useMemo, useRef, useState, memo, useCallback } from "react";
 import {
   Box,
   HStack,
@@ -46,6 +46,10 @@ import {
   ModalCloseButton,
   SimpleGrid,
   Spinner,
+  Divider,
+  Tag,
+  TagLabel,
+  TagCloseButton,
 } from "@chakra-ui/react";
 import {
   FiSearch,
@@ -56,12 +60,20 @@ import {
   FiImage,
   FiStar,
   FiEdit2,
+  FiRefreshCw,
+  FiBox,
+  FiCheckCircle,
+  FiXCircle,
+  FiAlertTriangle,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import api, { API_BASE_URL } from "../../utils/axiosInstance";
 
-/* =============== Utils =============== */
-const MotionBox = motion(Box);
+/* =============== Motion helper (sin warning) =============== */
+const MotionBox = motion.create(Box);
+const MotionTr = motion.create(Tr);
+
+const ferreYellow = "#F9BF20";
 
 const PRESET_CATEGORIES = [
   "Ferretería general",
@@ -111,140 +123,167 @@ const ProductRow = memo(function ProductRow({
     onCloseConfirm();
   };
 
+  const hasImages = !!product.imagen_principal;
+
   return (
     <>
-      <motion.tr
+      <MotionTr
         layout
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
       >
-        <Td fontWeight="medium">{product.id}</Td>
-
-        {/* Nombre (solo lectura en tabla) */}
-        <Td>
-          <Text fontWeight="medium" noOfLines={2}>
-            {product.nombre}
-          </Text>
+        <Td fontWeight="medium" fontVariantNumeric="tabular-nums">
+          {product.id}
         </Td>
 
-        {/* Precio */}
-        <Td isNumeric>{Number(product.precio ?? 0).toLocaleString("es-CO")}</Td>
+        {/* Producto (nombre + categoría como “caption”) */}
+        <Td>
+          <VStack align="start" spacing={0} maxW="420px">
+            <Text fontWeight="semibold" noOfLines={1}>
+              {product.nombre}
+            </Text>
+            <Text fontSize="xs" color="gray.500" noOfLines={1}>
+              {product.categoria || "Sin categoría"}
+            </Text>
+          </VStack>
+        </Td>
 
-        {/* Stock */}
-        <Td isNumeric>
+        <Td isNumeric fontVariantNumeric="tabular-nums">
+          {Number(product.precio ?? 0).toLocaleString("es-CO", {
+            style: "currency",
+            currency: "COP",
+            maximumFractionDigits: 0,
+          })}
+        </Td>
+
+        <Td isNumeric fontVariantNumeric="tabular-nums">
           <HStack justify="flex-end" spacing={2}>
-            <Text>{product.stock}</Text>
+            <Text>{Number(product.stock ?? 0).toLocaleString("es-CO")}</Text>
             {Number(product.stock) <= 5 && (
-              <Tooltip label="Stock bajo">
-                <Badge colorScheme="red">Bajo</Badge>
+              <Tooltip label="Stock bajo (≤ 5)">
+                <Badge colorScheme="red" borderRadius="999px" px={2}>
+                  Bajo
+                </Badge>
               </Tooltip>
             )}
           </HStack>
         </Td>
 
-        {/* Categoría */}
+        {/* Gestión (compacta): imágenes + estado + editar */}
         <Td>
-          <Text fontSize="sm" noOfLines={1}>
-            {product.categoria || "Sin categoría"}
-          </Text>
-        </Td>
+          <HStack justify="space-between" align="center" spacing={3}>
+            {/* Imágenes */}
+            <VStack align="start" spacing={1} minW={{ base: "180px", md: "220px" }}>
+              <HStack spacing={2}>
+                <Tooltip
+                  label={
+                    hasImages
+                      ? "Este producto ya tiene imagen principal registrada."
+                      : "Aún no hay imágenes. Sube al menos 1."
+                  }
+                >
+                  <Badge
+                    borderRadius="999px"
+                    px={3}
+                    py={1}
+                    bg={hasImages ? "green.50" : "blackAlpha.50"}
+                    color={hasImages ? "green.700" : "gray.700"}
+                  >
+                    {hasImages ? "Imágenes registradas" : "Sin imágenes"}
+                  </Badge>
+                </Tooltip>
 
-        {/* Estado (switch + badge) */}
-        <Td>
-          <HStack spacing={2}>
-            <Badge colorScheme={localActivo ? "green" : "red"}>
-              {localActivo ? "Activo" : "Inactivo"}
-            </Badge>
-            <Switch
-              size="sm"
-              isChecked={localActivo}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                // Activo -> Inactivo: pedir confirmación
-                if (!checked && localActivo) {
-                  onOpenConfirm();
-                  return;
-                }
-                // Inactivo -> Activo: aplicar de una vez
-                if (checked && !localActivo) {
-                  setLocalActivo(true);
-                  onSave && onSave({ ...product, activo: true });
-                }
-              }}
-              aria-label="Activar / desactivar producto"
-            />
-          </HStack>
-        </Td>
-
-        {/* Imágenes (solo texto + acciones) */}
-        <Td>
-          <VStack align="start" spacing={1}>
-            <Text fontSize="xs" color="gray.500">
-              {product.imagen_principal
-                ? "Imágenes registradas"
-                : "Sin imágenes aún"}
-            </Text>
-
-            <HStack spacing={2}>
-              <Input
-                type="file"
-                accept="image/*"
-                multiple
-                ref={fileInputRef}
-                display="none"
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  if (!files.length) return;
-                  onUpload(product.id, files, product.nombre);
-                  e.target.value = "";
-                }}
-              />
-
-              <Button
-                size="xs"
-                leftIcon={<FiUpload />}
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                aria-label={`Subir imágenes de ${
-                  product.nombre || `producto ${product.id}`
-                }`}
-              >
-                Subir
-              </Button>
-
-              <Tooltip label="Ver todas las imágenes de este producto">
-                <IconButton
-                  icon={<FiImage />}
-                  size="xs"
-                  variant="ghost"
-                  aria-label="Ver galería"
-                  onClick={() => onOpenGallery && onOpenGallery(product)}
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={fileInputRef}
+                  display="none"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (!files.length) return;
+                    onUpload(product.id, files, product.nombre);
+                    e.target.value = "";
+                  }}
                 />
+
+                <Tooltip label="Subir imágenes">
+                  <Button
+                    size="xs"
+                    leftIcon={<FiUpload />}
+                    variant="outline"
+                    borderRadius="999px"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label={`Subir imágenes de ${product.nombre || `producto ${product.id}`}`}
+                  >
+                    Subir
+                  </Button>
+                </Tooltip>
+
+                <Tooltip label="Ver galería">
+                  <IconButton
+                    icon={<FiImage />}
+                    size="xs"
+                    variant="ghost"
+                    borderRadius="999px"
+                    aria-label="Ver galería"
+                    onClick={() => onOpenGallery && onOpenGallery(product)}
+                  />
+                </Tooltip>
+              </HStack>
+            </VStack>
+
+            {/* Estado + Editar */}
+            <HStack spacing={3}>
+              <HStack spacing={2}>
+                <Badge
+                  borderRadius="999px"
+                  px={3}
+                  py={1}
+                  bg={localActivo ? "green.50" : "red.50"}
+                  color={localActivo ? "green.700" : "red.700"}
+                >
+                  {localActivo ? "ACTIVO" : "INACTIVO"}
+                </Badge>
+
+                <Switch
+                  size="sm"
+                  isChecked={localActivo}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+
+                    if (!checked && localActivo) {
+                      onOpenConfirm();
+                      return;
+                    }
+
+                    if (checked && !localActivo) {
+                      setLocalActivo(true);
+                      onSave && onSave({ ...product, activo: true });
+                    }
+                  }}
+                  aria-label="Activar / desactivar producto"
+                />
+              </HStack>
+
+              <Tooltip label="Editar producto">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<FiEdit2 />}
+                  onClick={() => onOpenEdit && onOpenEdit(product)}
+                  isLoading={isSaving}
+                  borderRadius="999px"
+                >
+                  Editar
+                </Button>
               </Tooltip>
             </HStack>
-          </VStack>
-        </Td>
-
-        {/* Acciones: Editar */}
-        <Td>
-          <HStack>
-            <Tooltip label="Editar producto">
-              <Button
-                size="sm"
-                variant="ghost"
-                leftIcon={<FiEdit2 />}
-                onClick={() => onOpenEdit && onOpenEdit(product)}
-                isLoading={isSaving}
-              >
-                Editar
-              </Button>
-            </Tooltip>
           </HStack>
         </Td>
-      </motion.tr>
+      </MotionTr>
 
-      {/* AlertDialog de confirmación para desactivar */}
       <AlertDialog
         isOpen={isConfirmOpen}
         leastDestructiveRef={cancelRef}
@@ -257,9 +296,8 @@ const ProductRow = memo(function ProductRow({
             </AlertDialogHeader>
             <AlertDialogBody>
               ¿Seguro que deseas desactivar{" "}
-              <strong>{product.nombre || `#${product.id}`}</strong>? Dejará de
-              aparecer en el catálogo público, pero se conservará para pedidos y
-              auditoría.
+              <strong>{product.nombre || `#${product.id}`}</strong>? Dejará de aparecer en el
+              catálogo público, pero se conservará para pedidos y auditoría.
             </AlertDialogBody>
             <AlertDialogFooter>
               <Button ref={cancelRef} onClick={onCloseConfirm}>
@@ -281,21 +319,16 @@ export default function AdminProductos() {
   const toast = useToast();
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  /* ===== Estilos/theme ===== */
-  const pageBg = useColorModeValue(
-    "linear-gradient(135deg,#f7f7fb 0%,#eef3ff 100%)",
-    "linear-gradient(135deg,#0b0f1a 0%,#121826 100%)"
-  );
+  /* ===== Layout-aware styles ===== */
+  const canvasBg = useColorModeValue("gray.50", "gray.900");
   const subtle = useColorModeValue("gray.600", "gray.300");
-  const tableHeadBg = useColorModeValue(
-    "rgba(249,250,251,0.8)",
-    "blackAlpha.300"
-  );
+  const tableHeadBg = useColorModeValue("rgba(249,250,251,0.85)", "blackAlpha.300");
 
   /* ===== state ===== */
   const [loading, setLoading] = useState(false);
   const [productos, setProductos] = useState([]);
   const [prodTotal, setProdTotal] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState("");
 
   const [newProd, setNewProd] = useState({
     nombre: "",
@@ -356,64 +389,77 @@ export default function AdminProductos() {
 
   /* ===== debounce búsqueda ===== */
   useEffect(() => {
-    const id = setTimeout(() => {
-      setDebouncedProdQuery(prodQuery.trim());
-    }, 250);
+    const id = setTimeout(() => setDebouncedProdQuery(prodQuery.trim()), 250);
     return () => clearTimeout(id);
   }, [prodQuery]);
 
-  /* ====== Carga de productos ====== */
-  async function loadProductos(customQuery) {
-    setLoading(true);
-    const params = {};
-
-    const q =
-      typeof customQuery === "string"
-        ? customQuery.trim()
-        : debouncedProdQuery.trim();
-
-    if (q) params.search = q;
-    if (precioMin) params.precioMin = precioMin;
-    if (precioMax) params.precioMax = precioMax;
-    params.sort = prodSort;
-    params.order = prodOrder;
-    params.page = prodPage;
-    params.limit = prodLimit;
-
-    if (verInactivos) params.incluirInactivos = 1;
-
+  const stampUpdated = () => {
     try {
-      const { data } = await api.get("/productos", { params });
-      const arr = data?.productos || [];
-      const final = onlyLowStock ? arr.filter((x) => Number(x.stock) <= 5) : arr;
-      setProductos(final);
-      setProdTotal(Number(data?.total || arr.length));
-    } catch (e) {
-      console.error(e);
-      toastError(toast, "Error cargando productos");
-    } finally {
-      setLoading(false);
+      const d = new Date();
+      const hh = d.getHours() % 12 || 12;
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      const ampm = d.getHours() >= 12 ? "p. m." : "a. m.";
+      setLastUpdated(`${hh}:${mm} ${ampm}`);
+    } catch {
+      setLastUpdated("");
     }
-  }
+  };
 
-  // carga inicial + recarga al cambiar filtros/paginación
+  /* ====== Carga de productos ====== */
+  const loadProductos = useCallback(
+    async (customQuery) => {
+      setLoading(true);
+      const params = {};
+
+      const q =
+        typeof customQuery === "string"
+          ? customQuery.trim()
+          : debouncedProdQuery.trim();
+
+      if (q) params.search = q;
+      if (precioMin !== "") params.precioMin = precioMin;
+      if (precioMax !== "") params.precioMax = precioMax;
+
+      params.sort = prodSort;
+      params.order = prodOrder;
+      params.page = prodPage;
+      params.limit = prodLimit;
+
+      if (verInactivos) params.incluirInactivos = 1;
+
+      try {
+        const { data } = await api.get("/productos", { params });
+        const arr = data?.productos || [];
+        const final = onlyLowStock ? arr.filter((x) => Number(x.stock) <= 5) : arr;
+
+        setProductos(final);
+        setProdTotal(Number(data?.total || arr.length));
+        stampUpdated();
+      } catch (e) {
+        console.error(e);
+        toastError(toast, "Error cargando productos");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      debouncedProdQuery,
+      precioMin,
+      precioMax,
+      prodSort,
+      prodOrder,
+      prodPage,
+      prodLimit,
+      verInactivos,
+      onlyLowStock,
+      toast,
+    ]
+  );
+
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      loadProductos();
-    }, 100);
+    const timeout = setTimeout(() => loadProductos(), 80);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    prodPage,
-    prodLimit,
-    prodSort,
-    prodOrder,
-    onlyLowStock,
-    verInactivos,
-    debouncedProdQuery,
-    precioMin,
-    precioMax,
-  ]);
+  }, [loadProductos]);
 
   /* ====== Categorías (preset + derivadas) ====== */
   const categorias = useMemo(() => {
@@ -431,6 +477,20 @@ export default function AdminProductos() {
       a.localeCompare(b, "es", { sensitivity: "base" })
     );
   }, [productos, newProd.categoria]);
+
+  /* ====== KPIs (sobre los resultados cargados) ====== */
+  const kpis = useMemo(() => {
+    const arr = Array.isArray(productos) ? productos : [];
+    const activos = arr.filter((p) => !!p.activo).length;
+    const inactivos = arr.filter((p) => !p.activo).length;
+    const stockBajo = arr.filter((p) => Number(p.stock) <= 5).length;
+    return {
+      total: Number(prodTotal || arr.length),
+      activos,
+      inactivos,
+      stockBajo,
+    };
+  }, [productos, prodTotal]);
 
   /* ====== CRUD Productos ====== */
   const createProducto = async () => {
@@ -456,18 +516,10 @@ export default function AdminProductos() {
         stock: Number(stock),
         categoria: categoria?.trim() || null,
       });
-      toast({
-        status: "success",
-        title: "Producto creado",
-        duration: 1500,
-      });
-      setNewProd({
-        nombre: "",
-        descripcion: "",
-        precio: 0,
-        stock: 0,
-        categoria: "",
-      });
+
+      toast({ status: "success", title: "Producto creado", duration: 1500 });
+
+      setNewProd({ nombre: "", descripcion: "", precio: 0, stock: 0, categoria: "" });
       setNewCatMode(false);
       onCloseCreate();
       await loadProductos();
@@ -488,11 +540,7 @@ export default function AdminProductos() {
         categoria: (p.categoria ?? "").trim() || null,
         activo: p.activo ? 1 : 0,
       });
-      toast({
-        status: "success",
-        title: `Producto #${p.id} guardado`,
-        duration: 1200,
-      });
+      toast({ status: "success", title: `Producto #${p.id} guardado`, duration: 1200 });
       await loadProductos();
     } catch (e) {
       console.error(e);
@@ -508,13 +556,8 @@ export default function AdminProductos() {
 
     try {
       const fd = new FormData();
-      arr.forEach((file) => {
-        fd.append("imagenes", file);
-      });
-
-      if (alt) {
-        fd.append("alt_text", alt);
-      }
+      arr.forEach((file) => fd.append("imagenes", file));
+      if (alt) fd.append("alt_text", alt);
 
       await api.post(`/productos/${prodId}/imagenes`, fd);
 
@@ -560,15 +603,9 @@ export default function AdminProductos() {
     if (!galleryProduct) return;
     setSavingPrincipalId(img.id);
     try {
-      await api.patch(
-        `/productos/${galleryProduct.id}/imagenes/${img.id}/principal`
-      );
+      await api.patch(`/productos/${galleryProduct.id}/imagenes/${img.id}/principal`);
 
-      toast({
-        status: "success",
-        title: "Imagen principal actualizada",
-        duration: 1500,
-      });
+      toast({ status: "success", title: "Imagen principal actualizada", duration: 1500 });
 
       await reloadGalleryImages(galleryProduct.id);
       await loadProductos();
@@ -623,16 +660,67 @@ export default function AdminProductos() {
     setProdPage(1);
   };
 
-  /* ====== Render ====== */
-  const pageStyles = {
-    bgGradient: pageBg,
-    minH: "100%",
-    pb: 4,
-  };
+  const totalPages = useMemo(() => {
+    const t = Math.ceil((Number(prodTotal) || 0) / (Number(prodLimit) || 10));
+    return Math.max(1, t);
+  }, [prodTotal, prodLimit]);
+
+  const canPrev = prodPage > 1;
+  const canNext = prodPage < totalPages;
+
+  /* ====== “pills” removibles ====== */
+  const pills = useMemo(() => {
+    const list = [];
+    if (debouncedProdQuery) {
+      list.push({
+        key: "q",
+        label: `Búsqueda: “${debouncedProdQuery}”`,
+        onClear: () => {
+          setProdQuery("");
+          setDebouncedProdQuery("");
+          setProdPage(1);
+        },
+      });
+    }
+    if (precioMin !== "" || precioMax !== "") {
+      list.push({
+        key: "p",
+        label: `Precio: ${precioMin !== "" ? precioMin : "—"} a ${
+          precioMax !== "" ? precioMax : "—"
+        }`,
+        onClear: () => {
+          setPrecioMin("");
+          setPrecioMax("");
+          setProdPage(1);
+        },
+      });
+    }
+    if (onlyLowStock) {
+      list.push({
+        key: "s",
+        label: "Stock bajo (≤ 5)",
+        onClear: () => {
+          setOnlyLowStock(false);
+          setProdPage(1);
+        },
+      });
+    }
+    if (verInactivos) {
+      list.push({
+        key: "i",
+        label: "Incluye inactivos",
+        onClear: () => {
+          setVerInactivos(false);
+          setProdPage(1);
+        },
+      });
+    }
+    return list;
+  }, [debouncedProdQuery, precioMin, precioMax, onlyLowStock, verInactivos]);
 
   return (
-    <Box {...pageStyles}>
-      {/* barra de estado global cuando recarga tabla */}
+    <Box w="full" bg={canvasBg} minH="100%" pb={{ base: 6, md: 8 }}>
+      {/* Barra de estado global cuando recarga tabla */}
       <AnimatePresence>
         {loading && !prefersReducedMotion && (
           <motion.div
@@ -645,635 +733,677 @@ export default function AdminProductos() {
         )}
       </AnimatePresence>
 
-      {/* ===== Crear producto (solo botón + modal) ===== */}
-      <SectionCard
-        title="Gestión de productos"
-        subtitle="Crea nuevos productos y mantenlos actualizados. Esta sección está pensada para que el administrador trabaje rápido y sin confundirse."
-      >
-        <HStack justify="space-between" align="center" flexWrap="wrap" gap={3}>
-          <Text fontSize="sm" color={subtle}>
-            Usa el botón para registrar un nuevo producto en el catálogo. Podrás
-            definir nombre, categoría, precio, stock y descripción en la ventana
-            emergente.
-          </Text>
-          <Button
-            leftIcon={<FiPlus />}
-            colorScheme="yellow"
-            variant="solid"
-            onClick={onOpenCreate}
+      {/* Wrapper que respeta Sidebar + Topbar */}
+      <Box w="full" px={{ base: 4, md: 6, lg: 8 }} pt={{ base: 4, md: 5 }}>
+        <Box w="full" maxW="1440px" mx="auto">
+          {/* Header */}
+          <HStack justify="space-between" align="start" mb={4} gap={3} flexWrap="wrap">
+            <VStack align="start" spacing={1}>
+              <HStack spacing={2} wrap="wrap">
+                <Badge borderRadius="999px" px={3} py={1} bg="blackAlpha.50">
+                  ADMIN · PRODUCTOS
+                </Badge>
+                {lastUpdated ? (
+                  <Text fontSize="xs" color={subtle}>
+                    Última actualización: <b>{lastUpdated}</b>
+                  </Text>
+                ) : null}
+              </HStack>
+
+              <Heading size="lg" lineHeight="1.1">
+                Productos
+              </Heading>
+              <Text fontSize="sm" color={subtle}>
+                Crea, edita, controla stock e imágenes. En móvil verás tarjetas; en desktop, tabla completa.
+              </Text>
+            </VStack>
+
+            <HStack spacing={2}>
+              <Tooltip label="Recargar">
+                <IconButton
+                  aria-label="Recargar productos"
+                  icon={<FiRefreshCw />}
+                  borderRadius="999px"
+                  onClick={() => loadProductos()}
+                />
+              </Tooltip>
+
+              <Button
+                leftIcon={<FiPlus />}
+                bg={ferreYellow}
+                color="black"
+                borderRadius="999px"
+                _hover={{ filter: "brightness(0.98)" }}
+                _active={{ filter: "brightness(0.96)" }}
+                onClick={onOpenCreate}
+              >
+                Crear producto
+              </Button>
+            </HStack>
+          </HStack>
+
+          {/* KPIs */}
+          <SimpleGrid columns={{ base: 1, md: 4 }} spacing={3} mb={4}>
+            <KpiCard title="Total" value={kpis.total} icon={FiBox} />
+            <KpiCard title="Activos" value={kpis.activos} icon={FiCheckCircle} />
+            <KpiCard title="Inactivos" value={kpis.inactivos} icon={FiXCircle} />
+            <KpiCard title="Stock bajo" value={kpis.stockBajo} icon={FiAlertTriangle} />
+          </SimpleGrid>
+
+          {/* Filtros */}
+          <SectionCard
+            title="Filtros y búsqueda"
+            subtitle="Escribe para buscar. Ajusta precio, orden y estado. Se aplica automáticamente."
+            right={
+              <Tooltip label="Restablecer filtros a valores por defecto">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<FiFilter />}
+                  onClick={clearFilters}
+                  borderRadius="999px"
+                >
+                  Limpiar
+                </Button>
+              </Tooltip>
+            }
           >
-            Crear nuevo producto
-          </Button>
-        </HStack>
-      </SectionCard>
+            <VStack align="stretch" spacing={3}>
+              <Stack
+                direction={{ base: "column", md: "row" }}
+                spacing={3}
+                align={{ base: "stretch", md: "center" }}
+              >
+                <Box flex="1">
+                  <Text fontSize="xs" mb={1} color={subtle}>
+                    Buscar en productos
+                  </Text>
+                  <InputGroup>
+                    <InputLeftElement pointerEvents="none">
+                      <FiSearch />
+                    </InputLeftElement>
+                    <Input
+                      placeholder="Ej: taladro, tornillo, pintura blanca"
+                      value={prodQuery}
+                      onChange={(e) => {
+                        setProdQuery(e.target.value);
+                        setProdPage(1);
+                      }}
+                      aria-label="Buscar productos"
+                      borderRadius="999px"
+                    />
+                  </InputGroup>
+                </Box>
 
-      {/* ===== Listado productos + filtros ===== */}
-      <SectionCard
-        title="Listado de productos"
-        subtitle="Filtra por nombre, precio y estado. Los filtros se aplican automáticamente al modificarlos."
-      >
-        {/* --- Filtros claros y agrupados --- */}
-        <Box mb={4}>
-          <VStack align="stretch" spacing={3}>
-            <Text fontSize="sm" color={subtle}>
-              1. Escribe un nombre o palabra clave, 2. Ajusta el rango de
-              precios si lo necesitas, 3. Elige cómo ordenar y qué productos
-              mostrar. Todo se actualiza automáticamente.
-            </Text>
-
-            {/* Fila 1: búsqueda + rango de precio */}
-            <Stack
-              direction={{ base: "column", md: "row" }}
-              spacing={3}
-              align={{ base: "stretch", md: "center" }}
-            >
-              <Box flex="1">
-                <Text fontSize="xs" mb={1} color={subtle}>
-                  Buscar por nombre
-                </Text>
-                <InputGroup>
-                  <InputLeftElement pointerEvents="none">
-                    <FiSearch />
-                  </InputLeftElement>
-                  <Input
-                    id="search-products"
-                    placeholder="Ej: taladro, tornillo, pintura blanca"
-                    value={prodQuery}
-                    onChange={(e) => {
-                      setProdQuery(e.target.value);
-                      setProdPage(1);
-                    }}
-                    aria-label="Buscar productos"
-                  />
-                </InputGroup>
-              </Box>
-
-              <Box flex="1">
-                <Text fontSize="xs" mb={1} color={subtle}>
-                  Rango de precio (COP)
-                </Text>
-                <HStack spacing={2}>
+                <Box w={{ base: "100%", md: "180px" }}>
+                  <Text fontSize="xs" mb={1} color={subtle}>
+                    Precio mínimo
+                  </Text>
                   <NumberInput
-                    maxW="140px"
                     min={0}
                     value={precioMin}
-                    onChange={(_, v) => {
-                      setPrecioMin(v || "");
+                    onChange={(valueString) => {
+                      setPrecioMin(valueString);
                       setProdPage(1);
                     }}
                   >
-                    <NumberInputField
-                      placeholder="Mínimo"
-                      aria-label="Precio mínimo"
-                    />
+                    <NumberInputField placeholder="Mínimo" aria-label="Precio mínimo" borderRadius="999px" />
                   </NumberInput>
-                  <Text>—</Text>
+                </Box>
+
+                <Box w={{ base: "100%", md: "180px" }}>
+                  <Text fontSize="xs" mb={1} color={subtle}>
+                    Precio máximo
+                  </Text>
                   <NumberInput
-                    maxW="140px"
                     min={0}
                     value={precioMax}
-                    onChange={(_, v) => {
-                      setPrecioMax(v || "");
+                    onChange={(valueString) => {
+                      setPrecioMax(valueString);
                       setProdPage(1);
                     }}
                   >
-                    <NumberInputField
-                      placeholder="Máximo"
-                      aria-label="Precio máximo"
-                    />
+                    <NumberInputField placeholder="Máximo" aria-label="Precio máximo" borderRadius="999px" />
                   </NumberInput>
-                </HStack>
-              </Box>
-            </Stack>
+                </Box>
+              </Stack>
 
-            {/* Fila 2: ordenar */}
-            <Stack
-              direction={{ base: "column", md: "row" }}
-              spacing={3}
-              align={{ base: "stretch", md: "center" }}
-            >
-              <Box flex="1">
-                <Text fontSize="xs" mb={1} color={subtle}>
-                  Ordenar por
-                </Text>
-                <Select
-                  value={prodSort}
-                  onChange={(e) => {
-                    setProdSort(e.target.value);
-                    setProdPage(1);
-                  }}
-                  aria-label="Ordenar por"
-                  maxW={{ base: "100%", md: "220px" }}
-                >
-                  <option value="created_at">Fecha de creación</option>
-                  <option value="nombre">Nombre</option>
-                  <option value="precio">Precio</option>
-                </Select>
-              </Box>
-
-              <Box>
-                <Text fontSize="xs" mb={1} color={subtle}>
-                  Dirección del orden
-                </Text>
-                <Select
-                  maxW={{ base: "100%", md: "140px" }}
-                  value={prodOrder}
-                  onChange={(e) => {
-                    setProdOrder(e.target.value);
-                    setProdPage(1);
-                  }}
-                  aria-label="Dirección de orden"
-                >
-                  <option value="asc">Ascendente</option>
-                  <option value="desc">Descendente</option>
-                </Select>
-              </Box>
-            </Stack>
-
-            {/* Fila 3: estado / visibilidad + limpiar */}
-            <Stack
-              direction={{ base: "column", md: "row" }}
-              spacing={3}
-              align={{ base: "stretch", md: "center" }}
-              justify="space-between"
-            >
-              <VStack align="stretch" spacing={2}>
-                <HStack>
-                  <Switch
-                    isChecked={onlyLowStock}
+              <Stack
+                direction={{ base: "column", md: "row" }}
+                spacing={3}
+                align={{ base: "stretch", md: "center" }}
+              >
+                <Box w={{ base: "100%", md: "240px" }}>
+                  <Text fontSize="xs" mb={1} color={subtle}>
+                    Ordenar por
+                  </Text>
+                  <Select
+                    value={prodSort}
                     onChange={(e) => {
-                      setOnlyLowStock(e.target.checked);
+                      setProdSort(e.target.value);
                       setProdPage(1);
                     }}
-                    aria-label="Filtrar por bajo stock"
-                  />
-                  <Text fontSize="sm" color={subtle}>
-                    Mostrar solo productos con stock bajo (≤ 5)
-                  </Text>
-                </HStack>
+                    aria-label="Ordenar por"
+                    borderRadius="999px"
+                  >
+                    <option value="created_at">Fecha de creación</option>
+                    <option value="nombre">Nombre</option>
+                    <option value="precio">Precio</option>
+                  </Select>
+                </Box>
 
-                <HStack>
-                  <Switch
-                    isChecked={verInactivos}
+                <Box w={{ base: "100%", md: "200px" }}>
+                  <Text fontSize="xs" mb={1} color={subtle}>
+                    Dirección
+                  </Text>
+                  <Select
+                    value={prodOrder}
                     onChange={(e) => {
-                      setVerInactivos(e.target.checked);
+                      setProdOrder(e.target.value);
                       setProdPage(1);
                     }}
-                    aria-label="Mostrar también productos inactivos"
-                  />
-                  <Text fontSize="sm" color={subtle}>
-                    Incluir productos inactivos en el listado
-                  </Text>
-                </HStack>
-              </VStack>
+                    aria-label="Dirección de orden"
+                    borderRadius="999px"
+                  >
+                    <option value="asc">Ascendente</option>
+                    <option value="desc">Descendente</option>
+                  </Select>
+                </Box>
 
-              <Box>
-                <Tooltip label="Restablecer todos los filtros a sus valores por defecto">
+                <Box flex="1" />
+
+                <HStack spacing={4} justify={{ base: "space-between", md: "flex-end" }}>
+                  <HStack>
+                    <Switch
+                      isChecked={onlyLowStock}
+                      onChange={(e) => {
+                        setOnlyLowStock(e.target.checked);
+                        setProdPage(1);
+                      }}
+                      aria-label="Filtrar por stock bajo"
+                    />
+                    <Text fontSize="sm" color={subtle}>
+                      Solo stock bajo (≤ 5)
+                    </Text>
+                  </HStack>
+
+                  <HStack>
+                    <Switch
+                      isChecked={verInactivos}
+                      onChange={(e) => {
+                        setVerInactivos(e.target.checked);
+                        setProdPage(1);
+                      }}
+                      aria-label="Incluir productos inactivos"
+                    />
+                    <Text fontSize="sm" color={subtle}>
+                      Incluir inactivos
+                    </Text>
+                  </HStack>
+                </HStack>
+              </Stack>
+
+              {pills.length ? (
+                <HStack wrap="wrap" spacing={2} pt={1}>
+                  {pills.map((p) => (
+                    <Tag
+                      key={p.key}
+                      borderRadius="999px"
+                      bg="blackAlpha.50"
+                      color="gray.800"
+                      px={2}
+                      py={1}
+                    >
+                      <TagLabel fontSize="sm">{p.label}</TagLabel>
+                      <TagCloseButton onClick={p.onClear} />
+                    </Tag>
+                  ))}
+                </HStack>
+              ) : null}
+            </VStack>
+          </SectionCard>
+
+          {/* Listado */}
+          <SectionCard
+            title="Listado"
+            subtitle="Acciones: subir imágenes, ver galería, activar/desactivar y editar."
+          >
+            <Box
+              overflowX="auto"
+              borderRadius="xl"
+              border="1px solid"
+              borderColor={useColorModeValue("gray.200", "gray.700")}
+            >
+              <Table size="sm" variant="simple">
+                <Thead
+                  position="sticky"
+                  top={0}
+                  zIndex={1}
+                  bg={tableHeadBg}
+                  backdropFilter="blur(8px)"
+                >
+                  <Tr>
+                    <Th>ID</Th>
+                    <Th>PRODUCTO</Th>
+                    <Th isNumeric>PRECIO</Th>
+                    <Th isNumeric>STOCK</Th>
+                    <Th>GESTIÓN</Th>
+                  </Tr>
+                </Thead>
+
+                <Tbody>
+                  <AnimatePresence initial={false}>
+                    {loading
+                      ? Array.from({ length: prodLimit }).map((_, i) => (
+                          <Tr key={`sk-${i}`}>
+                            <Td colSpan={5}>
+                              <Skeleton height="44px" />
+                            </Td>
+                          </Tr>
+                        ))
+                      : productos.map((p) => (
+                          <ProductRow
+                            key={p.id}
+                            product={p}
+                            onSave={updateProducto}
+                            onUpload={uploadImagen}
+                            onOpenGallery={openGallery}
+                            onOpenEdit={handleOpenEdit}
+                            isSaving={savingRowId === p.id}
+                          />
+                        ))}
+                  </AnimatePresence>
+                </Tbody>
+              </Table>
+            </Box>
+
+            {/* Paginación */}
+            <HStack justify="space-between" mt={3} flexWrap="wrap" rowGap={2}>
+              <Text fontSize="sm" color={subtle}>
+                Total encontrados: {prodTotal} • Página {prodPage} de {totalPages}
+              </Text>
+
+              <HStack>
+                <Text fontSize="sm" color={subtle}>
+                  Filas:
+                </Text>
+                <Select
+                  size="sm"
+                  value={prodLimit}
+                  onChange={(e) => {
+                    setProdPage(1);
+                    setProdLimit(Number(e.target.value));
+                  }}
+                  maxW="90px"
+                  borderRadius="999px"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </Select>
+
+                <Button
+                  size="sm"
+                  onClick={() => setProdPage((p) => Math.max(1, p - 1))}
+                  isDisabled={!canPrev}
+                  borderRadius="999px"
+                >
+                  Anterior
+                </Button>
+
+                <Button
+                  size="sm"
+                  onClick={() => setProdPage((p) => Math.min(totalPages, p + 1))}
+                  isDisabled={!canNext}
+                  borderRadius="999px"
+                >
+                  Siguiente
+                </Button>
+              </HStack>
+            </HStack>
+
+            {!loading && productos.length === 0 && (
+              <EmptyState
+                title="Sin resultados"
+                description="No encontramos productos con los filtros actuales. Prueba limpiarlos o usa un término más general."
+                action={
                   <Button
-                    size="sm"
-                    variant="outline"
-                    leftIcon={<FiFilter />}
                     onClick={clearFilters}
+                    leftIcon={<FiFilter />}
+                    borderRadius="999px"
                   >
                     Limpiar filtros
                   </Button>
-                </Tooltip>
-              </Box>
-            </Stack>
-          </VStack>
-        </Box>
-
-        {/* --- Tabla --- */}
-        <Box overflowX="auto">
-          <Table size="sm" variant="simple">
-            <Thead
-              position="sticky"
-              top={0}
-              zIndex={1}
-              bg={tableHeadBg}
-              backdropFilter="blur(6px)"
-            >
-              <Tr>
-                <Th>ID</Th>
-                <Th>Nombre</Th>
-                <Th isNumeric>Precio</Th>
-                <Th isNumeric>Stock</Th>
-                <Th>Categoría</Th>
-                <Th>Estado</Th>
-                <Th>Imágenes</Th>
-                <Th>Acciones</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              <AnimatePresence initial={false}>
-                {loading
-                  ? Array.from({ length: prodLimit }).map((_, i) => (
-                      <Tr key={`sk-${i}`}>
-                        <Td colSpan={8}>
-                          <Skeleton height="44px" />
-                        </Td>
-                      </Tr>
-                    ))
-                  : productos.map((p) => (
-                      <ProductRow
-                        key={p.id}
-                        product={p}
-                        onSave={updateProducto}
-                        onUpload={uploadImagen}
-                        onOpenGallery={openGallery}
-                        onOpenEdit={handleOpenEdit}
-                        isSaving={savingRowId === p.id}
-                      />
-                    ))}
-              </AnimatePresence>
-            </Tbody>
-          </Table>
-        </Box>
-
-        {/* --- Paginación --- */}
-        <HStack justify="space-between" mt={3} flexWrap="wrap" rowGap={2}>
-          <Text fontSize="sm" color={subtle}>
-            Total de productos encontrados: {prodTotal}
-          </Text>
-          <HStack>
-            <Text fontSize="sm" color={subtle}>
-              Filas por página:
-            </Text>
-            <Select
-              size="sm"
-              value={prodLimit}
-              onChange={(e) => {
-                setProdPage(1);
-                setProdLimit(Number(e.target.value));
-              }}
-              maxW="80px"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </Select>
-            <Button
-              size="sm"
-              onClick={() => setProdPage((p) => Math.max(1, p - 1))}
-            >
-              Anterior
-            </Button>
-            <Text fontSize="sm">Página {prodPage}</Text>
-            <Button size="sm" onClick={() => setProdPage((p) => p + 1)}>
-              Siguiente
-            </Button>
-          </HStack>
-        </HStack>
-
-        {/* --- Estado vacío --- */}
-        {!loading && productos.length === 0 && (
-          <EmptyState
-            icon={FiSearch}
-            title="Sin resultados"
-            description="No encontramos productos con los filtros actuales. Prueba limpiarlos o usar un término más general."
-            action={
-              <Button onClick={clearFilters} leftIcon={<FiFilter />}>
-                Limpiar filtros
-              </Button>
-            }
-          />
-        )}
-      </SectionCard>
-
-      {/* ===== Modal: Crear producto ===== */}
-      <Modal
-        isOpen={isCreateOpen}
-        onClose={onCloseCreate}
-        isCentered
-        size="lg"
-        scrollBehavior="inside"
-      >
-        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
-        <ModalContent>
-          <ModalHeader>Crear nuevo producto</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack align="stretch" spacing={3}>
-              <Input
-                placeholder="Nombre del producto"
-                value={newProd.nombre}
-                onChange={(e) =>
-                  setNewProd((s) => ({
-                    ...s,
-                    nombre: e.target.value,
-                  }))
                 }
-                aria-label="Nombre del producto"
               />
-
-              <HStack spacing={3}>
-                <NumberInput
-                  min={0}
-                  value={newProd.precio}
-                  onChange={(_, v) =>
-                    setNewProd((s) => ({ ...s, precio: v || 0 }))
-                  }
-                >
-                  <NumberInputField placeholder="Precio" aria-label="Precio" />
-                </NumberInput>
-                <NumberInput
-                  min={0}
-                  value={newProd.stock}
-                  onChange={(_, v) =>
-                    setNewProd((s) => ({ ...s, stock: v || 0 }))
-                  }
-                >
-                  <NumberInputField placeholder="Stock" aria-label="Stock" />
-                </NumberInput>
-              </HStack>
-
-              <Select
-                placeholder="Selecciona categoría"
-                value={newCatMode ? "__new__" : newProd.categoria || ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val === "__new__") {
-                    setNewCatMode(true);
-                    setNewProd((s) => ({ ...s, categoria: "" }));
-                  } else {
-                    setNewCatMode(false);
-                    setNewProd((s) => ({ ...s, categoria: val }));
-                  }
-                }}
-                aria-label="Categoría"
-              >
-                {categorias.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-                <option value="__new__">➕ Nueva categoría…</option>
-              </Select>
-
-              {newCatMode && (
-                <Input
-                  placeholder="Nombre de la nueva categoría"
-                  value={newProd.categoria}
-                  onChange={(e) =>
-                    setNewProd((s) => ({
-                      ...s,
-                      categoria: e.target.value,
-                    }))
-                  }
-                  aria-label="Nueva categoría"
-                />
-              )}
-
-              <Box>
-                <Text fontSize="sm" mb={1} color={subtle}>
-                  Descripción del producto
-                </Text>
-                <RichDescriptionEditor
-                  value={newProd.descripcion}
-                  onChange={(val) =>
-                    setNewProd((s) => ({ ...s, descripcion: val }))
-                  }
-                />
-                <Text mt={1} fontSize="xs" color={subtle}>
-                  Puedes aplicar negrilla, cursiva y listas. El texto se guarda
-                  como HTML para mostrarlo luego en la ficha del cliente.
-                </Text>
-              </Box>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClose={onCloseCreate}>
-              Cancelar
-            </Button>
-            <Button
-              colorScheme="yellow"
-              leftIcon={<FiPlus />}
-              onClick={createProducto}
-            >
-              Guardar producto
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* ===== Modal: Editar producto ===== */}
-      <Modal
-        isOpen={isEditOpen}
-        onClose={onCloseEdit}
-        isCentered
-        size="lg"
-        scrollBehavior="inside"
-      >
-        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
-        <ModalContent>
-          <ModalHeader>
-            Editar producto {editProduct ? `#${editProduct.id}` : ""}
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack align="stretch" spacing={3}>
-              <Input
-                placeholder="Nombre del producto"
-                value={editForm.nombre}
-                onChange={(e) =>
-                  setEditForm((s) => ({ ...s, nombre: e.target.value }))
-                }
-                aria-label="Nombre del producto"
-              />
-
-              <HStack spacing={3}>
-                <NumberInput
-                  min={0}
-                  value={editForm.precio}
-                  onChange={(_, v) =>
-                    setEditForm((s) => ({ ...s, precio: v || 0 }))
-                  }
-                  flex="1"
-                >
-                  <NumberInputField placeholder="Precio" aria-label="Precio" />
-                </NumberInput>
-                <NumberInput
-                  min={0}
-                  value={editForm.stock}
-                  onChange={(_, v) =>
-                    setEditForm((s) => ({ ...s, stock: v || 0 }))
-                  }
-                  flex="1"
-                >
-                  <NumberInputField placeholder="Stock" aria-label="Stock" />
-                </NumberInput>
-              </HStack>
-
-              <Select
-                placeholder="Selecciona categoría"
-                value={editForm.categoria || ""}
-                onChange={(e) =>
-                  setEditForm((s) => ({ ...s, categoria: e.target.value }))
-                }
-                aria-label="Categoría"
-              >
-                {categorias.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </Select>
-
-              <HStack>
-                <Switch
-                  isChecked={editForm.activo}
-                  onChange={(e) =>
-                    setEditForm((s) => ({ ...s, activo: e.target.checked }))
-                  }
-                />
-                <Text fontSize="sm">
-                  {editForm.activo ? "Producto activo" : "Producto inactivo"}
-                </Text>
-              </HStack>
-
-              <Box>
-                <Text fontSize="sm" mb={1} color={subtle}>
-                  Descripción del producto
-                </Text>
-                <RichDescriptionEditor
-                  value={editForm.descripcion}
-                  onChange={(val) =>
-                    setEditForm((s) => ({ ...s, descripcion: val }))
-                  }
-                />
-                <Text mt={1} fontSize="xs" color={subtle}>
-                  Esta descripción se guarda como HTML. Luego puedes mostrarla
-                  tal cual al cliente en la ficha de producto.
-                </Text>
-              </Box>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onCloseEdit}>
-              Cancelar
-            </Button>
-            <Button
-              colorScheme="yellow"
-              onClick={handleSaveEdit}
-              isLoading={savingRowId === (editProduct?.id ?? null)}
-            >
-              Guardar cambios
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* ===== Modal: Galería de imágenes ===== */}
-      <Modal
-        isOpen={isGalleryOpen}
-        onClose={onCloseGallery}
-        isCentered
-        size="xl"
-        scrollBehavior="inside"
-      >
-        <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(6px)" />
-        <ModalContent>
-          <ModalHeader>
-            Imágenes de{" "}
-            {galleryProduct?.nombre || `producto #${galleryProduct?.id || ""}`}
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            {loadingGallery ? (
-              <VStack py={6}>
-                <Spinner />
-                <Text fontSize="sm" color={subtle}>
-                  Cargando imágenes…
-                </Text>
-              </VStack>
-            ) : galleryImages.length === 0 ? (
-              <Text fontSize="sm" color={subtle}>
-                Este producto aún no tiene imágenes asociadas.
-              </Text>
-            ) : (
-              <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3}>
-                {galleryImages.map((img) => {
-                  const isPrincipal =
-                    img.es_principal === 1 || img.es_principal === true;
-
-                  return (
-                    <Box
-                      key={img.id || img.url}
-                      borderRadius="md"
-                      overflow="hidden"
-                      border="1px solid"
-                      borderColor={
-                        isPrincipal
-                          ? "yellow.400"
-                          : useColorModeValue("gray.200", "gray.700")
-                      }
-                      position="relative"
-                    >
-                      {isPrincipal && (
-                        <Badge
-                          colorScheme="yellow"
-                          position="absolute"
-                          top={2}
-                          left={2}
-                          fontSize="0.65rem"
-                        >
-                          Principal
-                        </Badge>
-                      )}
-
-                      <Image
-                        src={`${API_BASE_URL}${img.url}`}
-                        alt={img.alt_text || galleryProduct?.nombre || "Imagen"}
-                        w="100%"
-                        h="140px"
-                        objectFit="cover"
-                      />
-
-                      <VStack align="stretch" spacing={1} p={2}>
-                        {img.alt_text && (
-                          <Text fontSize="xs" noOfLines={2} color={subtle}>
-                            {img.alt_text}
-                          </Text>
-                        )}
-
-                        <Button
-                          size="xs"
-                          leftIcon={<FiStar />}
-                          variant={isPrincipal ? "solid" : "outline"}
-                          colorScheme={isPrincipal ? "yellow" : "gray"}
-                          isDisabled={isPrincipal}
-                          isLoading={savingPrincipalId === img.id}
-                          onClick={() => handleSetPrincipal(img)}
-                        >
-                          {isPrincipal ? "Principal" : "Hacer principal"}
-                        </Button>
-                      </VStack>
-                    </Box>
-                  );
-                })}
-              </SimpleGrid>
             )}
-          </ModalBody>
-          <ModalFooter>
-            <Button onClick={onCloseGallery}>Cerrar</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+          </SectionCard>
+
+          {/* ===== Modal: Crear producto ===== */}
+          <Modal
+            isOpen={isCreateOpen}
+            onClose={onCloseCreate}
+            isCentered
+            size="lg"
+            scrollBehavior="inside"
+          >
+            <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(6px)" />
+            <ModalContent>
+              <ModalHeader>Crear nuevo producto</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <VStack align="stretch" spacing={3}>
+                  <Input
+                    placeholder="Nombre del producto"
+                    value={newProd.nombre}
+                    onChange={(e) => setNewProd((s) => ({ ...s, nombre: e.target.value }))}
+                    aria-label="Nombre del producto"
+                    borderRadius="xl"
+                  />
+
+                  <HStack spacing={3}>
+                    <NumberInput
+                      min={0}
+                      value={newProd.precio}
+                      onChange={(_, v) =>
+                        setNewProd((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
+                      }
+                      flex="1"
+                    >
+                      <NumberInputField placeholder="Precio" aria-label="Precio" borderRadius="xl" />
+                    </NumberInput>
+
+                    <NumberInput
+                      min={0}
+                      value={newProd.stock}
+                      onChange={(_, v) =>
+                        setNewProd((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
+                      }
+                      flex="1"
+                    >
+                      <NumberInputField placeholder="Stock" aria-label="Stock" borderRadius="xl" />
+                    </NumberInput>
+                  </HStack>
+
+                  <Select
+                    placeholder="Selecciona categoría"
+                    value={newCatMode ? "__new__" : newProd.categoria || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__new__") {
+                        setNewCatMode(true);
+                        setNewProd((s) => ({ ...s, categoria: "" }));
+                      } else {
+                        setNewCatMode(false);
+                        setNewProd((s) => ({ ...s, categoria: val }));
+                      }
+                    }}
+                    aria-label="Categoría"
+                    borderRadius="xl"
+                  >
+                    {categorias.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                    <option value="__new__">➕ Nueva categoría…</option>
+                  </Select>
+
+                  {newCatMode && (
+                    <Input
+                      placeholder="Nombre de la nueva categoría"
+                      value={newProd.categoria}
+                      onChange={(e) => setNewProd((s) => ({ ...s, categoria: e.target.value }))}
+                      aria-label="Nueva categoría"
+                      borderRadius="xl"
+                    />
+                  )}
+
+                  <Box>
+                    <Text fontSize="sm" mb={1} color={subtle}>
+                      Descripción del producto
+                    </Text>
+                    <RichDescriptionEditor
+                      value={newProd.descripcion}
+                      onChange={(val) => setNewProd((s) => ({ ...s, descripcion: val }))}
+                    />
+                    <Text mt={1} fontSize="xs" color={subtle}>
+                      Puedes aplicar negrilla, cursiva y listas. Se guarda como HTML para mostrar luego en la ficha.
+                    </Text>
+                  </Box>
+                </VStack>
+              </ModalBody>
+
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={onCloseCreate}>
+                  Cancelar
+                </Button>
+                <Button
+                  leftIcon={<FiPlus />}
+                  bg={ferreYellow}
+                  color="black"
+                  borderRadius="999px"
+                  _hover={{ filter: "brightness(0.98)" }}
+                  _active={{ filter: "brightness(0.96)" }}
+                  onClick={createProducto}
+                >
+                  Guardar producto
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+
+          {/* ===== Modal: Editar producto ===== */}
+          <Modal
+            isOpen={isEditOpen}
+            onClose={onCloseEdit}
+            isCentered
+            size="lg"
+            scrollBehavior="inside"
+          >
+            <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(6px)" />
+            <ModalContent>
+              <ModalHeader>Editar producto {editProduct ? `#${editProduct.id}` : ""}</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <VStack align="stretch" spacing={3}>
+                  <Input
+                    placeholder="Nombre del producto"
+                    value={editForm.nombre}
+                    onChange={(e) => setEditForm((s) => ({ ...s, nombre: e.target.value }))}
+                    aria-label="Nombre del producto"
+                    borderRadius="xl"
+                  />
+
+                  <HStack spacing={3}>
+                    <NumberInput
+                      min={0}
+                      value={editForm.precio}
+                      onChange={(_, v) =>
+                        setEditForm((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
+                      }
+                      flex="1"
+                    >
+                      <NumberInputField placeholder="Precio" aria-label="Precio" borderRadius="xl" />
+                    </NumberInput>
+                    <NumberInput
+                      min={0}
+                      value={editForm.stock}
+                      onChange={(_, v) =>
+                        setEditForm((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
+                      }
+                      flex="1"
+                    >
+                      <NumberInputField placeholder="Stock" aria-label="Stock" borderRadius="xl" />
+                    </NumberInput>
+                  </HStack>
+
+                  <Select
+                    placeholder="Selecciona categoría"
+                    value={editForm.categoria || ""}
+                    onChange={(e) => setEditForm((s) => ({ ...s, categoria: e.target.value }))}
+                    aria-label="Categoría"
+                    borderRadius="xl"
+                  >
+                    {categorias.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </Select>
+
+                  <HStack>
+                    <Switch
+                      isChecked={editForm.activo}
+                      onChange={(e) => setEditForm((s) => ({ ...s, activo: e.target.checked }))}
+                    />
+                    <Text fontSize="sm">{editForm.activo ? "Producto activo" : "Producto inactivo"}</Text>
+                  </HStack>
+
+                  <Box>
+                    <Text fontSize="sm" mb={1} color={subtle}>
+                      Descripción del producto
+                    </Text>
+                    <RichDescriptionEditor
+                      value={editForm.descripcion}
+                      onChange={(val) => setEditForm((s) => ({ ...s, descripcion: val }))}
+                    />
+                    <Text mt={1} fontSize="xs" color={subtle}>
+                      Se guarda como HTML. Luego se muestra tal cual en la ficha de producto.
+                    </Text>
+                  </Box>
+                </VStack>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={onCloseEdit}>
+                  Cancelar
+                </Button>
+                <Button
+                  bg={ferreYellow}
+                  color="black"
+                  borderRadius="999px"
+                  _hover={{ filter: "brightness(0.98)" }}
+                  _active={{ filter: "brightness(0.96)" }}
+                  onClick={handleSaveEdit}
+                  isLoading={savingRowId === (editProduct?.id ?? null)}
+                >
+                  Guardar cambios
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+
+          {/* ===== Modal: Galería de imágenes ===== */}
+          <Modal
+            isOpen={isGalleryOpen}
+            onClose={onCloseGallery}
+            isCentered
+            size="xl"
+            scrollBehavior="inside"
+          >
+            <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(8px)" />
+            <ModalContent>
+              <ModalHeader>
+                Imágenes de {galleryProduct?.nombre || `producto #${galleryProduct?.id || ""}`}
+              </ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                {loadingGallery ? (
+                  <VStack py={6}>
+                    <Spinner />
+                    <Text fontSize="sm" color={subtle}>
+                      Cargando imágenes…
+                    </Text>
+                  </VStack>
+                ) : galleryImages.length === 0 ? (
+                  <Text fontSize="sm" color={subtle}>
+                    Este producto aún no tiene imágenes asociadas.
+                  </Text>
+                ) : (
+                  <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3}>
+                    {galleryImages.map((img) => {
+                      const isPrincipal = img.es_principal === 1 || img.es_principal === true;
+
+                      return (
+                        <Box
+                          key={img.id || img.url}
+                          borderRadius="xl"
+                          overflow="hidden"
+                          border="1px solid"
+                          borderColor={
+                            isPrincipal
+                              ? "yellow.400"
+                              : useColorModeValue("gray.200", "gray.700")
+                          }
+                          position="relative"
+                        >
+                          {isPrincipal && (
+                            <Badge
+                              colorScheme="yellow"
+                              position="absolute"
+                              top={2}
+                              left={2}
+                              fontSize="0.65rem"
+                              borderRadius="999px"
+                            >
+                              Principal
+                            </Badge>
+                          )}
+
+                          <Image
+                            src={`${API_BASE_URL}${img.url}`}
+                            alt={img.alt_text || galleryProduct?.nombre || "Imagen"}
+                            w="100%"
+                            h="140px"
+                            objectFit="cover"
+                          />
+
+                          <VStack align="stretch" spacing={2} p={2}>
+                            {img.alt_text ? (
+                              <Text fontSize="xs" noOfLines={2} color={subtle}>
+                                {img.alt_text}
+                              </Text>
+                            ) : null}
+
+                            <Button
+                              size="xs"
+                              leftIcon={<FiStar />}
+                              variant={isPrincipal ? "solid" : "outline"}
+                              colorScheme={isPrincipal ? "yellow" : "gray"}
+                              isDisabled={isPrincipal}
+                              isLoading={savingPrincipalId === img.id}
+                              onClick={() => handleSetPrincipal(img)}
+                              borderRadius="999px"
+                            >
+                              {isPrincipal ? "Principal" : "Hacer principal"}
+                            </Button>
+                          </VStack>
+                        </Box>
+                      );
+                    })}
+                  </SimpleGrid>
+                )}
+              </ModalBody>
+              <ModalFooter>
+                <Button onClick={onCloseGallery} borderRadius="999px">
+                  Cerrar
+                </Button>
+              </ModalFooter>
+            </ModalContent>
+          </Modal>
+        </Box>
+      </Box>
     </Box>
   );
 }
 
 /* ================= Subcomponentes UI ================= */
 function SectionCard({ title, subtitle, right, children }) {
-  const cardBg = useColorModeValue(
-    "rgba(255,255,255,0.9)",
-    "rgba(23,25,35,0.7)"
-  );
-  const borderCo = useColorModeValue(
-    "rgba(226,232,240,0.8)",
-    "rgba(45,55,72,0.7)"
-  );
+  const cardBg = useColorModeValue("rgba(255,255,255,0.92)", "rgba(23,25,35,0.74)");
+  const borderCo = useColorModeValue("rgba(226,232,240,0.9)", "rgba(45,55,72,0.75)");
+  const subtle = useColorModeValue("gray.600", "gray.300");
   const prefersReducedMotion = usePrefersReducedMotion();
+
   const animatedProps = prefersReducedMotion
     ? {}
     : {
@@ -1289,37 +1419,71 @@ function SectionCard({ title, subtitle, right, children }) {
       border="1px solid"
       borderColor={borderCo}
       borderRadius="2xl"
-      p={3}
+      p={{ base: 3, md: 4 }}
       mb={4}
       style={{ backdropFilter: "saturate(150%) blur(10px)" }}
       boxShadow={useColorModeValue(
-        "0 8px 24px rgba(31,38,135,0.12)",
-        "0 8px 24px rgba(0,0,0,0.35)"
+        "0 8px 22px rgba(31,38,135,0.10)",
+        "0 8px 22px rgba(0,0,0,0.35)"
       )}
     >
-      <HStack
-        justify="space-between"
-        align="start"
-        mb={subtitle ? 1 : 3}
-        wrap="wrap"
-        gap={3}
-      >
+      <HStack justify="space-between" align="start" mb={subtitle ? 2 : 3} wrap="wrap" gap={3}>
         <VStack align="start" spacing={0}>
           <Heading size="sm">{title}</Heading>
-          {subtitle && (
-            <Text
-              fontSize="sm"
-              color={useColorModeValue("gray.600", "gray.300")}
-            >
+          {subtitle ? (
+            <Text fontSize="sm" color={subtle}>
               {subtitle}
             </Text>
-          )}
+          ) : null}
         </VStack>
         {right}
       </HStack>
-      <Box as="hr" borderColor={borderCo} mb={3} />
+
+      <Divider mb={3} opacity={0.7} />
       {children}
     </MotionBox>
+  );
+}
+
+function KpiCard({ title, value, icon: IconCmp }) {
+  const cardBg = useColorModeValue("rgba(255,255,255,0.92)", "rgba(23,25,35,0.74)");
+  const borderCo = useColorModeValue("rgba(226,232,240,0.9)", "rgba(45,55,72,0.75)");
+  const subtle = useColorModeValue("gray.600", "gray.300");
+
+  return (
+    <Box
+      bg={cardBg}
+      border="1px solid"
+      borderColor={borderCo}
+      borderRadius="2xl"
+      p={4}
+      style={{ backdropFilter: "saturate(150%) blur(10px)" }}
+      boxShadow={useColorModeValue(
+        "0 8px 22px rgba(31,38,135,0.08)",
+        "0 8px 22px rgba(0,0,0,0.35)"
+      )}
+    >
+      <HStack justify="space-between" align="center">
+        <VStack align="start" spacing={1}>
+          <Text fontSize="xs" color={subtle}>
+            {title}
+          </Text>
+          <Text fontSize="2xl" fontWeight="bold" fontVariantNumeric="tabular-nums">
+            {Number(value ?? 0).toLocaleString("es-CO")}
+          </Text>
+        </VStack>
+        <Box
+          w="36px"
+          h="36px"
+          borderRadius="999px"
+          bg="blackAlpha.50"
+          display="grid"
+          placeItems="center"
+        >
+          <Box as={IconCmp} boxSize={5} />
+        </Box>
+      </HStack>
+    </Box>
   );
 }
 
@@ -1331,10 +1495,10 @@ function EmptyState({
 }) {
   const subtle = useColorModeValue("gray.600", "gray.300");
   return (
-    <VStack spacing={2} py={6} color={subtle}>
-      <IconCmp size={24} />
+    <VStack spacing={2} py={8} color={subtle}>
+      <Box as={IconCmp} boxSize={6} />
       <Heading size="sm">{title}</Heading>
-      <Text fontSize="sm" textAlign="center">
+      <Text fontSize="sm" textAlign="center" maxW="520px">
         {description}
       </Text>
       {action}
@@ -1349,7 +1513,6 @@ function RichDescriptionEditor({ value, onChange, minHeight = "150px" }) {
   const borderColor = useColorModeValue("gray.200", "whiteAlpha.300");
   const placeholderColor = useColorModeValue("gray.400", "whiteAlpha.400");
 
-  // Sincroniza el contenido inicial cuando cambia el value desde afuera (ej: abrir modal)
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
@@ -1359,6 +1522,12 @@ function RichDescriptionEditor({ value, onChange, minHeight = "150px" }) {
       el.innerHTML = value;
     }
   }, [value]);
+
+  const handleInput = () => {
+    const el = editorRef.current;
+    if (!el) return;
+    onChange?.(el.innerHTML);
+  };
 
   const exec = (command) => {
     const el = editorRef.current;
@@ -1376,36 +1545,25 @@ function RichDescriptionEditor({ value, onChange, minHeight = "150px" }) {
     handleInput();
   };
 
-  const handleInput = () => {
-    const el = editorRef.current;
-    if (!el) return;
-    const html = el.innerHTML;
-    onChange?.(html);
-  };
-
-  const computeIsEmpty = () => {
+  const isEmpty = useMemo(() => {
     const raw = value || "";
     const textOnly = raw.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
     return textOnly.length === 0;
-  };
-
-  const isEmpty = computeIsEmpty();
+  }, [value]);
 
   return (
-    <Box borderWidth="1px" borderRadius="md" overflow="hidden" borderColor={borderColor}>
-      <HStack
-        spacing={1}
-        px={2}
-        py={1}
-        borderBottomWidth="1px"
-        bg={toolbarBg}
-      >
+    <Box borderWidth="1px" borderRadius="xl" overflow="hidden" borderColor={borderColor}>
+      <HStack spacing={1} px={2} py={1} borderBottomWidth="1px" bg={toolbarBg}>
         <Tooltip label="Negrilla">
           <IconButton
             size="xs"
             variant="ghost"
             aria-label="Negrilla"
-            icon={<Text as="span" fontWeight="bold">B</Text>}
+            icon={
+              <Text as="span" fontWeight="bold">
+                B
+              </Text>
+            }
             onClick={() => exec("bold")}
           />
         </Tooltip>
@@ -1415,7 +1573,11 @@ function RichDescriptionEditor({ value, onChange, minHeight = "150px" }) {
             size="xs"
             variant="ghost"
             aria-label="Cursiva"
-            icon={<Text as="span" fontStyle="italic">I</Text>}
+            icon={
+              <Text as="span" fontStyle="italic">
+                I
+              </Text>
+            }
             onClick={() => exec("italic")}
           />
         </Tooltip>
@@ -1425,7 +1587,11 @@ function RichDescriptionEditor({ value, onChange, minHeight = "150px" }) {
             size="xs"
             variant="ghost"
             aria-label="Subrayado"
-            icon={<Text as="span" textDecor="underline">U</Text>}
+            icon={
+              <Text as="span" textDecor="underline">
+                U
+              </Text>
+            }
             onClick={() => exec("underline")}
           />
         </Tooltip>

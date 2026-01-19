@@ -126,6 +126,85 @@ const registerEmpresa = async (req, res) => {
   }
 };
 
+// Convertir Cliente → Contratista (sin aprobación)
+const convertirAEmpresa = async (req, res) => {
+  try {
+    const userId = req.user.sub || req.user.id; // viene del requireAuth
+    const { nit, razon_social, telefono, cargo, mensaje } = req.body;
+
+    if (!nit || !razon_social) {
+      return res.status(400).json({ error: "NIT y razón social son requeridos" });
+    }
+
+    // 1) Traer usuario actual
+    const [uRows] = await pool.query(
+      "SELECT id, username, email, role, estado FROM usuarios WHERE id = ? LIMIT 1",
+      [userId]
+    );
+
+    if (!uRows.length) return res.status(404).json({ error: "Usuario no encontrado" });
+
+    const u = uRows[0];
+
+    if (u.estado === "BLOQUEADO") {
+      return res.status(403).json({ error: "Cuenta bloqueada. Contacta al soporte." });
+    }
+
+    // Si ya es contratista, no repetir
+    if (u.role === "CONTRATISTA") {
+      const token = generarToken(u);
+      return res.json({ message: "Ya eres CONTRATISTA", token, role: "CONTRATISTA" });
+    }
+
+    // 2) Validar NIT no usado por otro usuario
+    const [nitRows] = await pool.query(
+      "SELECT id FROM usuarios WHERE nit = ? AND id <> ? LIMIT 1",
+      [nit, userId]
+    );
+    if (nitRows.length) {
+      return res.status(409).json({ error: "Ese NIT ya está registrado por otra cuenta" });
+    }
+
+    // 3) Actualizar rol + nit + telefono
+    await pool.query(
+      "UPDATE usuarios SET role = 'CONTRATISTA', nit = ?, telefono = ? WHERE id = ?",
+      [nit, telefono || null, userId]
+    );
+
+    // 4) (Opcional) Guardar “historial” en empresa_solicitudes si existe
+    // Si no quieres usar esa tabla, puedes borrar este try/catch completo.
+    try {
+      await pool.query(
+        `INSERT INTO empresa_solicitudes
+          (usuario_id, nit, razon_social, telefono, cargo, mensaje, estado, revisado_en, notas)
+         VALUES (?, ?, ?, ?, ?, ?, 'APROBADA', NOW(), 'Auto-conversión desde perfil')`,
+        [userId, nit, razon_social, telefono || null, cargo || null, mensaje || null]
+      );
+    } catch (e) {
+      // No bloquear si no existe la tabla o no la quieres usar
+    }
+
+    // 5) Token nuevo con role actualizado
+    const nuevoUsuario = {
+      id: userId,
+      username: u.username,
+      email: u.email,
+      role: "CONTRATISTA",
+    };
+
+    const token = generarToken(nuevoUsuario);
+
+    return res.json({
+      message: "Cuenta convertida a empresa (CONTRATISTA) correctamente",
+      token,
+      role: "CONTRATISTA",
+    });
+  } catch (error) {
+    console.error("Error convertirAEmpresa:", error);
+    return res.status(500).json({ error: "Error al convertir a empresa" });
+  }
+};
+
 // Login
 const login = async (req, res) => {
   try {
@@ -308,7 +387,7 @@ const resetPassword = async (req, res) => {
 const changePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
-    const userId = req.user.sub;
+    const userId = req.user.sub || req.user.id;
 
     if (!oldPassword || !newPassword)
       return res.status(400).json({ error: "Contraseñas requeridas" });
@@ -340,8 +419,7 @@ const changePassword = async (req, res) => {
 // Perfil: GET /auth/perfil
 const getPerfil = async (req, res) => {
   try {
-    const userId = req.user.sub;
-
+    const userId = req.user.sub || req.user.id;
     const [rows] = await pool.query(
       "SELECT id, username, email, role, nit, telefono, avatar, estado, created_at FROM usuarios WHERE id = ?",
       [userId]
@@ -361,7 +439,7 @@ const getPerfil = async (req, res) => {
 // Perfil: PUT /auth/perfil
 const updatePerfil = async (req, res) => {
   try {
-    const userId = req.user.sub;
+    const userId = req.user.sub || req.user.id;
     const { username, telefono } = req.body;
 
     if (!username) {
@@ -433,4 +511,4 @@ const cambiarEstadoUsuario = async (req, res) => {
   }
 };
 
-module.exports = {registerCliente, registerEmpresa, login, forgotPassword, verifyReset, resetPassword, changePassword, getPerfil, updatePerfil, listarUsuarios, cambiarEstadoUsuario};
+module.exports = { registerCliente, registerEmpresa, convertirAEmpresa, login, forgotPassword, verifyReset, resetPassword, changePassword, getPerfil, updatePerfil, listarUsuarios, cambiarEstadoUsuario };

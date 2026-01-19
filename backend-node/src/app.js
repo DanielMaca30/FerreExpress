@@ -13,9 +13,13 @@ const auditoria = require("./routes/auditoria");
 const carrito = require("./routes/carrito");
 
 const app = express();
+const isProd = process.env.NODE_ENV === "production";
 
 /* ===== Middlewares base ===== */
-app.use(express.json());
+app.disable("x-powered-by");
+app.set("trust proxy", 1); // ✅ necesario si estás detrás de proxy (Railway/Render/etc)
+
+app.use(express.json({ limit: "2mb" }));
 
 // Archivos estáticos
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -30,6 +34,7 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS || "")
 
 const corsOptions = {
   origin: (origin, cb) => {
+    // Permite server-to-server / Postman / SSR sin origin
     if (!origin) return cb(null, true);
 
     if (allowedOrigins.includes(origin)) return cb(null, true);
@@ -40,14 +45,15 @@ const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
 
-// ✅ Manejo OPTIONS sin app.options("*") (evita crash de path-to-regexp)
+// ✅ Preflight OPTIONS sin app.options("*") (evita crash path-to-regexp)
 app.use((req, res, next) => {
   if (req.method === "OPTIONS") {
-    return cors(corsOptions)(req, res, next);
+    return cors(corsOptions)(req, res, () => res.sendStatus(204));
   }
   next();
 });
@@ -55,11 +61,19 @@ app.use((req, res, next) => {
 /* ===== Autenticación Google (si la usas) ===== */
 app.use(
   session({
+    name: process.env.SESSION_NAME || "ferre.sid",
     secret: process.env.SESSION_SECRET || "ferreexpress",
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: isProd,                 // ✅ en prod debe ser true (https)
+      sameSite: isProd ? "none" : "lax", // ✅ cross-site (Vercel -> API) requiere none
+      maxAge: 1000 * 60 * 60 * 6,      // 6h
+    },
   })
 );
+
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -84,5 +98,16 @@ app.use("/api/v1/auditoria", auditoria);
 
 /* ===== Health simple (extra) ===== */
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+/* ===== 404 ===== */
+app.use((_req, res) => {
+  res.status(404).json({ ok: false, message: "Ruta no encontrada" });
+});
+
+/* ===== Error handler ===== */
+app.use((err, _req, res, _next) => {
+  console.error("🔥 Error:", err);
+  res.status(500).json({ ok: false, message: "Error interno del servidor" });
+});
 
 module.exports = app;

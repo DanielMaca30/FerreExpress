@@ -23,6 +23,7 @@ import {
   InputRightElement,
   Kbd,
   Button,
+  Collapse,
   Drawer,
   DrawerOverlay,
   DrawerContent,
@@ -62,14 +63,13 @@ import { cartCountSkus, onCartChanged } from "../utils/cartStore";
 const MotionBox = motion(Box);
 
 export default function ClienteLayout() {
-  // Asegúrate de que useAuth devuelva user con al menos { username, email }
-  const { user, logout } = useAuth(); 
+  const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const bgPage = useColorModeValue("#f6f7f9", "#0f1117");
-  const headerBg = "#f8bd22"; // color de marca
+  const headerBg = "#f8bd22";
   const footerBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("blackAlpha.200", "blackAlpha.400");
   const navInactive = useColorModeValue("gray.800", "gray.100");
@@ -82,21 +82,17 @@ export default function ClienteLayout() {
   const isMobile = useBreakpointValue({ base: true, md: false });
   const pathname = location.pathname;
 
-  // ===== Navegación activa =====
   const isActive = (to) => {
-    if (to === "/cliente") {
-      return pathname === "/cliente" || pathname === "/cliente/";
-    }
+    if (to === "/cliente") return pathname === "/cliente" || pathname === "/cliente/";
     return pathname === to || pathname.startsWith(to + "/");
   };
 
-  // ===== Logout =====
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  // ===== Búsqueda y sugerencias =====
+  // ================== BUSCADOR + SUGERENCIAS ==================
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -107,29 +103,32 @@ export default function ClienteLayout() {
   const suggestionsRef = useRef(null);
 
   const handleSearchSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const term = search.trim();
+
     if (!term) return;
+
     setShowSuggestions(false);
-    navigate(`/cliente?search=${encodeURIComponent(term)}`);
+    setSearch(""); // opcional: limpiar el input después de buscar
+
+    // Navegamos a la página principal pública con el parámetro de búsqueda
+    navigate(`/Home?search=${encodeURIComponent(term)}`);
+    // O si tu página principal es simplemente "/", puedes usar:
+    // navigate(`/?search=${encodeURIComponent(term)}`);
   };
 
-  // Atajo "/" para enfocar buscador y "Esc" para limpiar y cerrar sugerencias
   useEffect(() => {
     const onKey = (e) => {
       const input = searchInputRef.current;
       if (!input) return;
 
       const tag = (e.target.tagName || "").toLowerCase();
-      const typing =
-        tag === "input" || tag === "textarea" || e.target.isContentEditable;
+      const typing = tag === "input" || tag === "textarea" || e.target.isContentEditable;
 
       if (e.key === "/" && !typing) {
         e.preventDefault();
         input.focus();
-        setShowSuggestions(
-          (prev) => prev || search.trim().length >= 2
-        );
+        setShowSuggestions((prev) => prev || search.trim().length >= 2);
       }
 
       if (e.key === "Escape" && document.activeElement === input) {
@@ -144,23 +143,13 @@ export default function ClienteLayout() {
     return () => window.removeEventListener("keydown", onKey);
   }, [search]);
 
-  // Cerrar sugerencias si se hace click fuera
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!showSuggestions) return;
 
-      if (
-        searchInputRef.current &&
-        searchInputRef.current.contains(e.target)
-      ) {
-        return;
-      }
-      if (
-        suggestionsRef.current &&
-        suggestionsRef.current.contains(e.target)
-      ) {
-        return;
-      }
+      if (searchInputRef.current && searchInputRef.current.contains(e.target)) return;
+      if (suggestionsRef.current && suggestionsRef.current.contains(e.target)) return;
+
       setShowSuggestions(false);
     };
 
@@ -168,15 +157,11 @@ export default function ClienteLayout() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSuggestions]);
 
-  // Debounce del término de búsqueda
   useEffect(() => {
-    const id = setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 250);
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 250);
     return () => clearTimeout(id);
   }, [search]);
 
-  // Llamado al backend para sugerencias
   useEffect(() => {
     if (debouncedSearch.length < 2) {
       setSearchResults([]);
@@ -188,23 +173,15 @@ export default function ClienteLayout() {
     setSearchLoading(true);
 
     api
-      .get("/productos", {
-        params: { search: debouncedSearch, limit: 8, page: 1 },
-      })
+      .get("/productos", { params: { search: debouncedSearch, limit: 8, page: 1 } })
       .then((res) => {
-        if (!cancelled) {
-          setSearchResults(res.data?.productos || []);
-        }
+        if (!cancelled) setSearchResults(res.data?.productos || []);
       })
       .catch((err) => {
-        if (!cancelled) {
-          console.error("Error al buscar productos:", err);
-        }
+        if (!cancelled) console.error("Error al buscar productos:", err);
       })
       .finally(() => {
-        if (!cancelled) {
-          setSearchLoading(false);
-        }
+        if (!cancelled) setSearchLoading(false);
       });
 
     return () => {
@@ -221,25 +198,69 @@ export default function ClienteLayout() {
   const hasQuery = debouncedSearch.length >= 2;
   const hasResults = searchResults && searchResults.length > 0;
 
-  // ===== Notificaciones =====
+  // ================== NOTIFICACIONES (AUTO-REFRESH) ==================
   const [notificaciones, setNotificaciones] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
 
-  const fetchNotificaciones = async () => {
+  const notifInFlightRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const fetchNotificaciones = async ({ silent = false } = {}) => {
+    if (!user?.token) return;
+    if (notifInFlightRef.current) return;
+
+    notifInFlightRef.current = true;
     try {
-      setNotifLoading(true);
+      if (!silent) setNotifLoading(true);
+
       const res = await api.get("/notificaciones", {
-        headers: {
-          Authorization: user?.token ? `Bearer ${user.token}` : undefined,
-        },
+        headers: { Authorization: `Bearer ${user.token}` },
       });
-      setNotificaciones(res.data || []);
+
+      if (mountedRef.current) {
+        setNotificaciones(Array.isArray(res.data) ? res.data : []);
+      }
     } catch (error) {
+      // Si falla en background, no “ensucies” UI; solo log
       console.error("Error al cargar notificaciones:", error);
     } finally {
-      setNotifLoading(false);
+      if (mountedRef.current && !silent) setNotifLoading(false);
+      notifInFlightRef.current = false;
     }
   };
+
+  // ✅ Auto refresco: inicial + polling + focus/visibility
+  useEffect(() => {
+    if (!user?.token) return;
+
+    const NOTIF_POLL_MS = 30000; // <-- AJUSTA AQUÍ
+    fetchNotificaciones({ silent: true }); // initial badge load
+
+    const id = setInterval(() => {
+      fetchNotificaciones({ silent: true });
+    }, NOTIF_POLL_MS);
+
+    const onFocus = () => fetchNotificaciones({ silent: true });
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") fetchNotificaciones({ silent: true });
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [user?.token]);
 
   const unreadCount = useMemo(
     () => notificaciones.filter((n) => !n.leido).length,
@@ -248,20 +269,17 @@ export default function ClienteLayout() {
 
   const handleNotificacionClick = async (notif) => {
     try {
+      if (!user?.token) return;
+
       if (!notif.leido) {
         await api.put(
           `/notificaciones/${notif.id}/leida`,
           {},
-          {
-            headers: {
-              Authorization: user?.token ? `Bearer ${user.token}` : undefined,
-            },
-          }
+          { headers: { Authorization: `Bearer ${user.token}` } }
         );
+
         setNotificaciones((prev) =>
-          prev.map((n) =>
-            n.id === notif.id ? { ...n, leido: 1 } : n
-          )
+          prev.map((n) => (n.id === notif.id ? { ...n, leido: 1 } : n))
         );
       }
     } catch (error) {
@@ -269,35 +287,25 @@ export default function ClienteLayout() {
     }
   };
 
-  // ===== Navegación =====
-  const profileLabel = user?.username || "Mi perfil";
-  
-  // Datos de usuario para el menú desplegable (SIMULACIÓN si no tienes `email` en useAuth)
+  // ================== NAV ==================
   const userDisplayName = user?.username || "Usuario FerreExpress";
-  const userEmail = user?.email || "usuario@ferreexpress.com"; 
+  const userEmail = user?.email || "usuario@ferreexpress.com";
 
   const navLeft = [
     { to: "/cliente", label: "Inicio", icon: FiHome },
     { to: "/cliente/about", label: "Acerca de", icon: FiInfo },
-    {
-      to: "/cliente/puntos-fisicos",
-      label: "Puntos físicos",
-      icon: FiMapPin,
-    },
+    { to: "/cliente/puntos-fisicos", label: "Puntos físicos", icon: FiMapPin },
   ];
 
   const navRight = [
     { to: "/cliente/pedidos", label: "Mis pedidos", icon: FiTruck },
     { to: "/cliente/carrito", label: "Carrito", icon: FiShoppingCart },
-    { to: "/cliente/perfil", label: profileLabel, icon: FiUser },
+    { to: "/cliente/perfil", label: "Mi perfil", icon: FiUser },
   ];
 
-  const headerShadow = useMemo(
-    () => "0 3px 14px rgba(0,0,0,0.25)",
-    []
-  );
+  const headerShadow = useMemo(() => "0 3px 14px rgba(0,0,0,0.25)", []);
 
-  // ===== CARRITO: SKUs + animación =====
+  // ================== CARRITO ==================
   const [cartSkus, setCartSkus] = useState(() => cartCountSkus());
   const [cartBump, setCartBump] = useState(false);
 
@@ -305,11 +313,7 @@ export default function ClienteLayout() {
     setCartSkus(cartCountSkus());
 
     const unsubscribe = onCartChanged((detail) => {
-      if (typeof detail.skus === "number") {
-        setCartSkus(detail.skus);
-      } else {
-        setCartSkus(cartCountSkus());
-      }
+      setCartSkus(typeof detail.skus === "number" ? detail.skus : cartCountSkus());
 
       if (detail.lastAction === "add" && detail.addedUnits > 0) {
         setCartBump(true);
@@ -319,6 +323,50 @@ export default function ClienteLayout() {
 
     return unsubscribe;
   }, []);
+
+  // ================== HEADER MÓVIL COMPACTO (SCROLL) ==================
+  const [compactHeader, setCompactHeader] = useState(false);
+  const lastScrollYRef = useRef(0);
+  const tickingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setCompactHeader(false);
+      return;
+    }
+
+    lastScrollYRef.current = window.scrollY || 0;
+
+    const MIN_Y_TO_COLLAPSE = 56;
+    const DELTA = 10;
+
+    const onScroll = () => {
+      if (tickingRef.current) return;
+      tickingRef.current = true;
+
+      window.requestAnimationFrame(() => {
+        const y = window.scrollY || 0;
+        const prev = lastScrollYRef.current;
+        const diff = y - prev;
+
+        if (y < 10) {
+          setCompactHeader(false);
+        } else {
+          const goingDown = diff > DELTA;
+          const goingUp = diff < -DELTA;
+
+          if (goingDown && y > MIN_Y_TO_COLLAPSE) setCompactHeader(true);
+          if (goingUp) setCompactHeader(false);
+        }
+
+        lastScrollYRef.current = y;
+        tickingRef.current = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isMobile]);
 
   return (
     <Box minH="100vh" bg={bgPage} display="flex" flexDirection="column">
@@ -334,137 +382,128 @@ export default function ClienteLayout() {
         boxShadow={headerShadow}
       >
         <Container maxW="7xl" px={{ base: 3, md: 5 }} py={{ base: 2, md: 3 }}>
-          {/* FILA 1: Logo + acciones */}
-          <Flex
-            align="center"
-            justify="space-between"
-            gap={{ base: 2, md: 4 }}
-            wrap="nowrap"
-          >
-            <HStack spacing={3} minW={0}>
-              <Image
-                src="/LOGOFERREEXPRESS.jpg"
-                alt="FerreExpress S.A.S."
-                h={{ base: "32px", md: "40px" }}
-                objectFit="contain"
-              />
-            </HStack>
+          {/* FILA 1 (MOBILE: se oculta al bajar) */}
+          <Collapse in={!isMobile || !compactHeader} animateOpacity unmountOnExit>
+            <Flex align="center" justify="space-between" gap={{ base: 2, md: 4 }} wrap="nowrap">
+              <HStack spacing={3} minW={0}>
+                <Image
+                  src="/LOGOFERREEXPRESS.jpg"
+                  alt="FerreExpress S.A.S."
+                  h={{ base: "32px", md: "40px" }}
+                  objectFit="contain"
+                />
+              </HStack>
 
-            {/* ACCIONES: DESKTOP -> botón salir ; MOBILE -> carrito + menú */}
-            <HStack spacing={3}>
-              {isMobile ? (
-                <>
-                  {/* Carrito móvil con badge y animación */}
-                  <Box position="relative">
-                    <Tooltip label="Carrito" hasArrow>
-                      <IconButton
-                        aria-label="Carrito"
-                        variant="ghost"
-                        color="gray.900"
-                        onClick={() => navigate("/cliente/carrito")}
-                        icon={
-                          <MotionBox
-                            display="inline-flex"
-                            animate={
-                              cartBump
-                                ? { scale: [1, 1.18, 1] }
-                                : { scale: 1 }
-                            }
-                            transition={{ duration: 0.25 }}
-                          >
-                            <FiShoppingCart />
-                          </MotionBox>
-                        }
-                      />
-                    </Tooltip>
-                    {cartSkus > 0 && (
-                      <Box
-                        position="absolute"
-                        top="2px"
-                        right="2px"
-                        bg="red.500"
-                        color="white"
-                        borderRadius="full"
-                        minW="16px"
-                        h="16px"
-                        px={0.5}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                        fontSize="0.65rem"
-                        fontWeight="bold"
-                        lineHeight="1"
-                      >
-                        {cartSkus > 9 ? "9+" : cartSkus}
-                      </Box>
-                    )}
-                  </Box>
+              <HStack spacing={3}>
+                {isMobile ? (
+                  <>
+                    {/* Carrito móvil */}
+                    <Box position="relative">
+                      <Tooltip label="Carrito" hasArrow>
+                        <IconButton
+                          aria-label="Carrito"
+                          variant="ghost"
+                          color="gray.900"
+                          onClick={() => navigate("/cliente/carrito")}
+                          icon={
+                            <MotionBox
+                              display="inline-flex"
+                              animate={cartBump ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+                              transition={{ duration: 0.25 }}
+                            >
+                              <FiShoppingCart />
+                            </MotionBox>
+                          }
+                        />
+                      </Tooltip>
+                      {cartSkus > 0 && (
+                        <Box
+                          position="absolute"
+                          top="2px"
+                          right="2px"
+                          bg="red.500"
+                          color="white"
+                          borderRadius="full"
+                          minW="16px"
+                          h="16px"
+                          px={0.5}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          fontSize="0.65rem"
+                          fontWeight="bold"
+                          lineHeight="1"
+                        >
+                          {cartSkus > 9 ? "9+" : cartSkus}
+                        </Box>
+                      )}
+                    </Box>
 
-                  {/* Campanita móvil con pestañita (popover) */}
-                  <Popover
-                    placement="bottom-end"
-                    onOpen={fetchNotificaciones}
-                    closeOnBlur
-                  >
-                    <PopoverTrigger>
-                      <Box position="relative">
-                        <Tooltip label="Notificaciones" hasArrow>
-                          <IconButton
-                            aria-label="Notificaciones"
-                            icon={<FiBell />}
-                            variant="ghost"
-                            color="gray.900"
-                          />
-                        </Tooltip>
-                        {unreadCount > 0 && (
-                          <Box
-                            position="absolute"
-                            top="2px"
-                            right="2px"
-                            bg="red.500"
-                            color="white"
-                            borderRadius="full"
-                            minW="16px"
-                            h="16px"
-                            px={0.5}
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                            fontSize="0.65rem"
-                            fontWeight="bold"
-                            lineHeight="1"
-                          >
-                            {unreadCount > 9 ? "9+" : unreadCount}
-                          </Box>
-                        )}
-                      </Box>
-                    </PopoverTrigger>
-                    {renderNotificationsPanel({
-                      notifLoading,
-                      notificaciones,
-                      fetchNotificaciones,
-                      handleNotificacionClick,
-                      borderColor,
-                    })}
-                  </Popover>
+                    {/* Campanita móvil */}
+                    <Popover
+                      placement="bottom-end"
+                      onOpen={() => fetchNotificaciones({ silent: false })}
+                      closeOnBlur
+                    >
+                      <PopoverTrigger>
+                        <Box position="relative">
+                          <Tooltip label="Notificaciones" hasArrow>
+                            <IconButton
+                              aria-label="Notificaciones"
+                              icon={<FiBell />}
+                              variant="ghost"
+                              color="gray.900"
+                            />
+                          </Tooltip>
+                          {unreadCount > 0 && (
+                            <Box
+                              position="absolute"
+                              top="2px"
+                              right="2px"
+                              bg="red.500"
+                              color="white"
+                              borderRadius="full"
+                              minW="16px"
+                              h="16px"
+                              px={0.5}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="0.65rem"
+                              fontWeight="bold"
+                              lineHeight="1"
+                            >
+                              {unreadCount > 9 ? "9+" : unreadCount}
+                            </Box>
+                          )}
+                        </Box>
+                      </PopoverTrigger>
+                      {renderNotificationsPanel({
+                        notifLoading,
+                        notificaciones,
+                        fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
+                        handleNotificacionClick,
+                        borderColor,
+                      })}
+                    </Popover>
 
-                  <IconButton
-                    aria-label="Menú"
-                    icon={<FiMenu />}
-                    variant="ghost"
-                    color="gray.900"
-                    onClick={onOpen}
-                  />
-                </>
-              ) : (
-                // LÓGICA DE ESCRITORIO - Botón Salir Eliminado, ahora el menú está en Fila 3.
-                <Box h="32px" w="1px" /> // Espacio para mantener el layout
-              )}
-            </HStack>
-          </Flex>
+                    <IconButton
+                      aria-label="Menú"
+                      icon={<FiMenu />}
+                      variant="ghost"
+                      color="gray.900"
+                      onClick={onOpen}
+                    />
+                  </>
+                ) : (
+                  <Box h="32px" w="1px" />
+                )}
+              </HStack>
+            </Flex>
+          </Collapse>
 
-          {/* FILA 2: Buscador de productos + sugerencias */}
-          <Box mt={{ base: 2, md: 3 }} position="relative">
+          {/* FILA 2: Buscador (siempre visible) */}
+          <Box mt={{ base: compactHeader ? 0 : 2, md: 3 }} position="relative">
             <Box as="form" onSubmit={handleSearchSubmit}>
               <InputGroup>
                 <InputLeftElement pointerEvents="none" h="100%" pl="3">
@@ -494,17 +533,10 @@ export default function ClienteLayout() {
                     setShowSuggestions(value.trim().length >= 2);
                   }}
                   onFocus={() => {
-                    if (search.trim().length >= 2) {
-                      setShowSuggestions(true);
-                    }
+                    if (search.trim().length >= 2) setShowSuggestions(true);
                   }}
                 />
-                <InputRightElement
-                  width="88px"
-                  h="100%"
-                  pr="3"
-                  justifyContent="flex-end"
-                >
+                <InputRightElement width="88px" h="100%" pr="3" justifyContent="flex-end">
                   {!isMobile && (
                     <HStack spacing={2} color="gray.700" fontSize="xs">
                       <Text>Atajo</Text>
@@ -538,7 +570,6 @@ export default function ClienteLayout() {
                   maxH="360px"
                   overflowY="auto"
                 >
-                  {/* Estado de carga */}
                   {searchLoading && (
                     <HStack px={4} py={3} spacing={3}>
                       <Spinner size="sm" />
@@ -548,7 +579,6 @@ export default function ClienteLayout() {
                     </HStack>
                   )}
 
-                  {/* Sin resultados */}
                   {!searchLoading && hasQuery && !hasResults && (
                     <Box px={4} py={3}>
                       <Text fontSize="sm" color={muted}>
@@ -556,12 +586,11 @@ export default function ClienteLayout() {
                         <Text as="span" fontWeight="semibold">
                           “{debouncedSearch}”
                         </Text>
-                        . Prueba con otra marca, medida o referencia.
+                        .
                       </Text>
                     </Box>
                   )}
 
-                  {/* Lista de resultados */}
                   {!searchLoading && hasResults && (
                     <Stack spacing={1} p={2}>
                       {searchResults.map((p) => {
@@ -569,14 +598,11 @@ export default function ClienteLayout() {
                           ? `${API_BASE_URL}${p.imagen_principal}`
                           : "https://via.placeholder.com/80x80?text=Sin+imagen";
 
-                        const price = Number(p.precio ?? 0).toLocaleString(
-                          "es-CO",
-                          {
-                            style: "currency",
-                            currency: "COP",
-                            maximumFractionDigits: 0,
-                          }
-                        );
+                        const price = Number(p.precio ?? 0).toLocaleString("es-CO", {
+                          style: "currency",
+                          currency: "COP",
+                          maximumFractionDigits: 0,
+                        });
 
                         return (
                           <Box
@@ -601,41 +627,18 @@ export default function ClienteLayout() {
                                 borderColor="blackAlpha.100"
                                 flexShrink={0}
                               >
-                                <Image
-                                  src={img}
-                                  alt={p.nombre}
-                                  w="100%"
-                                  h="100%"
-                                  objectFit="contain"
-                                />
+                                <Image src={img} alt={p.nombre} w="100%" h="100%" objectFit="contain" />
                               </Box>
-                              <VStack
-                                align="flex-start"
-                                spacing={0.5}
-                                flex="1"
-                                minW={0}
-                              >
-                                <Text
-                                  fontSize="sm"
-                                  fontWeight="semibold"
-                                  noOfLines={1}
-                                >
+                              <VStack align="flex-start" spacing={0.5} flex="1" minW={0}>
+                                <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
                                   {p.nombre}
                                 </Text>
                                 <HStack spacing={2}>
-                                  <Text
-                                    fontSize="sm"
-                                    fontWeight="bold"
-                                    color="gray.900"
-                                  >
+                                  <Text fontSize="sm" fontWeight="bold" color="gray.900">
                                     {price}
                                   </Text>
                                   {p.categoria && (
-                                    <Badge
-                                      variant="subtle"
-                                      colorScheme="yellow"
-                                      fontSize="0.65rem"
-                                    >
+                                    <Badge variant="subtle" colorScheme="yellow" fontSize="0.65rem">
                                       {p.categoria}
                                     </Badge>
                                   )}
@@ -648,7 +651,6 @@ export default function ClienteLayout() {
                     </Stack>
                   )}
 
-                  {/* Hint de teclado */}
                   <Box
                     px={4}
                     py={2}
@@ -661,41 +663,27 @@ export default function ClienteLayout() {
                     alignItems="center"
                     gap={2}
                   >
-                    <Text>Presiona</Text>
+                    <Text>Enter</Text>
                     <Kbd>Enter</Kbd>
-                    <Text>para ver resultados completos o</Text>
+                    <Text>• Cerrar</Text>
                     <Kbd>Esc</Kbd>
-                    <Text>para cerrar.</Text>
                   </Box>
                 </MotionBox>
               )}
             </AnimatePresence>
           </Box>
 
-          {/* FILA 3: Navegación SOLO DESKTOP */}
-          <Box
-            mt={{ base: 0, md: 3 }}
-            display={{ base: "none", md: "block" }}
-          >
+          {/* FILA 3: DESKTOP */}
+          <Box mt={{ base: 0, md: 3 }} display={{ base: "none", md: "block" }}>
             <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
-            <Flex
-              mt={1}
-              align="center"
-              justify="space-between"
-              gap={4}
-              wrap="nowrap"
-            >
-              {/* IZQUIERDA: Información / contenido */}
+            <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
               <Flex
                 as="nav"
                 align="center"
                 gap={2}
                 overflowX="auto"
                 pb={1}
-                sx={{
-                  "::-webkit-scrollbar": { display: "none" },
-                  scrollbarWidth: "none",
-                }}
+                sx={{ "::-webkit-scrollbar": { display: "none" }, scrollbarWidth: "none" }}
               >
                 {navLeft.map((item) => (
                   <ClienteNavItem
@@ -711,19 +699,14 @@ export default function ClienteLayout() {
                 ))}
               </Flex>
 
-              {/* DERECHA: Cuenta / acciones */}
               <Flex
                 as="nav"
                 align="center"
                 gap={2}
                 overflowX="auto"
                 pb={1}
-                sx={{
-                  "::-webkit-scrollbar": { display: "none" },
-                  scrollbarWidth: "none",
-                }}
+                sx={{ "::-webkit-scrollbar": { display: "none" }, scrollbarWidth: "none" }}
               >
-                {/* Mis pedidos */}
                 <ClienteNavItem
                   to={navRight[0].to}
                   icon={navRight[0].icon}
@@ -734,7 +717,6 @@ export default function ClienteLayout() {
                   navActiveColor={navActiveColor}
                 />
 
-                {/* Carrito con badge + animación */}
                 <ClienteNavItem
                   to={navRight[1].to}
                   icon={navRight[1].icon}
@@ -748,10 +730,9 @@ export default function ClienteLayout() {
                   bump={cartBump}
                 />
 
-                {/* Campanita escritorio */}
                 <Popover
                   placement="bottom-end"
-                  onOpen={fetchNotificaciones}
+                  onOpen={() => fetchNotificaciones({ silent: false })}
                   closeOnBlur
                 >
                   <PopoverTrigger>
@@ -791,104 +772,95 @@ export default function ClienteLayout() {
                   {renderNotificationsPanel({
                     notifLoading,
                     notificaciones,
-                    fetchNotificaciones,
+                    fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
                     handleNotificacionClick,
                     borderColor,
                   })}
                 </Popover>
 
-                {/* === MODIFICACIÓN: MENÚ DESPLEGABLE DE PERFIL Y SALIR (Pequeño y bonito) === */}
                 <Popover placement="bottom-end">
-                    <PopoverTrigger>
-                        <HStack
-                            as="button"
-                            spacing={1} // Más compacto
-                            px={2.5} // Menos padding horizontal
-                            py={1.5}
-                            borderRadius="full"
-                            bg={isActive("/cliente/perfil") ? navActiveBg : "transparent"} // Resaltar si está activo
-                            color={navInactive}
-                            _hover={{
-                                textDecoration: "none",
-                                bg: "whiteAlpha.800",
-                                transform: "translateY(-1px)",
-                            }}
-                            transition="background 0.15s ease, transform 0.12s ease"
-                            flexShrink={0}
-                        >
-                            <FiUser size={14} /> {/* Ícono más pequeño */}
-                            <Text
-                                fontSize="xs" // Letra más pequeña
-                                fontWeight="medium"
-                                noOfLines={1}
-                            >
-                                {userDisplayName}
-                            </Text>
-                        </HStack>
-                    </PopoverTrigger>
-
-                    <PopoverContent
-                        w="190px" // Ancho reducido
-                        p={0.5} // Padding más estrecho
-                        bg={navActiveBg}
-                        borderRadius="lg"
-                        boxShadow="xl"
-                        borderColor={borderColor}
-                        _focus={{ boxShadow: "xl" }}
+                  <PopoverTrigger>
+                    <HStack
+                      as="button"
+                      spacing={1}
+                      px={2.5}
+                      py={1.5}
+                      borderRadius="full"
+                      bg={isActive("/cliente/perfil") ? navActiveBg : "transparent"}
+                      color={navInactive}
+                      _hover={{
+                        textDecoration: "none",
+                        bg: "whiteAlpha.800",
+                        transform: "translateY(-1px)",
+                      }}
+                      transition="background 0.15s ease, transform 0.12s ease"
+                      flexShrink={0}
                     >
-                        <VStack spacing={0} align="stretch">
-                            {/* Header con información del usuario */}
-                            <Box px={3} py={2} mb={1}>
-                                <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
-                                    {userDisplayName}
-                                </Text>
-                                <Text fontSize="xs" color="gray.500" noOfLines={1}>
-                                    {userEmail}
-                                </Text>
-                            </Box>
-                            
-                            <Divider my={1} borderColor={borderColor} />
+                      <FiUser size={14} />
+                      <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
+                        {userDisplayName}
+                      </Text>
+                    </HStack>
+                  </PopoverTrigger>
 
-                            {/* Opción 1: Ir al Perfil (tamaño 'sm') */}
-                            <Button
-                                size="sm" // Botón más pequeño
-                                variant="ghost"
-                                justifyContent="flex-start"
-                                leftIcon={<FiUser />}
-                                onClick={() => navigate("/cliente/perfil")}
-                                color={navInactive}
-                                _hover={{ bg: panelSubtleBg, color: "gray.900" }}
-                                borderRadius="md"
-                                fontSize="sm"
-                            >
-                                Mi Perfil
-                            </Button>
+                  <PopoverContent
+                    w="190px"
+                    p={0.5}
+                    bg={navActiveBg}
+                    borderRadius="lg"
+                    boxShadow="xl"
+                    borderColor={borderColor}
+                    _focus={{ boxShadow: "xl" }}
+                  >
+                    <VStack spacing={0} align="stretch">
+                      <Box px={3} py={2} mb={1}>
+                        <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                          {userDisplayName}
+                        </Text>
+                        <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                          {userEmail}
+                        </Text>
+                      </Box>
 
-                            {/* Opción 2: Cerrar Sesión (tamaño 'sm') */}
-                            <Button
-                                size="sm" // Botón más pequeño
-                                variant="ghost"
-                                justifyContent="flex-start"
-                                leftIcon={<FiLogOut />}
-                                onClick={handleLogout}
-                                color="red.500"
-                                _hover={{ bg: "red.50", color: "red.600" }}
-                                borderRadius="md"
-                                fontSize="sm"
-                            >
-                                Cerrar Sesión
-                            </Button>
-                        </VStack>
-                    </PopoverContent>
+                      <Divider my={1} borderColor={borderColor} />
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        leftIcon={<FiUser />}
+                        onClick={() => navigate("/cliente/perfil")}
+                        color={navInactive}
+                        _hover={{ bg: panelSubtleBg, color: "gray.900" }}
+                        borderRadius="md"
+                        fontSize="sm"
+                      >
+                        Mi Perfil
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        leftIcon={<FiLogOut />}
+                        onClick={handleLogout}
+                        color="red.500"
+                        _hover={{ bg: "red.50", color: "red.600" }}
+                        borderRadius="md"
+                        fontSize="sm"
+                      >
+                        Cerrar Sesión
+                      </Button>
+                    </VStack>
+                  </PopoverContent>
                 </Popover>
-                {/* === FIN DE MODIFICACIÓN === */}
               </Flex>
             </Flex>
           </Box>
         </Container>
       </Box>
 
-      {/* ===== DRAWER MOBILE (MENÚ HAMBURGUESA) ===== */}
+      {/* ===== DRAWER MOBILE ===== */}
       <Drawer isOpen={isOpen} onClose={onClose} placement="right">
         <DrawerOverlay />
         <DrawerContent>
@@ -897,12 +869,7 @@ export default function ClienteLayout() {
           <DrawerBody>
             <Stack spacing={4}>
               <Box>
-                <Text
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  color="gray.500"
-                  mb={1}
-                >
+                <Text fontSize="xs" textTransform="uppercase" color="gray.500" mb={1}>
                   Explorar
                 </Text>
                 <Stack spacing={1}>
@@ -925,12 +892,7 @@ export default function ClienteLayout() {
               </Box>
 
               <Box>
-                <Text
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  color="gray.500"
-                  mb={1}
-                >
+                <Text fontSize="xs" textTransform="uppercase" color="gray.500" mb={1}>
                   Mi cuenta
                 </Text>
                 <Stack spacing={1}>
@@ -973,19 +935,13 @@ export default function ClienteLayout() {
       </Drawer>
 
       {/* ===== CONTENIDO ===== */}
-      <Box
-        as="main"
-        flex="1"
-        bg={bgPage}
-        px={{ base: 2, md: 4 }}
-        py={{ base: 3, md: 4 }}
-      >
+      <Box as="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
         <Container maxW="7xl">
           <Outlet />
         </Container>
       </Box>
 
-      {/* ====== FOOTER (AÑADIDO Y ADAPTADO) ====== */}
+      {/* ===== FOOTER ===== */}
       <Box
         as="footer"
         w="full"
@@ -996,15 +952,9 @@ export default function ClienteLayout() {
         mt="auto"
         boxShadow="0 -4px 20px rgba(0,0,0,0.06)"
       >
-        <Container
-          maxW={{ base: "100%", md: "95%", lg: "8xl" }}
-          px={{ base: 4, md: 6, lg: 8 }}
-        >
+        <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 6, lg: 8 }}>
           <Grid
-            templateColumns={{
-              base: "1fr",
-              md: "1fr auto 1fr",
-            }}
+            templateColumns={{ base: "1fr", md: "1fr auto 1fr" }}
             alignItems="center"
             gap={{ base: 6, md: 8 }}
           >
@@ -1019,15 +969,10 @@ export default function ClienteLayout() {
               />
             </HStack>
 
-            <HStack
-              spacing={{ base: 6, md: 10 }}
-              justify="center"
-              fontSize={{ base: "sm", md: "md" }}
-              fontWeight="medium"
-            >
+            <HStack spacing={{ base: 6, md: 10 }} justify="center" fontSize={{ base: "sm", md: "md" }} fontWeight="medium">
               <Button
                 as={RouterLink}
-                to="/condiciones-uso"
+                to="condiciones-uso-cliente"   // ← sin barra inicial
                 variant="link"
                 color="blue.600"
                 _hover={{ color: "blue.700" }}
@@ -1036,7 +981,7 @@ export default function ClienteLayout() {
               </Button>
               <Button
                 as={RouterLink}
-                to="/avisos-privacidad"
+                to="avisos-privacidad-cliente" // ← sin barra inicial
                 variant="link"
                 color="blue.600"
                 _hover={{ color: "blue.700" }}
@@ -1045,21 +990,14 @@ export default function ClienteLayout() {
               </Button>
             </HStack>
 
-            <HStack
-              spacing={{ base: 5, md: 6 }}
-              justify={{ base: "center", md: "flex-end" }}
-            >
+            <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
               {[
                 { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366" },
                 { Icon: FaInstagram, label: "Instagram", color: "#E4405F" },
                 { Icon: FaFacebook, label: "Facebook", color: "#1877F2" },
                 { Icon: FaXTwitter, label: "X", color: "#000000" },
               ].map((social) => (
-                <MotionBox
-                  key={social.label}
-                  whileHover={{ scale: 1.22 }}
-                  whileTap={{ scale: 0.92 }}
-                >
+                <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
                   <IconButton
                     as="a"
                     href="#"
@@ -1077,12 +1015,7 @@ export default function ClienteLayout() {
             </HStack>
 
             <GridItem colSpan={{ base: 1, md: 3 }} mt={{ base: 6, md: 8 }}>
-              <Text
-                fontSize={{ base: "xs", md: "sm" }}
-                color={muted}
-                textAlign="center"
-                fontWeight="medium"
-              >
+              <Text fontSize={{ base: "xs", md: "sm" }} color={muted} textAlign="center" fontWeight="medium">
                 © {new Date().getFullYear()} FerreExpress® • Todos los derechos reservados
               </Text>
             </GridItem>
@@ -1093,7 +1026,7 @@ export default function ClienteLayout() {
   );
 }
 
-/* ===== Subcomponente de item de navegación (DESKTOP) ===== */
+/* ===== Item navegación desktop ===== */
 function ClienteNavItem({
   to,
   icon: Icon,
@@ -1102,7 +1035,7 @@ function ClienteNavItem({
   navInactive,
   navActiveBg,
   navActiveColor,
-  badgeValue,
+  badgeValue = 0,
   isCart,
   bump,
 }) {
@@ -1162,18 +1095,14 @@ function ClienteNavItem({
           </Box>
         )}
       </Box>
-      <Text
-        fontSize="sm"
-        fontWeight={active ? "semibold" : "normal"}
-        noOfLines={1}
-      >
+      <Text fontSize="sm" fontWeight={active ? "semibold" : "normal"} noOfLines={1}>
         {label}
       </Text>
     </HStack>
   );
 }
 
-/* ===== Panel reutilizable de notificaciones (popover) ===== */
+/* ===== Panel notificaciones ===== */
 function renderNotificationsPanel({
   notifLoading,
   notificaciones,
@@ -1188,26 +1117,17 @@ function renderNotificationsPanel({
       overflowY="auto"
       _focus={{ boxShadow: "lg" }}
     >
-      <Box
-        px={3}
-        py={2}
-        borderBottom="1px solid"
-        borderColor={borderColor}
-        bg="whiteAlpha.900"
-      >
+      <Box px={3} py={2} borderBottom="1px solid" borderColor={borderColor} bg="whiteAlpha.900">
         <HStack justify="space-between">
           <Text fontWeight="semibold" fontSize="sm">
             Notificaciones
           </Text>
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={fetchNotificaciones}
-          >
+          <Button size="xs" variant="outline" onClick={fetchNotificaciones}>
             Actualizar
           </Button>
         </HStack>
       </Box>
+
       <Box p={3}>
         {notifLoading ? (
           <HStack spacing={3}>
@@ -1235,11 +1155,7 @@ function renderNotificationsPanel({
               >
                 <HStack justify="space-between" align="flex-start">
                   <VStack align="flex-start" spacing={0.5}>
-                    <Text
-                      fontSize="sm"
-                      fontWeight="semibold"
-                      noOfLines={1}
-                    >
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
                       {n.titulo}
                     </Text>
                     <Text fontSize="xs" color="gray.600">
@@ -1252,6 +1168,7 @@ function renderNotificationsPanel({
                     </Badge>
                   )}
                 </HStack>
+
                 {n.fecha && (
                   <Text mt={1} fontSize="xs" color="gray.500">
                     {new Date(n.fecha).toLocaleString("es-CO")}

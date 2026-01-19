@@ -1,1495 +1,1332 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+// src/pages/empresa/BeneficiosEmpresa.jsx
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Badge,
   Box,
   Button,
+  Card,
+  CardBody,
+  Container,
   Divider,
   Flex,
   Heading,
   HStack,
+  Icon,
   IconButton,
   Input,
   InputGroup,
   InputLeftElement,
-  Kbd,
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-  Select,
+  InputRightElement,
+  Progress,
   SimpleGrid,
   Skeleton,
-  SkeletonText,
   Stack,
-  Stat,
-  StatLabel,
-  StatNumber,
-  StatHelpText,
   Table,
+  TableContainer,
   Tbody,
   Td,
   Text,
   Th,
   Thead,
-  Tr,
   Tooltip,
+  Tr,
   Tag,
-  useColorModeValue,
-  useToast,
   VStack,
+  useColorModeValue,
+  useOutsideClick,
+  usePrefersReducedMotion,
+  useToast,
 } from "@chakra-ui/react";
 import {
+  FiActivity,
   FiAlertTriangle,
-  FiArrowRight,
+  FiBox,
   FiCheckCircle,
-  FiClock,
   FiFileText,
   FiInfo,
-  FiPercent,
-  FiRefreshCw,
-  FiShoppingBag,
-  FiTrendingUp,
+  FiLayers,
   FiPlus,
-  FiTrash2,
+  FiRefreshCw,
   FiSearch,
+  FiShoppingBag,
+  FiTrash2,
+  FiX,
 } from "react-icons/fi";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import api from "../../utils/axiosInstance";
 import { useAuth } from "../../context/AuthContext";
 import PromoHeroFadeBanner from "../public/PromoHeroFadeBanner";
 
-const MotionBox = (props) => (
-  <Box
-    as={motion.div}
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, ease: "easeOut" }}
-    {...props}
-  />
-);
+const MotionBox = motion.create(Box);
+const MotionTr = motion.create(Tr);
 
 const ferreYellow = "#F9BF20";
 
+/* =========================================================================
+   iOS / Modern motion primitives
+   ========================================================================= */
+const makeSpring = (reduce) =>
+  reduce
+    ? { duration: 0 }
+    : { type: "spring", stiffness: 380, damping: 32, mass: 0.7 };
+
+const fadeUp = (reduce) => ({
+  hidden: { opacity: 0, y: 10, filter: "blur(6px)" },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { ...makeSpring(reduce), duration: reduce ? 0 : 0.38 },
+  },
+});
+
+const fadeIn = (reduce) => ({
+  hidden: { opacity: 0, filter: "blur(6px)" },
+  show: {
+    opacity: 1,
+    filter: "blur(0px)",
+    transition: { ...makeSpring(reduce), duration: reduce ? 0 : 0.35 },
+  },
+});
+
+const stagger = (reduce) => ({
+  hidden: {},
+  show: { transition: reduce ? {} : { staggerChildren: 0.06, delayChildren: 0.04 } },
+});
+
+const pressable = (reduce) => ({
+  whileHover: reduce ? {} : { y: -2, scale: 1.01 },
+  whileTap: reduce ? {} : { scale: 0.985 },
+  transition: reduce ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 30, mass: 0.6 },
+});
+
+/* =========================================================================
+   UTILIDADES
+   ========================================================================= */
 function formatCurrency(value) {
-  const num = Number(value || 0);
-  return num.toLocaleString("es-CO", {
+  return Number(value || 0).toLocaleString("es-CO", {
     style: "currency",
     currency: "COP",
     maximumFractionDigits: 0,
   });
 }
-
-function diffInDays(fechaIso) {
-  if (!fechaIso) return null;
-  const hoy = new Date();
-  const fecha = new Date(fechaIso);
-  const msDiff = fecha.getTime() - hoy.getTime();
-  return Math.round(msDiff / (1000 * 60 * 60 * 24));
+function normalizeText(s) {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+function clamp(n, min, max) {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, n));
+}
+function estadoPedidoMeta(estadoRaw) {
+  const estado = String(estadoRaw || "").toUpperCase();
+  switch (estado) {
+    case "PENDIENTE":
+      return { label: "Pendiente", progress: 20, scheme: "yellow" };
+    case "CONFIRMADO":
+      return { label: "Confirmado", progress: 45, scheme: "blue" };
+    case "ENVIADO":
+      return { label: "Enviado", progress: 75, scheme: "purple" };
+    case "ENTREGADO":
+      return { label: "Entregado", progress: 100, scheme: "green" };
+    case "CANCELADO":
+      return { label: "Cancelado", progress: 0, scheme: "red" };
+    default:
+      return { label: estado || "En proceso", progress: 40, scheme: "gray" };
+  }
 }
 
 /* =========================================================================
-   SUBCOMPONENTE: Cotizador rápido – protagonista, tabla horizontal tipo “Excel”
+   UI helpers (Glass / iOS)
    ========================================================================= */
-function CotizadorRapido({ onCotizacionCreada }) {
-  const toast = useToast();
-  const navigate = useNavigate();
+function GlassCard({ children, ...props }) {
+  const bg = useColorModeValue("whiteAlpha.900", "blackAlpha.400");
+  const border = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
+  const shadow = useColorModeValue(
+    "0 18px 60px rgba(0,0,0,0.10)",
+    "0 18px 60px rgba(0,0,0,0.35)"
+  );
 
-  const [productosCatalogo, setProductosCatalogo] = useState([]);
-  const [loadingCatalogo, setLoadingCatalogo] = useState(true);
-  const [items, setItems] = useState([]);
-  const [productoSeleccionado, setProductoSeleccionado] = useState("");
-  const [cantidad, setCantidad] = useState(1);
-  const [creando, setCreando] = useState(false);
-  const [ultimoResumen, setUltimoResumen] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
+  return (
+    <Box
+      bg={bg}
+      border="1px solid"
+      borderColor={border}
+      backdropFilter="blur(18px)"
+      boxShadow={shadow}
+      {...props}
+    >
+      {children}
+    </Box>
+  );
+}
 
-  const cardBg = useColorModeValue("white", "gray.800");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
+/* =========================================================================
+   KPI Card
+   ========================================================================= */
+function KpiCard({ label, value, icon, isLoading }) {
   const muted = useColorModeValue("gray.600", "gray.400");
-  const theadBg = useColorModeValue("gray.50", "gray.700");
-  const zebraBg = useColorModeValue("gray.50", "gray.900");
-  const successBg = useColorModeValue("green.50", "green.900");
-  const successBorderColor = useColorModeValue("green.200", "green.600");
-  const successTextColor = useColorModeValue("green.800", "green.100");
-  const successIconBg = useColorModeValue("green.500", "green.400");
-  const successIconColor = useColorModeValue("white", "gray.900");
-  const searchContainerBg = useColorModeValue("gray.50", "gray.900");
+  const border = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
+
+  return (
+    <MotionBox variants={fadeUp(false)}>
+      <GlassCard rounded="2xl" overflow="hidden">
+        <Card bg="transparent" border="none">
+          <CardBody p={5}>
+            <HStack justify="space-between" align="start">
+              <Box>
+                <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase">
+                  {label}
+                </Text>
+                {isLoading ? (
+                  <Skeleton mt={2} h="28px" w="130px" rounded="md" />
+                ) : (
+                  <Text mt={1} fontSize="2xl" fontWeight="black" lineHeight="1">
+                    {value}
+                  </Text>
+                )}
+              </Box>
+
+              <Box
+                border="1px solid"
+                borderColor={border}
+                bg={useColorModeValue("whiteAlpha.800", "blackAlpha.500")}
+                rounded="xl"
+                p={2.5}
+              >
+                <Icon as={icon} />
+              </Box>
+            </HStack>
+          </CardBody>
+        </Card>
+      </GlassCard>
+    </MotionBox>
+  );
+}
+
+/* =========================================================================
+   Cotizador Pro (iOS smooth + modern microinteractions + UNDO robusto)
+   ========================================================================= */
+function CotizadorPro({ onCotizacionCreada }) {
+  const toast = useToast();
+  const reduceMotion = usePrefersReducedMotion();
+
+  // Datos
+  const [productosCatalogo, setProductosCatalogo] = useState([]);
+  const [items, setItems] = useState([]);
+
+  // UI
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loadingCatalogo, setLoadingCatalogo] = useState(true);
+  const [creando, setCreando] = useState(false);
+
+  // Dropdown / teclado
+  const [isDropdownOpen, setDropdownOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Confirm dialog (limpiar)
+  const [isClearOpen, setClearOpen] = useState(false);
+  const cancelClearRef = useRef(null);
+
+  // Refs
+  const searchInputRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  // Theme
+  const muted = useColorModeValue("gray.600", "gray.400");
+  const softBg = useColorModeValue("gray.50", "blackAlpha.500");
+  const borderColor = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
+  const hoverBg = useColorModeValue("yellow.50", "whiteAlpha.100");
+  const dropdownBg = useColorModeValue("white", "gray.900");
+
+  // Toast colors (NO hooks inside toast render)
+  const toastBg = useColorModeValue("white", "gray.900");
+  const toastBorder = useColorModeValue("gray.200", "gray.700");
+  const toastMuted = useColorModeValue("gray.600", "gray.400");
+
+  useOutsideClick({
+    ref: dropdownRef,
+    handler: () => setDropdownOpen(false),
+  });
+
+  /* ---------- UNDO (FIX REAL) ---------- */
+  const UNDO_TTL_MS = 12000;
+  const UNDO_TOAST_ID = "cotizador-undo-toast";
+
+  const itemsRef = useRef([]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const undoRef = useRef(null); // { snapshot, ts }
+  const undoTimerRef = useRef(null);
+
+  const cloneItems = useCallback((arr) => {
+    try {
+      return structuredClone(arr);
+    } catch {
+      return (arr || []).map((x) => ({ ...x }));
+    }
+  }, []);
+
+  const openUndoToast = useCallback(
+    (snapshot, message) => {
+      // limpia timer anterior
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+
+      undoRef.current = { snapshot, ts: Date.now() };
+
+      // ✅ si expira, invalida el undo (y el toast se cierra solo)
+      undoTimerRef.current = setTimeout(() => {
+        undoRef.current = null;
+      }, UNDO_TTL_MS + 50);
+
+      toast({
+        id: UNDO_TOAST_ID, // un solo toast, se reemplaza
+        position: "top-right",
+        duration: UNDO_TTL_MS,
+        isClosable: true,
+        render: ({ onClose }) => (
+          <motion.div
+            initial={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+            transition={makeSpring(reduceMotion)}
+          >
+            <Box bg={toastBg} border="1px solid" borderColor={toastBorder} rounded="2xl" p={3} shadow="2xl">
+              <HStack justify="space-between" align="start" spacing={3}>
+                <Box>
+                  <Text fontWeight="black" fontSize="sm">
+                    {message}
+                  </Text>
+                  <Text fontSize="xs" color={toastMuted} mt={0.5}>
+                    Deshacer disponible por {Math.round(UNDO_TTL_MS / 1000)}s
+                  </Text>
+
+                  {/* mini “countdown bar” iOS */}
+                  <Box mt={2} h="2px" bg={useColorModeValue("gray.100", "whiteAlpha.200")} rounded="full" overflow="hidden">
+                    <motion.div
+                      initial={{ width: "100%" }}
+                      animate={{ width: 0 }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: UNDO_TTL_MS / 1000, ease: "linear" }}
+                      style={{ height: "100%", background: ferreYellow }}
+                    />
+                  </Box>
+                </Box>
+
+                <HStack>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    rounded="xl"
+                    onClick={() => {
+                      const u = undoRef.current;
+                      if (!u?.snapshot) return;
+
+                      setItems(u.snapshot);
+
+                      undoRef.current = null;
+                      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+                      onClose();
+                    }}
+                  >
+                    Deshacer
+                  </Button>
+
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    rounded="xl"
+                    aria-label="Cerrar"
+                    icon={<FiX />}
+                    onClick={() => {
+                      undoRef.current = null;
+                      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+                      onClose();
+                    }}
+                  />
+                </HStack>
+              </HStack>
+            </Box>
+          </motion.div>
+        ),
+      });
+    },
+    [toast, toastBg, toastBorder, toastMuted, reduceMotion]
+  );
 
   useEffect(() => {
-    let cancelado = false;
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+  /* ---------- /UNDO ---------- */
+
+  useEffect(() => {
+    let cancelled = false;
 
     const fetchCatalogo = async () => {
       try {
         setLoadingCatalogo(true);
         const res = await api.get("/productos", {
-          params: { page: 1, limit: 50, sort: "nombre", order: "asc" },
+          params: { page: 1, limit: 220, sort: "nombre", order: "asc" },
         });
-        if (!cancelado) {
-          setProductosCatalogo(res.data?.productos || []);
-        }
-      } catch (err) {
-        if (!cancelado) {
-          console.error("Error cargando catálogo para cotizador rápido", err);
+
+        const productos =
+          Array.isArray(res.data?.productos) ? res.data.productos : Array.isArray(res.data) ? res.data : [];
+
+        if (!cancelled) setProductosCatalogo(productos);
+      } catch (e) {
+        if (!cancelled) {
+          console.error(e);
           toast({
-            title: "No se pudo cargar el catálogo",
-            description: "Intenta recargar la página en unos minutos.",
-            status: "error",
-            duration: 6000,
+            title: "No pudimos cargar el catálogo",
+            description: "Revisa tu conexión e intenta actualizar.",
+            status: "warning",
+            duration: 4500,
             isClosable: true,
           });
         }
       } finally {
-        if (!cancelado) setLoadingCatalogo(false);
+        if (!cancelled) setLoadingCatalogo(false);
       }
     };
 
     fetchCatalogo();
     return () => {
-      cancelado = true;
+      cancelled = true;
     };
   }, [toast]);
 
-  // 🔎 Filtro por texto (reconocimiento > memoria)
   const productosFiltrados = useMemo(() => {
-    if (!searchTerm) return productosCatalogo;
-    const term = searchTerm.toLowerCase();
-    return productosCatalogo.filter((p) => {
-      const nombre = p.nombre?.toLowerCase() || "";
-      const sku = p.sku?.toLowerCase() || "";
-      const codigo = p.codigo?.toLowerCase() || "";
-      return (
-        nombre.includes(term) ||
-        sku.includes(term) ||
-        codigo.includes(term)
-      );
-    });
+    const term = normalizeText(searchTerm);
+    if (!term) return [];
+
+    return productosCatalogo
+      .map((p) => {
+        const nombre = normalizeText(p.nombre);
+        const sku = normalizeText(p.sku || p.codigo || "");
+        const score =
+          (nombre.startsWith(term) ? 3 : nombre.includes(term) ? 2 : 0) +
+          (sku.startsWith(term) ? 2 : sku.includes(term) ? 1 : 0);
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map((x) => x.p);
   }, [productosCatalogo, searchTerm]);
 
-  const handleAgregarItem = () => {
-    if (!productoSeleccionado) {
-      toast({
-        title: "Selecciona un producto",
-        status: "warning",
-        duration: 3500,
-        isClosable: true,
+  const total = useMemo(() => {
+    return items.reduce((acc, i) => acc + Number(i.precio_unitario || 0) * Number(i.cantidad || 0), 0);
+  }, [items]);
+
+  const handleAddItem = useCallback(
+    (producto) => {
+      if (!producto?.id) return;
+
+      const snapshot = cloneItems(itemsRef.current);
+
+      setItems((prev) => {
+        const existing = prev.find((i) => String(i.producto_id) === String(producto.id));
+        const precioUnit = Number(producto.precio ?? producto.precio_unitario ?? 0);
+        const sku = producto.sku || producto.codigo || "S/R";
+
+        if (existing) {
+          return prev.map((i) =>
+            String(i.producto_id) === String(producto.id)
+              ? { ...i, cantidad: clamp(Number(i.cantidad) + 1, 1, 999) }
+              : i
+          );
+        }
+
+        return [
+          ...prev,
+          {
+            producto_id: producto.id,
+            nombre: producto.nombre || "Producto",
+            sku,
+            precio_unitario: precioUnit,
+            cantidad: 1,
+          },
+        ];
       });
-      return;
-    }
-    const qty = Number(cantidad || 0);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast({
-        title: "Cantidad inválida",
-        description: "La cantidad debe ser un entero positivo.",
-        status: "warning",
-        duration: 3500,
-        isClosable: true,
-      });
-      return;
-    }
 
-    const producto = productosCatalogo.find(
-      (p) => String(p.id) === String(productoSeleccionado)
-    );
-    if (!producto) {
-      toast({
-        title: "Producto no encontrado",
-        status: "error",
-        duration: 3500,
-        isClosable: true,
-      });
-      return;
-    }
+      setSearchTerm("");
+      setActiveIndex(0);
+      setDropdownOpen(false);
+      requestAnimationFrame(() => searchInputRef.current?.focus());
 
-    setItems((prev) => {
-      const existing = prev.find(
-        (i) => String(i.producto_id) === String(producto.id)
-      );
-      if (existing) {
-        return prev.map((i) =>
-          String(i.producto_id) === String(producto.id)
-            ? { ...i, cantidad: i.cantidad + qty }
-            : i
-        );
-      }
-      return [
-        ...prev,
-        {
-          producto_id: producto.id,
-          nombre: producto.nombre,
-          precio_unitario: Number(producto.precio),
-          cantidad: qty,
-        },
-      ];
-    });
-
-    setCantidad(1);
-    setProductoSeleccionado("");
-  };
-
-  const handleQuitarItem = (producto_id) => {
-    setItems((prev) =>
-      prev.filter((i) => String(i.producto_id) !== String(producto_id))
-    );
-  };
-
-  const handleCambiarCantidad = (producto_id, nuevaCantidad) => {
-    const qty = Number(nuevaCantidad || 0);
-    if (!Number.isFinite(qty) || qty <= 0) return;
-    setItems((prev) =>
-      prev.map((i) =>
-        String(i.producto_id) === String(producto_id)
-          ? { ...i, cantidad: qty }
-          : i
-      )
-    );
-  };
-
-  const totalBrutoLocal = useMemo(
-    () =>
-      items.reduce(
-        (acc, item) =>
-          acc + Number(item.precio_unitario) * Number(item.cantidad),
-        0
-      ),
-    [items]
+      openUndoToast(snapshot, "Producto agregado (+1)");
+    },
+    [cloneItems, openUndoToast]
   );
 
-  const handleCrearCotizacion = async () => {
+  const updateQty = useCallback((id, valueNumber) => {
+    const qty = clamp(Number(valueNumber), 1, 999);
+    setItems((prev) => prev.map((i) => (i.producto_id === id ? { ...i, cantidad: qty } : i)));
+  }, []);
+
+  const removeItem = useCallback(
+    (id) => {
+      const snapshot = cloneItems(itemsRef.current);
+      setItems((prev) => prev.filter((x) => x.producto_id !== id));
+      openUndoToast(snapshot, "Producto eliminado");
+    },
+    [cloneItems, openUndoToast]
+  );
+
+  const clearAll = useCallback(() => {
+    const snapshot = cloneItems(itemsRef.current);
+    setItems([]);
+    openUndoToast(snapshot, "Tabla limpiada");
+  }, [cloneItems, openUndoToast]);
+
+  const handleSearchKeyDown = useCallback(
+    (e) => {
+      if (!isDropdownOpen && e.key === "ArrowDown" && productosFiltrados.length > 0) {
+        setDropdownOpen(true);
+        setActiveIndex(0);
+        return;
+      }
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        if (!searchTerm) searchInputRef.current?.blur();
+        return;
+      }
+      if (!productosFiltrados.length) return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setDropdownOpen(true);
+        setActiveIndex((i) => (i + 1) % productosFiltrados.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setDropdownOpen(true);
+        setActiveIndex((i) => (i - 1 + productosFiltrados.length) % productosFiltrados.length);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const chosen = productosFiltrados[activeIndex] || productosFiltrados[0];
+        if (chosen) handleAddItem(chosen);
+      }
+    },
+    [activeIndex, handleAddItem, isDropdownOpen, productosFiltrados, searchTerm]
+  );
+
+  const handleCrear = useCallback(async () => {
     if (items.length === 0) {
       toast({
-        title: "No hay productos en la cotización",
-        description: "Agrega al menos un producto para cotizar.",
-        status: "warning",
-        duration: 3500,
-        isClosable: true,
+        title: "Tu cotización está vacía",
+        description: "Agrega al menos un material para continuar.",
+        status: "info",
+        duration: 3000,
       });
       return;
     }
+
     try {
       setCreando(true);
-      setUltimoResumen(null);
-
       const payload = {
-        productos: items.map((i) => ({
-          producto_id: i.producto_id,
-          cantidad: i.cantidad,
-        })),
+        productos: items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
       };
 
       const res = await api.post("/cotizaciones", payload);
-
-      setUltimoResumen(res.data);
-      onCotizacionCreada?.(res.data);
-
-      toast({
-        title: "Cotización creada",
-        description: `Total con IVA: ${formatCurrency(
-          res.data.total
-        )}${
-          res.data.descuento
-            ? ` · Ahorro por descuentos: ${formatCurrency(
-                res.data.descuento
-              )}`
-            : ""
-        }`,
-        status: "success",
-        duration: 6000,
-        isClosable: true,
-      });
+      const data = res.data;
 
       setItems([]);
-    } catch (err) {
-      console.error("Error al crear cotización rápida", err);
-      const msg =
-        err.response?.data?.error ||
-        "No se pudo crear la cotización. Intenta de nuevo.";
+      onCotizacionCreada?.();
+
       toast({
-        title: "Error al crear cotización",
-        description: msg,
+        title: "Cotización generada",
+        description: `Total estimado: ${formatCurrency(data?.total ?? total)}.`,
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error al generar la cotización",
+        description: e?.response?.data?.error || "Intenta nuevamente. Si persiste, contacta soporte.",
         status: "error",
-        duration: 6000,
+        duration: 5000,
         isClosable: true,
       });
     } finally {
       setCreando(false);
     }
-  };
+  }, [items, onCotizacionCreada, toast, total]);
 
-  const ultimaId = ultimoResumen?.cotizacion_id || ultimoResumen?.id || null;
+  const showDropdown = isDropdownOpen && normalizeText(searchTerm).length > 0;
 
   return (
-    <MotionBox
-      bg={cardBg}
-      border="1px solid"
-      borderColor={borderColor}
-      rounded="2xl"
-      p={{ base: 5, md: 6 }}
-      shadow="xl"
-      _hover={{ shadow: "2xl", transform: "translateY(-4px)" }}
-      transition="all 0.25s ease-out"
-    >
-      {/* Header del módulo de cotización */}
-      <Flex
-        justify="space-between"
-        align={{ base: "flex-start", md: "center" }}
-        direction={{ base: "column", md: "row" }}
-        mb={4}
-        gap={4}
-      >
-        <VStack align="flex-start" spacing={2}>
-          <HStack spacing={3}>
-            <Badge
-              px={3}
-              py={1}
-              rounded="full"
-              colorScheme="yellow"
-              variant="solid"
-              fontSize="xs"
-              textTransform="uppercase"
-              letterSpacing="0.08em"
-            >
-              Nueva cotización
-            </Badge>
-            {items.length > 0 && (
-              <Tag size="sm" variant="subtle" colorScheme="gray" rounded="full">
-                {items.length} ítem(s) · {formatCurrency(totalBrutoLocal)}
-              </Tag>
-            )}
-          </HStack>
-          <Heading size="lg">Arma tu cotización</Heading>
-          <Text fontSize="sm" color={muted} maxW="2xl">
-            Selecciona productos, ajusta cantidades y genera tu cotización
-            formal con descuentos B2B para tu obra.
-          </Text>
-        </VStack>
-
-        <Tooltip label="Recargar catálogo" hasArrow>
-          <IconButton
-            aria-label="Recargar catálogo"
-            icon={<FiRefreshCw />}
-            size="md"
-            variant="ghost"
-            rounded="full"
-            border="1px solid"
-            borderColor={borderColor}
-            onClick={async () => {
-              try {
-                setLoadingCatalogo(true);
-                const res = await api.get("/productos", {
-                  params: {
-                    page: 1,
-                    limit: 50,
-                    sort: "nombre",
-                    order: "asc",
-                  },
-                });
-                setProductosCatalogo(res.data?.productos || []);
-              } catch (error) {
-                console.error("Error recargando catálogo", error);
-                toast({
-                  title: "No se pudo recargar el catálogo",
-                  status: "error",
-                  duration: 4000,
-                  isClosable: true,
-                });
-              } finally {
-                setLoadingCatalogo(false);
-              }
-            }}
-          />
-        </Tooltip>
-      </Flex>
-
-      {/* Feedback visual de éxito al crear cotización */}
-      {ultimoResumen && (
-        <MotionBox
-          mt={2}
-          mb={4}
-          w="100%"
-          border="1px solid"
-          borderColor={successBorderColor}
-          bg={successBg}
-          rounded="2xl"
-          p={{ base: 4, md: 5 }}
-        >
-          <HStack align="flex-start" spacing={4}>
+    <MotionBox variants={fadeUp(reduceMotion)}>
+      <GlassCard rounded="3xl" overflow="visible">
+        <Card bg="transparent" border="none">
+          <CardBody p={{ base: 4, md: 6 }}>
+            {/* Header */}
             <Flex
-              align="center"
-              justify="center"
-              rounded="full"
-              bg={successIconBg}
-              color={successIconColor}
-              boxSize={{ base: "48px", md: "56px" }}
-              flexShrink={0}
-            >
-              <FiCheckCircle size={28} />
-            </Flex>
-            <VStack align="flex-start" spacing={1} flex="1">
-              <Heading size="sm" color={successTextColor}>
-                ¡Cotización creada correctamente!
-              </Heading>
-              <Text fontSize="sm" color={successTextColor}>
-                Total con IVA:{" "}
-                <Box as="span" fontWeight="semibold">
-                  {formatCurrency(ultimoResumen.total)}
-                </Box>
-                {ultimoResumen.descuento > 0 && (
-                  <>
-                    {" "}
-                    · Ahorro:{" "}
-                    <Box as="span" fontWeight="semibold">
-                      {formatCurrency(ultimoResumen.descuento)}
-                    </Box>
-                  </>
-                )}
-              </Text>
-              {ultimaId && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  colorScheme="green"
-                  rightIcon={<FiArrowRight />}
-                  onClick={() =>
-                    navigate(
-                      `/empresa/cotizaciones?cotizacionId=${ultimaId}`
-                    )
-                  }
-                  w={{ base: "100%", md: "auto" }}
-                >
-                  Ver detalle de la cotización
-                </Button>
-              )}
-            </VStack>
-          </HStack>
-        </MotionBox>
-      )}
-
-      <Stack spacing={6}>
-        {/* PASO 1: Buscar producto + elegir + cantidad */}
-        <Box>
-          <HStack justify="space-between" mb={2}>
-            <Text
-              fontSize="xs"
-              fontWeight="semibold"
-              textTransform="uppercase"
-              letterSpacing="0.08em"
-              color={muted}
-            >
-              Paso 1 · Busca y añade productos
-            </Text>
-            <Kbd fontSize="xs">Ctrl + F</Kbd>
-          </HStack>
-
-          <Flex
-            direction={{ base: "column", md: "row" }}
-            gap={4}
-            align={{ base: "stretch", md: "flex-end" }}
-          >
-            <Box flex={{ base: "1", md: "3" }}>
-              <Box
-                border="1px solid"
-                borderColor={borderColor}
-                rounded="2xl"
-                p={3}
-                bg={searchContainerBg}
-              >
-                <InputGroup size="md" mb={3}>
-                  <InputLeftElement pointerEvents="none">
-                    <FiSearch size={16} />
-                  </InputLeftElement>
-                  <Input
-                    placeholder="Nombre, referencia o código del producto…"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    aria-label="Buscar producto para cotizar"
-                    rounded="xl"
-                    border="1px solid"
-                    borderColor={borderColor}
-                    bg={cardBg}
-                    _focus={{
-                      borderColor: ferreYellow,
-                      boxShadow: `0 0 0 1px ${ferreYellow}`,
-                    }}
-                  />
-                </InputGroup>
-
-                {loadingCatalogo ? (
-                  <Skeleton h="44px" rounded="xl" />
-                ) : productosCatalogo.length === 0 ? (
-                  <Box p={3}>
-                    <Text fontSize="xs" color={muted}>
-                      No hay productos activos en el catálogo.
-                    </Text>
-                  </Box>
-                ) : productosFiltrados.length === 0 ? (
-                  <Box p={3}>
-                    <Text fontSize="xs" color={muted}>
-                      Sin resultados para la búsqueda actual.
-                    </Text>
-                  </Box>
-                ) : (
-                  <Box
-                    mt={1}
-                    maxH="260px"
-                    overflowY="auto"
-                    border="1px solid"
-                    borderColor={borderColor}
-                    rounded="xl"
-                    bg={cardBg}
-                    shadow="lg"
-                  >
-                    {productosFiltrados.slice(0, 12).map((p) => (
-                      <HStack
-                        key={p.id}
-                        px={3}
-                        py={2}
-                        spacing={3}
-                        cursor="pointer"
-                        _hover={{
-                          bg: useColorModeValue("gray.50", "gray.700"),
-                        }}
-                        onClick={() => {
-                          setProductoSeleccionado(String(p.id));
-                          setSearchTerm(p.nombre || "");
-                        }}
-                      >
-                        <Box flex="1">
-                          <Text fontSize="sm" fontWeight="medium" noOfLines={2}>
-                            {p.nombre}
-                          </Text>
-                          <Text fontSize="xs" color={muted}>
-                            {p.sku || p.codigo || "Sin referencia"} ·{" "}
-                            {formatCurrency(p.precio)}
-                          </Text>
-                        </Box>
-                        <Tag
-                          size="sm"
-                          colorScheme="yellow"
-                          variant="subtle"
-                          rounded="full"
-                        >
-                          Seleccionar
-                        </Tag>
-                      </HStack>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </Box>
-
-            <Box flex={{ base: "1", md: "1" }}>
-              <Text fontSize="xs" color={muted} mb={1}>
-                Cantidad
-              </Text>
-              <NumberInput
-                size="md"
-                min={1}
-                value={cantidad}
-                onChange={(_, v) => setCantidad(Number.isFinite(v) ? v : 1)}
-              >
-                <NumberInputField rounded="xl" />
-                <NumberInputStepper>
-                  <NumberIncrementStepper />
-                  <NumberDecrementStepper />
-                </NumberInputStepper>
-              </NumberInput>
-            </Box>
-
-            <Box flex={{ base: "1", md: "1" }}>
-              <Button
-                leftIcon={<FiPlus />}
-                colorScheme="yellow"
-                variant="solid"
-                size="md"
-                w="full"
-                rounded="xl"
-                onClick={handleAgregarItem}
-                isDisabled={loadingCatalogo || !productosCatalogo.length}
-              >
-                Agregar a la tabla
-              </Button>
-            </Box>
-          </Flex>
-        </Box>
-
-        {/* PASO 2: Tabla horizontal tipo Excel */}
-        <Box>
-          <Text
-            fontSize="xs"
-            fontWeight="semibold"
-            textTransform="uppercase"
-            letterSpacing="0.08em"
-            color={muted}
-            mb={2}
-          >
-            Paso 2 · Revisa cantidades y totales
-          </Text>
-          <Box
-            border="1px solid"
-            borderColor={borderColor}
-            rounded="2xl"
-            overflowX="auto"
-          >
-            {items.length === 0 ? (
-              <Box p={5}>
-                <Text fontSize="sm" color={muted}>
-                  Usa el buscador para encontrar un producto y pulsa{" "}
-                  <Kbd>Agregar a la tabla</Kbd>.
-                </Text>
-              </Box>
-            ) : (
-              <Table size="md">
-                <Thead bg={theadBg}>
-                  <Tr>
-                    <Th w="40%">Producto</Th>
-                    <Th isNumeric>Cantidad</Th>
-                    <Th isNumeric>Precio unit.</Th>
-                    <Th isNumeric>Subtotal</Th>
-                    <Th></Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {items.map((item) => {
-                    const subtotal =
-                      Number(item.precio_unitario) * Number(item.cantidad);
-                    return (
-                      <Tr
-                        key={item.producto_id}
-                        _hover={{ bg: zebraBg }}
-                        transition="background-color 0.15s ease-out"
-                      >
-                        <Td maxW="320px">
-                          <Text noOfLines={2} fontSize="sm">
-                            {item.nombre}
-                          </Text>
-                        </Td>
-                        <Td isNumeric>
-                          <NumberInput
-                            size="sm"
-                            min={1}
-                            value={item.cantidad}
-                            onChange={(_, v) =>
-                              handleCambiarCantidad(item.producto_id, v)
-                            }
-                            maxW="100px"
-                            ml="auto"
-                          >
-                            <NumberInputField rounded="lg" />
-                            <NumberInputStepper>
-                              <NumberIncrementStepper />
-                              <NumberDecrementStepper />
-                            </NumberInputStepper>
-                          </NumberInput>
-                        </Td>
-                        <Td isNumeric fontSize="sm">
-                          {formatCurrency(item.precio_unitario)}
-                        </Td>
-                        <Td isNumeric fontSize="sm">
-                          {formatCurrency(subtotal)}
-                        </Td>
-                        <Td textAlign="right">
-                          <Tooltip label="Quitar producto" hasArrow>
-                            <IconButton
-                              aria-label="Quitar"
-                              icon={<FiTrash2 />}
-                              size="xs"
-                              variant="ghost"
-                              rounded="full"
-                              onClick={() =>
-                                handleQuitarItem(item.producto_id)
-                              }
-                            />
-                          </Tooltip>
-                        </Td>
-                      </Tr>
-                    );
-                  })}
-                  <Tr bg="yellow.50" _dark={{ bg: "yellow.900/30" }}>
-                    <Td colSpan={3}>
-                      <Text fontSize="sm" fontWeight="semibold">
-                        Total estimado (antes de descuentos B2B e impuestos)
-                      </Text>
-                    </Td>
-                    <Td isNumeric fontWeight="semibold">
-                      {formatCurrency(totalBrutoLocal)}
-                    </Td>
-                    <Td />
-                  </Tr>
-                </Tbody>
-              </Table>
-            )}
-          </Box>
-        </Box>
-
-        {/* PASO 3: Acciones y resumen de última cotización creada */}
-        <Flex
-          mt={1}
-          pt={2}
-          direction={{ base: "column", md: "row" }}
-          gap={4}
-          justify="space-between"
-          align={{ base: "stretch", md: "center" }}
-        >
-          <HStack spacing={3} flexWrap="wrap">
-            <Button
-              colorScheme="yellow"
-              leftIcon={<FiFileText />}
-              onClick={handleCrearCotizacion}
-              isLoading={creando}
-              loadingText="Creando cotización..."
-              size="lg"
-              w={{ base: "100%", md: "auto" }}
-              rounded="full"
-            >
-              Generar cotización formal
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              rounded="full"
-              onClick={() => navigate("/empresa/cotizaciones")}
-            >
-              Ver mis cotizaciones
-            </Button>
-
-            {items.length > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setItems([])}
-                rounded="full"
-              >
-                Limpiar tabla
-              </Button>
-            )}
-          </HStack>
-
-          {ultimoResumen && (
-            <Stack
+              justify="space-between"
+              align={{ base: "start", md: "center" }}
+              mb={5}
+              gap={4}
               direction={{ base: "column", md: "row" }}
-              spacing={4}
-              align={{ base: "flex-start", md: "center" }}
-              flexWrap="wrap"
-              border="1px solid"
-              borderColor={borderColor}
-              rounded="2xl"
-              p={3}
-              bg={useColorModeValue("gray.50", "gray.900")}
             >
-              <HStack spacing={2}>
-                <Badge colorScheme="green" variant="subtle" rounded="full">
-                  Cotización #{ultimaId}
-                </Badge>
-                <Tag
-                  size="sm"
-                  colorScheme="blue"
-                  variant="subtle"
-                  rounded="full"
-                >
-                  {ultimoResumen.estado_gestion || "INICIAL"} ·{" "}
-                  {ultimoResumen.estado_vigencia || "VIGENTE"}
+              <HStack align="start" spacing={3}>
+                <motion.div {...pressable(reduceMotion)}>
+                  <Box
+                    bg={ferreYellow}
+                    p={2}
+                    rounded="xl"
+                    color="black"
+                    boxShadow={useColorModeValue("0 10px 24px rgba(249,191,32,.25)", "0 10px 24px rgba(249,191,32,.12)")}
+                  >
+                    <FiFileText size={20} />
+                  </Box>
+                </motion.div>
+
+                <Box>
+                  <Heading size="md">Cotizador de Obra</Heading>
+                  <Text fontSize="xs" color={muted}>
+                    Busca y agrega materiales (+1). Ajusta cantidades en la tabla y genera la cotización.
+                  </Text>
+                </Box>
+              </HStack>
+
+              <HStack w={{ base: "full", md: "auto" }} justify={{ base: "flex-end", md: "flex-end" }}>
+                {items.length > 0 && (
+                  <motion.div {...pressable(reduceMotion)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      colorScheme="red"
+                      onClick={() => setClearOpen(true)}
+                      leftIcon={<FiTrash2 />}
+                      rounded="xl"
+                    >
+                      Limpiar
+                    </Button>
+                  </motion.div>
+                )}
+
+                <motion.div {...pressable(reduceMotion)} style={{ width: "100%" }}>
+                  <Button
+                    colorScheme="yellow"
+                    rounded="full"
+                    px={7}
+                    onClick={handleCrear}
+                    isLoading={creando}
+                    loadingText="Generando..."
+                    isDisabled={items.length === 0 || creando}
+                    shadow="md"
+                    w={{ base: "full", md: "auto" }}
+                  >
+                    Generar cotización
+                  </Button>
+                </motion.div>
+              </HStack>
+            </Flex>
+
+            <Divider mb={5} borderColor={borderColor} />
+
+            {/* Buscador */}
+            <Box position="relative" ref={dropdownRef} zIndex={20}>
+              <InputGroup size="lg">
+                <InputLeftElement pointerEvents="none">
+                  <FiSearch color="gray.400" />
+                </InputLeftElement>
+
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Busca cemento, varilla, PVC, herramientas…"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setDropdownOpen(true);
+                    setActiveIndex(0);
+                  }}
+                  onFocus={() => setDropdownOpen(true)}
+                  onKeyDown={handleSearchKeyDown}
+                  rounded="2xl"
+                  bg={softBg}
+                  border="1px solid"
+                  borderColor={borderColor}
+                  focusBorderColor={ferreYellow}
+                  _placeholder={{ color: useColorModeValue("gray.400", "gray.500"), fontSize: "sm" }}
+                />
+
+                {searchTerm && (
+                  <InputRightElement>
+                    <motion.div {...pressable(reduceMotion)}>
+                      <IconButton
+                        aria-label="Limpiar búsqueda"
+                        icon={<FiX />}
+                        size="sm"
+                        variant="ghost"
+                        rounded="xl"
+                        onClick={() => {
+                          setSearchTerm("");
+                          setDropdownOpen(false);
+                          setActiveIndex(0);
+                          requestAnimationFrame(() => searchInputRef.current?.focus());
+                        }}
+                      />
+                    </motion.div>
+                  </InputRightElement>
+                )}
+              </InputGroup>
+
+              <HStack mt={2} spacing={2} flexWrap="wrap">
+                <Tag size="sm" borderRadius="full" variant="subtle" colorScheme="gray">
+                  Enter: agregar +1
+                </Tag>
+                <Tag size="sm" borderRadius="full" variant="subtle" colorScheme="gray">
+                  ↑↓: navegar
+                </Tag>
+                <Tag size="sm" borderRadius="full" variant="subtle" colorScheme="gray">
+                  Esc: cerrar
                 </Tag>
               </HStack>
 
-              <VStack
-                align="flex-start"
-                spacing={1}
-                fontSize="sm"
-                color={muted}
-              >
-                <Text>
-                  Total:{" "}
-                  <Box as="span" fontWeight="semibold">
-                    {formatCurrency(ultimoResumen.total)}
-                  </Box>
-                </Text>
-                {ultimoResumen.descuento > 0 && (
-                  <HStack spacing={1}>
-                    <FiPercent size={14} />
-                    <Text>
-                      Ahorro:{" "}
-                      <Box as="span" fontWeight="semibold" color="green.400">
-                        {formatCurrency(ultimoResumen.descuento)}
-                      </Box>
-                    </Text>
-                  </HStack>
-                )}
-                {ultimoResumen.fecha_vigencia && (
-                  <Text fontSize="xs">
-                    Vigente hasta:{" "}
-                    <Box as="span" fontWeight="medium">
-                      {new Date(
-                        ultimoResumen.fecha_vigencia
-                      ).toLocaleDateString("es-CO")}
-                    </Box>
-                  </Text>
-                )}
-              </VStack>
-
-              {ultimaId && (
-                <HStack spacing={2}>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    leftIcon={<FiArrowRight />}
-                    onClick={() =>
-                      navigate(`/empresa/cotizaciones?cotizacionId=${ultimaId}`)
-                    }
-                    rounded="full"
+              {/* Dropdown */}
+              <AnimatePresence>
+                {showDropdown && (
+                  <MotionBox
+                    initial={{ opacity: 0, y: -10, filter: "blur(8px)" }}
+                    animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                    exit={{ opacity: 0, y: -10, filter: "blur(8px)" }}
+                    transition={makeSpring(reduceMotion)}
+                    position="absolute"
+                    top="110%"
+                    left={0}
+                    right={0}
+                    bg={dropdownBg}
+                    shadow="2xl"
+                    rounded="2xl"
+                    border="1px solid"
+                    borderColor={borderColor}
+                    zIndex={30}
+                    overflow="hidden"
                   >
-                    Ver detalle
-                  </Button>
-                </HStack>
+                    <Box px={4} py={3} borderBottom="1px solid" borderColor={borderColor}>
+                      <HStack justify="space-between">
+                        <Text fontSize="xs" color={muted}>
+                          {loadingCatalogo ? "Cargando catálogo…" : `${productosFiltrados.length} resultado(s)`}
+                        </Text>
+                        <Tooltip label="Puedes buscar por SKU o parte del nombre" hasArrow placement="left">
+                          <HStack spacing={1} color={muted}>
+                            <FiInfo />
+                            <Text fontSize="xs">Ayuda</Text>
+                          </HStack>
+                        </Tooltip>
+                      </HStack>
+                    </Box>
+
+                    {loadingCatalogo ? (
+                      <Box p={4}>
+                        <Stack spacing={2}>
+                          <Skeleton h="18px" rounded="md" />
+                          <Skeleton h="18px" rounded="md" />
+                          <Skeleton h="18px" rounded="md" />
+                        </Stack>
+                      </Box>
+                    ) : productosFiltrados.length === 0 ? (
+                      <Box p={6} textAlign="center" color={muted}>
+                        <Box
+                          mx="auto"
+                          mb={2}
+                          boxSize="40px"
+                          rounded="full"
+                          bg={useColorModeValue("gray.50", "blackAlpha.500")}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          <FiSearch />
+                        </Box>
+                        <Text fontSize="sm" fontWeight="black">
+                          Sin resultados
+                        </Text>
+                        <Text fontSize="xs" mt={1}>
+                          Prueba “PVC”, “Tornillo”, “Cemento”, etc.
+                        </Text>
+                      </Box>
+                    ) : (
+                      <Box maxH="320px" overflowY="auto">
+                        {productosFiltrados.map((p, idx) => {
+                          const isActive = idx === activeIndex;
+                          return (
+                            <motion.div key={p.id} layout transition={makeSpring(reduceMotion)}>
+                              <Flex
+                                px={4}
+                                py={3}
+                                align="center"
+                                justify="space-between"
+                                borderBottom="1px solid"
+                                borderColor={useColorModeValue("gray.50", "whiteAlpha.100")}
+                                bg={isActive ? hoverBg : "transparent"}
+                                _hover={{ bg: hoverBg, cursor: "pointer" }}
+                                onMouseEnter={() => setActiveIndex(idx)}
+                                onClick={() => handleAddItem(p)}
+                              >
+                                <Box minW={0}>
+                                  <Text fontWeight="black" fontSize="sm" noOfLines={1}>
+                                    {p.nombre}
+                                  </Text>
+                                  <HStack spacing={2} mt={0.5}>
+                                    <Badge fontSize="10px" colorScheme="gray" variant="subtle">
+                                      {p.sku || p.codigo || "S/R"}
+                                    </Badge>
+                                    <Text fontSize="xs" color={muted}>
+                                      {formatCurrency(p.precio)}
+                                    </Text>
+                                  </HStack>
+                                </Box>
+                                <Icon as={FiPlus} color="yellow.500" />
+                              </Flex>
+                            </motion.div>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </MotionBox>
+                )}
+              </AnimatePresence>
+            </Box>
+
+            {/* Tabla */}
+            <Box mt={5}>
+              <TableContainer
+                rounded="2xl"
+                border="1px solid"
+                borderColor={borderColor}
+                minH="160px"
+                overflow="hidden"
+                bg={useColorModeValue("whiteAlpha.800", "blackAlpha.300")}
+                backdropFilter="blur(14px)"
+              >
+                <Table variant="simple" size="sm">
+                  <Thead bg={useColorModeValue("gray.50", "blackAlpha.500")}>
+                    <Tr>
+                      <Th>Material</Th>
+                      <Th isNumeric>Cantidad</Th>
+                      <Th isNumeric>Subtotal</Th>
+                      <Th />
+                    </Tr>
+                  </Thead>
+
+                  <Tbody>
+                    {items.length === 0 ? (
+                      <Tr>
+                        <Td colSpan={4} py={12} textAlign="center">
+                          <VStack color={useColorModeValue("gray.400", "gray.500")} spacing={2}>
+                            <Box
+                              boxSize="44px"
+                              rounded="full"
+                              bg={useColorModeValue("gray.50", "blackAlpha.500")}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                            >
+                              <FiBox size={20} />
+                            </Box>
+                            <Text fontSize="sm" fontWeight="black">
+                              Agrega productos para comenzar
+                            </Text>
+                            <Text fontSize="xs">Busca y presiona Enter para agregar +1.</Text>
+                          </VStack>
+                        </Td>
+                      </Tr>
+                    ) : (
+                      <AnimatePresence>
+                        {items.map((i) => (
+                          <MotionTr
+                            key={i.producto_id}
+                            layout
+                            initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
+                            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                            exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+                            transition={makeSpring(reduceMotion)}
+                            style={{ display: "table-row" }}
+                          >
+                            <Td fontWeight="black" fontSize="xs" maxW="320px">
+                              <Text noOfLines={1}>{i.nombre}</Text>
+                              <Text fontSize="10px" color={muted} fontWeight="normal">
+                                {i.sku}
+                              </Text>
+                            </Td>
+
+                            <Td isNumeric>
+                              <Box ml="auto" w="92px">
+                                <Input
+                                  value={i.cantidad}
+                                  onChange={(e) => {
+                                    const v = clamp(parseInt(e.target.value, 10), 1, 999);
+                                    if (!Number.isNaN(v)) updateQty(i.producto_id, v);
+                                  }}
+                                  onBlur={(e) => {
+                                    const v = clamp(parseInt(e.target.value, 10), 1, 999);
+                                    updateQty(i.producto_id, v);
+                                  }}
+                                  type="number"
+                                  min={1}
+                                  max={999}
+                                  size="sm"
+                                  rounded="xl"
+                                  textAlign="center"
+                                  fontWeight="black"
+                                  bg={useColorModeValue("whiteAlpha.900", "blackAlpha.500")}
+                                  border="1px solid"
+                                  borderColor={borderColor}
+                                  focusBorderColor={ferreYellow}
+                                />
+                              </Box>
+                            </Td>
+
+                            <Td isNumeric fontWeight="black">
+                              {formatCurrency(Number(i.precio_unitario) * Number(i.cantidad))}
+                            </Td>
+
+                            <Td isNumeric>
+                              <Tooltip label="Eliminar (se puede deshacer)" hasArrow>
+                                <motion.div {...pressable(reduceMotion)} style={{ display: "inline-block" }}>
+                                  <IconButton
+                                    icon={<FiTrash2 />}
+                                    size="sm"
+                                    variant="ghost"
+                                    colorScheme="red"
+                                    rounded="xl"
+                                    aria-label="Eliminar producto"
+                                    onClick={() => removeItem(i.producto_id)}
+                                  />
+                                </motion.div>
+                              </Tooltip>
+                            </Td>
+                          </MotionTr>
+                        ))}
+                      </AnimatePresence>
+                    )}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+
+              {items.length > 0 && (
+                <MotionBox
+                  mt={4}
+                  p={4}
+                  rounded="2xl"
+                  border="1px solid"
+                  borderColor={borderColor}
+                  bg={useColorModeValue("whiteAlpha.900", "blackAlpha.400")}
+                  backdropFilter="blur(18px)"
+                  variants={fadeIn(reduceMotion)}
+                >
+                  <Flex justify="flex-end">
+                    <HStack spacing={6} align="baseline">
+                      <Text color={muted} fontSize="sm" fontWeight="bold" letterSpacing="wide">
+                        TOTAL ESTIMADO
+                      </Text>
+                      <Text fontSize="xl" fontWeight="black">
+                        {formatCurrency(total)}
+                      </Text>
+                    </HStack>
+                  </Flex>
+                </MotionBox>
               )}
-            </Stack>
-          )}
-        </Flex>
-      </Stack>
+            </Box>
+
+            {/* Confirm limpiar */}
+            <AlertDialog isOpen={isClearOpen} leastDestructiveRef={cancelClearRef} onClose={() => setClearOpen(false)}>
+              <AlertDialogOverlay />
+              <AlertDialogContent rounded="2xl">
+                <AlertDialogHeader fontWeight="black">¿Limpiar la tabla?</AlertDialogHeader>
+                <AlertDialogBody>
+                  Esto eliminará todos los materiales. (Luego puedes <b>deshacer</b> el cambio).
+                </AlertDialogBody>
+                <AlertDialogFooter>
+                  <Button ref={cancelClearRef} onClick={() => setClearOpen(false)} rounded="xl">
+                    Cancelar
+                  </Button>
+                  <Button
+                    colorScheme="red"
+                    ml={3}
+                    rounded="xl"
+                    onClick={() => {
+                      setClearOpen(false);
+                      clearAll();
+                    }}
+                  >
+                    Sí, limpiar
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Micro-ayuda */}
+            <Box mt={5}>
+              <HStack spacing={2} color={muted} mb={2}>
+                <FiInfo />
+                <Text fontSize="xs" fontWeight="bold">
+                  Tip
+                </Text>
+              </HStack>
+              <Text fontSize="xs" color={muted}>
+                Agrega rápido con <b>Enter</b>. Ajusta cantidades en la tabla. Si el producto no aparece, intenta por SKU.
+              </Text>
+            </Box>
+          </CardBody>
+        </Card>
+      </GlassCard>
     </MotionBox>
   );
 }
 
 /* =========================================================================
-   SUBCOMPONENTE: TipsEmpresa – ahora se muestra ARRIBA del layout principal
-   ========================================================================= */
-function TipsEmpresa() {
-  const muted = useColorModeValue("gray.600", "gray.400");
-  const cardBg = useColorModeValue("white", "gray.800");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
-  const tipBg = useColorModeValue("gray.50", "gray.900");
-
-  return (
-    <MotionBox
-      bg={cardBg}
-      border="1px solid"
-      borderColor={borderColor}
-      rounded="2xl"
-      p={{ base: 4, md: 6 }}
-      shadow="lg"
-    >
-      <HStack mb={4} spacing={3} align="flex-start">
-        <Box
-          rounded="full"
-          bg={useColorModeValue("gray.100", "gray.700")}
-          p={3}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-        >
-          <FiInfo size={20} />
-        </Box>
-        <VStack align="flex-start" spacing={1}>
-          <Heading size="md">Tips rápidos para usar este inicio</Heading>
-          <Text fontSize="sm" color={muted} maxW="3xl">
-            En tres pasos: revisa estos tips, arma tu cotización en la tabla y
-            haz seguimiento a vigencias y pedidos desde los paneles laterales.
-          </Text>
-        </VStack>
-      </HStack>
-      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
-        <VStack
-          align="flex-start"
-          spacing={2}
-          p={3}
-          rounded="xl"
-          border="1px solid"
-          borderColor={borderColor}
-          bg={tipBg}
-        >
-          <HStack spacing={2}>
-            <FiPercent size={22} />
-            <Text fontWeight="semibold" fontSize="sm">
-              Descuentos por volumen
-            </Text>
-          </HStack>
-          <Text fontSize="xs" color={muted}>
-            Agrupa materiales por obra para maximizar el descuento B2B en una
-            sola cotización.
-          </Text>
-        </VStack>
-        <VStack
-          align="flex-start"
-          spacing={2}
-          p={3}
-          rounded="xl"
-          border="1px solid"
-          borderColor={borderColor}
-          bg={tipBg}
-        >
-          <HStack spacing={2}>
-            <FiShoppingBag size={22} />
-            <Text fontWeight="semibold" fontSize="sm">
-              De cotización a pedido
-            </Text>
-          </HStack>
-          <Text fontSize="xs" color={muted}>
-            Convierte a pedido solo cotizaciones <Kbd>ACEPTADA</Kbd> y{" "}
-            <Kbd>VIGENTE</Kbd> para evitar reprocesos en obra.
-          </Text>
-        </VStack>
-        <VStack
-          align="flex-start"
-          spacing={2}
-          p={3}
-          rounded="xl"
-          border="1px solid"
-          borderColor={borderColor}
-          bg={tipBg}
-        >
-          <HStack spacing={2}>
-            <FiAlertTriangle size={22} />
-            <Text fontWeight="semibold" fontSize="sm">
-              Flujo de estados
-            </Text>
-          </HStack>
-          <Text fontSize="xs" color={muted}>
-            Tus pedidos pasan por PENDIENTE → PAGADO → CONFIRMADO → ENVIADO →
-            ENTREGADO. Usa este flujo como checklist.
-          </Text>
-        </VStack>
-      </SimpleGrid>
-    </MotionBox>
-  );
-}
-
-/* =========================================================================
-   PÁGINA PRINCIPAL: BeneficiosEmpresa (Inicio Empresa)
+   PÁGINA PRINCIPAL (Dashboard)
    ========================================================================= */
 export default function BeneficiosEmpresa() {
   const { user } = useAuth();
-  const [cotizaciones, setCotizaciones] = useState([]);
-  const [pedidos, setPedidos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [reloadFlag, setReloadFlag] = useState(0);
-
-  const toast = useToast();
   const navigate = useNavigate();
+  const toast = useToast();
+  const reduceMotion = usePrefersReducedMotion();
 
-  const bg = useColorModeValue("gray.50", "gray.900");
-  const cardBg = useColorModeValue("white", "gray.800");
-  const borderColor = useColorModeValue("gray.200", "gray.700");
+  const [data, setData] = useState({
+    cotizaciones: [],
+    pedidos: [],
+    loading: true,
+    lastUpdated: null,
+  });
+
+  const bg = useColorModeValue("gray.50", "blackAlpha.900");
   const muted = useColorModeValue("gray.600", "gray.400");
+  const borderColor = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
 
-  const cargarDatos = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     try {
-      setLoading(true);
-      const [cotRes, pedRes] = await Promise.all([
-        api.get("/cotizaciones"),
-        api.get("/pedidos/mios"),
-      ]);
+      setData((prev) => ({ ...prev, loading: true }));
 
-      setCotizaciones(Array.isArray(cotRes.data) ? cotRes.data : []);
-      setPedidos(Array.isArray(pedRes.data) ? pedRes.data : []);
-    } catch (err) {
-      console.error("Error cargando datos", err);
+      const [cRes, pRes] = await Promise.all([api.get("/cotizaciones"), api.get("/pedidos/mios")]);
+
+      const cotizaciones = Array.isArray(cRes.data)
+        ? cRes.data
+        : Array.isArray(cRes.data?.cotizaciones)
+          ? cRes.data.cotizaciones
+          : [];
+
+      const pedidos = Array.isArray(pRes.data)
+        ? pRes.data
+        : Array.isArray(pRes.data?.pedidos)
+          ? pRes.data.pedidos
+          : [];
+
+      setData({
+        cotizaciones,
+        pedidos,
+        loading: false,
+        lastUpdated: new Date(),
+      });
+    } catch (e) {
+      console.error(e);
+      setData((prev) => ({ ...prev, loading: false }));
       toast({
-        title: "Error al cargar información",
-        description: err.response?.data?.error || "Intenta más tarde",
-        status: "error",
-        duration: 6000,
+        title: "No pudimos actualizar tus datos",
+        description: "Intenta de nuevo. Si persiste, revisa el backend o tu red.",
+        status: "warning",
+        duration: 4500,
         isClosable: true,
       });
-    } finally {
-      setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos, reloadFlag]);
+    loadAll();
+  }, [loadAll]);
 
-  const resumen = useMemo(() => {
-    const totalCotizaciones = cotizaciones.length;
-    const cotAprobadas = cotizaciones.filter(
-      (c) => c.estado_gestion === "ACEPTADA"
-    ).length;
-    const cotConvertidas = cotizaciones.filter(
-      (c) => c.estado_gestion === "CONVERTIDA"
-    ).length;
-    const cotRechazadas = cotizaciones.filter(
-      (c) => c.estado_gestion === "RECHAZADA"
-    ).length;
-    const vigentes = cotizaciones.filter(
-      (c) => c.estado_vigencia === "VIGENTE"
-    );
-    const vencidas = cotizaciones.filter(
-      (c) => c.estado_vigencia === "VENCIDA"
-    );
+  const kpis = useMemo(() => {
+    const cot = data.cotizaciones || [];
+    const ped = data.pedidos || [];
 
-    const cotParaAhorro = cotizaciones.filter((c) =>
-      ["ACEPTADA", "CONVERTIDA"].includes(c.estado_gestion)
-    );
-    const ahorroTotal = cotParaAhorro.reduce(
-      (acc, c) => acc + Number(c.descuento || 0),
-      0
-    );
-    const baseAntesDescuento = cotParaAhorro.reduce(
-      (acc, c) => acc + (Number(c.total) + Number(c.descuento || 0)),
-      0
-    );
-    const descuentoPromedio =
-      baseAntesDescuento > 0 ? (ahorroTotal / baseAntesDescuento) * 100 : 0;
+    const vigentes = cot.filter((c) => String(c.estado_vigencia || "").toUpperCase() === "VIGENTE").length;
 
-    const proximasAVencer = [...vigentes]
-      .sort(
-        (a, b) =>
-          new Date(a.fecha_vigencia) - new Date(b.fecha_vigencia)
-      )
-      .slice(0, 3);
+    const pedidosActivos = ped.filter((p) => {
+      const estado = String(p.estado || p.estado_pedido || "").toUpperCase();
+      return !["CANCELADO", "ENTREGADO"].includes(estado);
+    }).length;
 
-    const totalPedidos = pedidos.length;
-    const pedidosActivos = pedidos.filter(
-      (p) => !["CANCELADO", "ENTREGADO"].includes(p.estado)
-    ).length;
+    const ahorro = cot
+      .filter((c) => ["ACEPTADA", "CONVERTIDA"].includes(String(c.estado_gestion || "").toUpperCase()))
+      .reduce((acc, c) => acc + Number(c.descuento || 0), 0);
 
-    return {
-      totalCotizaciones,
-      cotAprobadas,
-      cotConvertidas,
-      cotRechazadas,
-      vigentes: vigentes.length,
-      vencidas: vencidas.length,
-      ahorroTotal,
-      descuentoPromedio,
-      totalPedidos,
-      pedidosActivos,
-      proximasAVencer,
-    };
-  }, [cotizaciones, pedidos]);
-
-  const handleCotizacionCreada = () => {
-    setReloadFlag((v) => v + 1);
-  };
+    return { vigentes, pedidosActivos, ahorro };
+  }, [data.cotizaciones, data.pedidos]);
 
   return (
-    <Box
-      bg={bg}
-      minH="100vh"
-      px={{ base: 4, md: 8 }}
-      py={{ base: 6, md: 8 }}
-    >
-      <Stack spacing={8} maxW="7xl" mx="auto">
-        {/* Header saludo + publicidad arriba (sin saturar) */}
-        <MotionBox
-          bg={cardBg}
-          border="1px solid"
-          borderColor={borderColor}
-          borderRadius="2xl"
-          p={{ base: 5, md: 6 }}
-          boxShadow="xl"
-        >
-          <Flex
-            direction={{ base: "column", lg: "row" }}
-            justify="space-between"
-            align="stretch"
-            gap={6}
-          >
-            <Box flex="1">
-              <Heading size="xl" mb={2}>
-                ¡Hola
-                {user
-                  ? `, ${user.razon_social || user.nombre || user.email}`
-                  : ""}!
-              </Heading>
-              <Text color={muted} fontSize="md" maxW="3xl">
-                Desde aquí puedes crear cotizaciones para tus obras y seguir tus
-                pedidos y descuentos como empresa.
-              </Text>
-              <HStack mt={4} spacing={3} flexWrap="wrap">
-                <Button
-                  size="lg"
-                  colorScheme="yellow"
-                  leftIcon={<FiFileText />}
-                  onClick={() => {
-                    const anchor = document.getElementById(
-                      "nueva-cotizacion-anchor"
-                    );
-                    if (anchor) {
-                      anchor.scrollIntoView({ behavior: "smooth" });
-                    }
-                  }}
-                  w={{ base: "100%", md: "auto" }}
-                  rounded="full"
-                >
-                  Ir a nueva cotización
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  leftIcon={<FiShoppingBag />}
-                  onClick={() => navigate("/empresa/catalogo")}
-                  w={{ base: "100%", md: "auto" }}
-                  rounded="full"
-                >
-                  Ver catálogo
-                </Button>
-              </HStack>
-            </Box>
-
-            <Box
-              flex={{ base: "none", lg: "1" }}
-              minW={{ lg: "320px" }}
-              borderRadius="2xl"
-              overflow="hidden"
-              border="1px solid"
-              borderColor={borderColor}
-              boxShadow="lg"
-            >
-              <PromoHeroFadeBanner
-                images={[
-                  "/Publicidad1.png",
-                  "/Publicidad2.png",
-                  "/publicidad3.jpg",
-                  "/Publicidad4.png",
-                  "/publicidad5.jpg",
-                  "/publicidad6.jpg",
-                ]}
-                height={{ base: "110px", md: "140px", lg: "150px" }}
-              />
-            </Box>
-          </Flex>
-        </MotionBox>
-
-        {/* 🆕 Tips arriba, visibles de una */}
-        <TipsEmpresa />
-
-        {/* Grid principal: Cotizador (2/3) + Sidebar de KPIs (1/3) */}
-        <SimpleGrid
-          columns={{ base: 1, xl: 3 }}
-          spacing={8}
-          alignItems="flex-start"
-        >
-          {/* Columna principal: solo Cotizador (ancla) */}
-          <Box
-            id="nueva-cotizacion-anchor"
-            gridColumn={{ base: "span 1", xl: "span 2" }}
-          >
-            <CotizadorRapido onCotizacionCreada={handleCotizacionCreada} />
-          </Box>
-
-          {/* Columna lateral: KPIs resumidos */}
-          <Stack
-            gridColumn={{ base: "span 1", xl: "span 1" }}
-            spacing={6}
-          >
-            {/* KPIs resumidos – visibilidad de estado sin saturar */}
-            <MotionBox>
-              {loading ? (
-                <SimpleGrid columns={{ base: 1 }} spacing={4}>
-                  {[...Array(3)].map((_, i) => (
-                    <Box
-                      key={i}
-                      bg={cardBg}
-                      rounded="2xl"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      p={6}
-                      shadow="lg"
-                    >
-                      <Skeleton h="18px" w="40%" mb={3} />
-                      <Skeleton h="32px" w="60%" mb={3} />
-                      <SkeletonText noOfLines={2} />
-                    </Box>
-                  ))}
-                </SimpleGrid>
-              ) : (
-                <SimpleGrid columns={{ base: 1 }} spacing={4}>
-                  {/* Tarjeta Cotizaciones */}
-                  <MotionBox
-                    bg={cardBg}
-                    border="1px solid"
-                    borderColor={borderColor}
-                    rounded="2xl"
-                    p={6}
-                    shadow="lg"
-                    whileHover={{ y: -4, boxShadow: "xl" }}
-                    transition="all 0.2s ease-out"
-                  >
-                    <HStack justify="space-between" mb={3} align="flex-start">
-                      <Stat>
-                        <StatLabel fontSize="sm">Cotizaciones</StatLabel>
-                        <StatNumber fontSize="2xl">
-                          {resumen.totalCotizaciones}
-                        </StatNumber>
-                        <StatHelpText fontSize="xs">
-                          {resumen.cotAprobadas} aceptadas ·{" "}
-                          {resumen.cotConvertidas} convertidas
-                        </StatHelpText>
-                      </Stat>
-                      <Box
-                        rounded="full"
-                        bg={useColorModeValue("yellow.50", "yellow.900")}
-                        p={3}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <FiFileText size={28} />
-                      </Box>
-                    </HStack>
-                    <Divider my={3} />
-                    <HStack spacing={2} flexWrap="wrap">
-                      <Tag size="sm" colorScheme="green" variant="subtle">
-                        Vigentes: {resumen.vigentes}
-                      </Tag>
-                      <Tag size="sm" colorScheme="red" variant="subtle">
-                        Vencidas: {resumen.vencidas}
-                      </Tag>
-                      {resumen.cotRechazadas > 0 && (
-                        <Tag
-                          size="sm"
-                          colorScheme="orange"
-                          variant="outline"
-                        >
-                          Rechazadas: {resumen.cotRechazadas}
-                        </Tag>
-                      )}
-                    </HStack>
-                  </MotionBox>
-
-                  {/* Tarjeta Ahorro */}
-                  <MotionBox
-                    bg={cardBg}
-                    border="1px solid"
-                    borderColor={borderColor}
-                    rounded="2xl"
-                    p={6}
-                    shadow="lg"
-                    whileHover={{ y: -4, boxShadow: "xl" }}
-                    transition="all 0.2s ease-out"
-                  >
-                    <HStack justify="space-between" mb={3} align="flex-start">
-                      <Stat>
-                        <StatLabel fontSize="sm">
-                          Ahorro por descuentos
-                        </StatLabel>
-                        <StatNumber fontSize="2xl">
-                          {formatCurrency(resumen.ahorroTotal)}
-                        </StatNumber>
-                        <StatHelpText fontSize="xs">
-                          Promedio: {resumen.descuentoPromedio.toFixed(1)}%
-                        </StatHelpText>
-                      </Stat>
-                      <Box
-                        rounded="full"
-                        bg={useColorModeValue("green.50", "green.900")}
-                        p={3}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <FiTrendingUp size={28} />
-                      </Box>
-                    </HStack>
-                  </MotionBox>
-
-                  {/* Tarjeta Pedidos */}
-                  <MotionBox
-                    bg={cardBg}
-                    border="1px solid"
-                    borderColor={borderColor}
-                    rounded="2xl"
-                    p={6}
-                    shadow="lg"
-                    whileHover={{ y: -4, boxShadow: "xl" }}
-                    transition="all 0.2s ease-out"
-                  >
-                    <HStack justify="space-between" mb={3} align="flex-start">
-                      <Stat>
-                        <StatLabel fontSize="sm">Pedidos</StatLabel>
-                        <StatNumber fontSize="2xl">
-                          {resumen.totalPedidos}
-                        </StatNumber>
-                        <StatHelpText fontSize="xs">
-                          {resumen.pedidosActivos} en curso
-                        </StatHelpText>
-                      </Stat>
-                      <Box
-                        rounded="full"
-                        bg={useColorModeValue("blue.50", "blue.900")}
-                        p={3}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <FiCheckCircle size={28} />
-                      </Box>
-                    </HStack>
-                  </MotionBox>
-                </SimpleGrid>
-              )}
-            </MotionBox>
-          </Stack>
-        </SimpleGrid>
-
-        {/* Vigencias próximas – ahora ancho completo como los Tips */}
-        <MotionBox
-          bg={cardBg}
-          border="1px solid"
-          borderColor={borderColor}
-          rounded="2xl"
-          p={6}
-          shadow="lg"
-        >
-          <HStack justify="space-between" mb={3}>
-            <HStack spacing={3}>
-              <Box
-                rounded="full"
-                bg={useColorModeValue("orange.50", "orange.900")}
-                p={3}
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
+    <Box minH="100vh" bg={bg} pb={10}>
+      <MotionConfig transition={makeSpring(reduceMotion)}>
+        <Container maxW="1200px" pt={{ base: 6, md: 8 }}>
+          <MotionBox initial="hidden" animate="show" variants={stagger(reduceMotion)}>
+            {/* HEADER */}
+            <MotionBox variants={fadeUp(reduceMotion)}>
+              <Flex
+                justify="space-between"
+                align={{ base: "start", md: "center" }}
+                mb={7}
+                direction={{ base: "column", md: "row" }}
+                gap={4}
               >
-                <FiClock size={20} />
-              </Box>
-              <VStack align="flex-start" spacing={0}>
-                <Heading size="sm">Próximas a vencer</Heading>
-                <Text fontSize="xs" color={muted}>
-                  Controla tus vigencias antes de que expiren.
-                </Text>
-              </VStack>
-            </HStack>
-            <IconButton
-              aria-label="Actualizar"
-              icon={<FiRefreshCw />}
-              size="sm"
-              variant="ghost"
-              rounded="full"
-              onClick={() => setReloadFlag((v) => v + 1)}
-            />
-          </HStack>
+                <VStack align="start" spacing={1}>
+                  <HStack spacing={2}>
+                    <Tag colorScheme="blue" borderRadius="full">
+                      Panel Empresas
+                    </Tag>
+                    {data.lastUpdated && (
+                      <Text fontSize="xs" color={muted}>
+                        Última actualización:{" "}
+                        {data.lastUpdated.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}
+                      </Text>
+                    )}
+                  </HStack>
 
-          <Divider my={3} />
+                  <Heading size="xl" fontWeight="black" letterSpacing="tight">
+                    ¡Bienvenido, {user?.nombre?.split(" ")[0] || user?.razon_social || "Empresa"}! 👷‍♂️
+                  </Heading>
+                  <Text color={muted} fontSize="sm">
+                    Gestiona suministros, cotizaciones y pedidos con control total.
+                  </Text>
+                </VStack>
 
-          {loading ? (
-            <Stack spacing={3}>
-              <Skeleton h="18px" />
-              <Skeleton h="18px" />
-              <Skeleton h="18px" />
-            </Stack>
-          ) : resumen.proximasAVencer.length === 0 ? (
-            <Text fontSize="sm" color={muted}>
-              No hay cotizaciones próximas a vencer.
-            </Text>
-          ) : (
-            <SimpleGrid
-              columns={{ base: 1, md: 2, xl: 3 }}
-              spacing={4}
-              mt={1}
-            >
-              {resumen.proximasAVencer.map((c) => {
-                const dias = diffInDays(c.fecha_vigencia);
-                let colorScheme = "green";
-                if (dias !== null) {
-                  if (dias <= 1) colorScheme = "red";
-                  else if (dias <= 3) colorScheme = "orange";
-                }
+                <HStack spacing={3} w={{ base: "full", md: "auto" }}>
+                  <motion.div {...pressable(reduceMotion)} style={{ width: "100%" }}>
+                    <Button
+                      leftIcon={<FiLayers />}
+                      variant="solid"
+                      bg="gray.800"
+                      color="white"
+                      _hover={{ bg: "black" }}
+                      rounded="full"
+                      px={6}
+                      onClick={() => navigate("/empresa/catalogo")}
+                      w={{ base: "full", md: "auto" }}
+                    >
+                      Ver catálogo completo
+                    </Button>
+                  </motion.div>
 
-                const goToCotizacion = () => {
-                  // Redirige a MisCotizaciones con la cotización seleccionada
-                  navigate(`/empresa/cotizaciones?cotizacionId=${c.id}`);
-                };
+                  <Tooltip label="Actualizar datos" hasArrow>
+                    <motion.div {...pressable(reduceMotion)} style={{ display: "inline-block" }}>
+                      <IconButton
+                        aria-label="Actualizar"
+                        icon={<FiRefreshCw />}
+                        onClick={loadAll}
+                        rounded="full"
+                        variant="outline"
+                        isLoading={data.loading}
+                      />
+                    </motion.div>
+                  </Tooltip>
+                </HStack>
+              </Flex>
+            </MotionBox>
 
-                return (
-                  <Box
-                    key={c.id}
-                    border="1px solid"
-                    borderColor={borderColor}
-                    rounded="xl"
-                    p={4}
-                    role="button"
-                    cursor="pointer"
-                    _hover={{
-                      shadow: "md",
-                      transform: "translateY(-2px)",
-                      borderColor: ferreYellow,
-                    }}
-                    transition="all 0.15s ease-out"
-                    onClick={goToCotizacion}
-                  >
-                    <HStack justify="space-between" align="flex-start">
-                      <VStack align="flex-start" spacing={1}>
-                        <HStack spacing={2} flexWrap="wrap">
-                          <Badge
-                            colorScheme="yellow"
-                            variant="subtle"
-                            rounded="full"
-                          >
-                            Cotización #{c.id}
-                          </Badge>
-                          <Tag
-                            size="sm"
-                            colorScheme="blue"
-                            variant="subtle"
-                            rounded="full"
-                          >
-                            {c.estado_gestion} · {c.estado_vigencia}
-                          </Tag>
-                        </HStack>
-                        <Text fontSize="sm">
-                          Total:{" "}
-                          <Box as="span" fontWeight="semibold">
-                            {formatCurrency(c.total)}
-                          </Box>
-                        </Text>
-                        <Text fontSize="xs" color={muted}>
-                          Vence{" "}
-                          {new Date(
-                            c.fecha_vigencia
-                          ).toLocaleDateString("es-CO")}
-                        </Text>
-                      </VStack>
-                      <VStack align="flex-end" spacing={2}>
-                        <Tag
-                          size="sm"
-                          colorScheme={colorScheme}
-                          variant="solid"
-                          rounded="full"
-                        >
-                          {dias === null
-                            ? "Sin fecha"
-                            : dias < 0
-                            ? "Vencida"
-                            : dias === 0
-                            ? "Hoy"
-                            : `En ${dias} día${dias > 1 ? "s" : ""}`}
-                        </Tag>
-                        <IconButton
-                          icon={<FiArrowRight />}
-                          size="xs"
-                          variant="ghost"
-                          aria-label="Ver cotización"
-                          rounded="full"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            goToCotizacion();
-                          }}
-                        />
-                      </VStack>
+            {/* KPIs */}
+            <MotionBox variants={stagger(reduceMotion)}>
+              <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4} mb={8}>
+                <KpiCard label="Cotizaciones vigentes" value={kpis.vigentes} icon={FiFileText} isLoading={data.loading} />
+                <KpiCard label="Pedidos en curso" value={kpis.pedidosActivos} icon={FiActivity} isLoading={data.loading} />
+                <KpiCard label="Ahorro acumulado" value={formatCurrency(kpis.ahorro)} icon={FiCheckCircle} isLoading={data.loading} />
+              </SimpleGrid>
+            </MotionBox>
+
+            <SimpleGrid columns={{ base: 1, lg: 12 }} spacing={8} alignItems="start">
+              {/* IZQUIERDA */}
+              <Box gridColumn={{ lg: "span 8" }}>
+                <CotizadorPro onCotizacionCreada={loadAll} />
+
+                {/* PEDIDOS RECIENTES */}
+                <MotionBox variants={fadeUp(reduceMotion)} mt={10}>
+                  <HStack justify="space-between" mb={4}>
+                    <HStack>
+                      <Icon as={FiActivity} color="green.400" />
+                      <Heading size="md">Mis pedidos recientes</Heading>
                     </HStack>
-                  </Box>
-                );
-              })}
-            </SimpleGrid>
-          )}
 
-          <Box mt={4} textAlign="right">
-            <Button
-              size="sm"
-              variant="outline"
-              rightIcon={<FiArrowRight />}
-              rounded="full"
-              onClick={() => navigate("/empresa/cotizaciones")}
-            >
-              Ver todas las cotizaciones
-            </Button>
-          </Box>
-        </MotionBox>
-      </Stack>
+                    <motion.div {...pressable(reduceMotion)}>
+                      <Button size="sm" variant="ghost" rounded="xl" onClick={() => navigate("/empresa/mis-pedidos")}>
+                        Ver todos
+                      </Button>
+                    </motion.div>
+                  </HStack>
+
+                  {data.loading ? (
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                      <Skeleton h="110px" rounded="2xl" />
+                      <Skeleton h="110px" rounded="2xl" />
+                    </SimpleGrid>
+                  ) : (data.pedidos || []).length === 0 ? (
+                    <GlassCard rounded="2xl" p={8} textAlign="center" border="1px solid" borderColor={borderColor}>
+                      <HStack justify="center" mb={2} color={muted}>
+                        <FiShoppingBag />
+                        <Text fontWeight="black" fontSize="sm">
+                          Aún no tienes pedidos
+                        </Text>
+                      </HStack>
+                      <Text color={muted} fontSize="xs" mb={4}>
+                        Cuando conviertas una cotización en pedido, aparecerá aquí con su progreso.
+                      </Text>
+                      <motion.div {...pressable(reduceMotion)} style={{ display: "inline-block" }}>
+                        <Button size="sm" colorScheme="yellow" rounded="full" onClick={() => navigate("/empresa/cotizaciones")}>
+                          Ir a cotizaciones
+                        </Button>
+                      </motion.div>
+                    </GlassCard>
+                  ) : (
+                    <MotionBox variants={stagger(reduceMotion)}>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                        {(data.pedidos || []).slice(0, 4).map((p) => {
+                          const estadoRaw = p.estado || p.estado_pedido || p.estado_pedido_nombre || "PENDIENTE";
+                          const meta = estadoPedidoMeta(estadoRaw);
+                          const metodo = p.metodo_pago || p.metodoPago || "—";
+
+                          return (
+                            <MotionBox key={p.id} variants={fadeUp(reduceMotion)}>
+                              <motion.div {...pressable(reduceMotion)}>
+                                <GlassCard
+                                  rounded="2xl"
+                                  overflow="hidden"
+                                  cursor="pointer"
+                                  border="1px solid"
+                                  borderColor={borderColor}
+                                  _hover={{ borderColor: ferreYellow }}
+                                  onClick={() => navigate(`/empresa/mis-pedidos?pedidoId=${p.id}`)}
+                                >
+                                  <Box p={4}>
+                                    <Flex justify="space-between" align="center" mb={2}>
+                                      <VStack align="start" spacing={0}>
+                                        <Text fontSize="10px" fontWeight="bold" color={muted} letterSpacing="wide">
+                                          ORDEN #{p.id}
+                                        </Text>
+                                        <Text fontWeight="black" fontSize="sm">
+                                          {meta.label}
+                                        </Text>
+                                      </VStack>
+                                      <Badge colorScheme={meta.scheme} rounded="full" variant="subtle">
+                                        {metodo}
+                                      </Badge>
+                                    </Flex>
+
+                                    <Progress value={meta.progress} size="xs" colorScheme={meta.scheme} rounded="full" />
+                                    <Text mt={2} fontSize="xs" color={muted}>
+                                      Toca para ver detalle y estado.
+                                    </Text>
+                                  </Box>
+                                </GlassCard>
+                              </motion.div>
+                            </MotionBox>
+                          );
+                        })}
+                      </SimpleGrid>
+                    </MotionBox>
+                  )}
+                </MotionBox>
+              </Box>
+
+              {/* DERECHA */}
+              <Box gridColumn={{ lg: "span 4" }}>
+                <Stack spacing={6}>
+                  {/* Banner 1920x480 => 4:1 + contenedor más grande */}
+                  <MotionBox variants={fadeUp(reduceMotion)}>
+                    <motion.div {...pressable(reduceMotion)}>
+                      <GlassCard rounded="3xl" overflow="hidden" border="1px solid" borderColor={borderColor}>
+                        <PromoHeroFadeBanner
+                          images={["/Publicidad1.png", "/Publicidad2.png", "/publicidad3.jpg", "/Publicidad4.png"]}
+                          ratio={{ base: 4 / 1, md: 4 / 1, lg: 4 / 1 }}
+                          height={{ base: "175px", md: "220px", lg: "245px" }}
+                          fit={{ base: "contain", md: "contain", lg: "contain" }}
+                          objectPosition="center"
+                          rounded="3xl"
+                          mb={0}
+                          blurBg={true}
+                          blurPx={18}
+                          blurOpacity={0.35}
+                          showDots={true}
+                          intervalMs={4200}
+                        />
+                      </GlassCard>
+                    </motion.div>
+                  </MotionBox>
+
+                  {/* Soporte */}
+                  <MotionBox variants={fadeUp(reduceMotion)}>
+                    <motion.div {...pressable(reduceMotion)}>
+                      <Card
+                        rounded="3xl"
+                        bg={useColorModeValue("gray.900", "gray.800")}
+                        color="white"
+                        w="full"
+                        shadow="2xl"
+                        overflow="hidden"
+                        border="1px solid"
+                        borderColor={useColorModeValue("blackAlpha.200", "whiteAlpha.200")}
+                      >
+                        <CardBody p={6}>
+                          <HStack mb={3}>
+                            <Icon as={FiInfo} color="yellow.400" />
+                            <Text fontWeight="black">Asesor de proyectos</Text>
+                          </HStack>
+
+                          <Text fontSize="sm" opacity={0.85} mb={4}>
+                            ¿Necesitas descuento por volumen, entrega programada o una cotización especial?
+                          </Text>
+
+                          <Button w="full" colorScheme="yellow" rounded="xl" h="48px" onClick={() => navigate("/empresa/casos-empresa")}>
+                            Contactar asesor
+                          </Button>
+
+                          <HStack mt={3} opacity={0.85}>
+                            <FiAlertTriangle />
+                            <Text fontSize="xs">Adjunta el número de cotización/pedido para respuesta más rápida.</Text>
+                          </HStack>
+                        </CardBody>
+                      </Card>
+                    </motion.div>
+                  </MotionBox>
+
+                  {/* Acceso rápido */}
+                  <MotionBox variants={fadeUp(reduceMotion)}>
+                    <motion.div {...pressable(reduceMotion)}>
+                      <GlassCard rounded="3xl" border="1px dashed" borderColor={borderColor} overflow="hidden" textAlign="center">
+                        <Box py={8} px={6}>
+                          <Icon as={FiShoppingBag} boxSize={8} color={useColorModeValue("gray.300", "gray.500")} mb={3} />
+                          <Text fontSize="xs" color={muted} mb={4}>
+                            ¿Buscas algo muy específico?
+                          </Text>
+                          <Button size="sm" variant="link" colorScheme="yellow" onClick={() => navigate("/empresa/catalogo")}>
+                            Explorar todo el catálogo
+                          </Button>
+                        </Box>
+                      </GlassCard>
+                    </motion.div>
+                  </MotionBox>
+                </Stack>
+              </Box>
+            </SimpleGrid>
+          </MotionBox>
+        </Container>
+      </MotionConfig>
     </Box>
   );
 }

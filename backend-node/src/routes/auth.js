@@ -6,6 +6,7 @@ const passport = require("passport");
 const {
   registerCliente,
   registerEmpresa,
+  convertirAEmpresa,
   login,
   forgotPassword,
   verifyReset,
@@ -110,6 +111,13 @@ router.get("/auth/perfil", requireAuth, getPerfil);
  * @access  Privado
  */
 router.put("/auth/perfil", requireAuth, updatePerfil);
+
+/**
+ * @route   POST /auth/convertir-empresa
+ * @desc    Convierte un CLIENTE a CONTRATISTA guardando NIT + razón social
+ * @access  Privado (JWT)
+ */
+router.post("/auth/convertir-empresa", requireAuth, convertirAEmpresa);
 
 /* ============================================================
    🧑‍💼 Administración de usuarios (solo ADMIN)

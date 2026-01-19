@@ -23,6 +23,7 @@ import {
   InputRightElement,
   Kbd,
   Button,
+  Collapse,
   Drawer,
   DrawerOverlay,
   DrawerContent,
@@ -60,7 +61,7 @@ import {
   FaFacebook,
   FaXTwitter,
 } from "react-icons/fa6";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import api, { API_BASE_URL } from "../utils/axiosInstance";
@@ -75,7 +76,7 @@ export default function EmpresaLayout() {
   const { isOpen, onOpen, onClose } = useDisclosure();
 
   const bgPage = useColorModeValue("#f6f7f9", "#0f1117");
-  const headerBg = "#f8bd22"; // color de marca
+  const headerBg = "#f8bd22";
   const footerBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("blackAlpha.200", "blackAlpha.400");
   const navInactive = useColorModeValue("gray.800", "gray.100");
@@ -119,6 +120,8 @@ export default function EmpresaLayout() {
     const term = search.trim();
     if (!term) return;
     setShowSuggestions(false);
+    // Si prefieres que SIEMPRE vaya al catálogo:
+    // navigate(`${basePath}/catalogo?search=${encodeURIComponent(term)}`);
     navigate(`${basePath}?search=${encodeURIComponent(term)}`);
   };
 
@@ -155,10 +158,7 @@ export default function EmpresaLayout() {
     const handleClickOutside = (e) => {
       if (!showSuggestions) return;
 
-      if (
-        searchInputRef.current &&
-        searchInputRef.current.contains(e.target)
-      ) {
+      if (searchInputRef.current && searchInputRef.current.contains(e.target)) {
         return;
       }
       if (suggestionsRef.current && suggestionsRef.current.contains(e.target)) {
@@ -205,9 +205,7 @@ export default function EmpresaLayout() {
         }
       })
       .finally(() => {
-        if (!cancelled) {
-          setSearchLoading(false);
-        }
+        if (!cancelled) setSearchLoading(false);
       });
 
     return () => {
@@ -228,30 +226,65 @@ export default function EmpresaLayout() {
   const [notificaciones, setNotificaciones] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
 
-  const fetchNotificaciones = async () => {
+  // ✅ FIX: este ref te faltaba (sin esto, se rompe fetchNotificaciones)
+  const notifInFlightRef = useRef(false);
+
+  const fetchNotificaciones = useCallback(async () => {
+    if (notifInFlightRef.current) return;
+    if (!user?.token) return;
+
+    notifInFlightRef.current = true;
+    setNotifLoading(true);
+
     try {
-      setNotifLoading(true);
       const res = await api.get("/notificaciones", {
-        headers: {
-          Authorization: user?.token ? `Bearer ${user.token}` : undefined,
-        },
+        headers: { Authorization: `Bearer ${user.token}` },
       });
-      setNotificaciones(res.data || []);
+
+      // Backend devuelve array directo
+      setNotificaciones(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       console.error("Error al cargar notificaciones:", error);
     } finally {
+      notifInFlightRef.current = false;
       setNotifLoading(false);
     }
-  };
+  }, [user?.token]);
+
+  useEffect(() => {
+    if (!user?.token) return;
+
+    fetchNotificaciones();
+
+    const id = setInterval(fetchNotificaciones, 20000);
+
+    const onFocus = () => fetchNotificaciones();
+    const onVis = () => {
+      if (document.visibilityState === "visible") fetchNotificaciones();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [user?.token, fetchNotificaciones]);
+
+  const isRead = (n) => n?.leido === 1 || n?.leido === true || n?.leido === "1";
 
   const unreadCount = useMemo(
-    () => notificaciones.filter((n) => !n.leido).length,
+    () => notificaciones.filter((n) => !isRead(n)).length,
     [notificaciones]
   );
 
   const handleNotificacionClick = async (notif) => {
     try {
-      if (!notif.leido) {
+      if (!notif?.id) return;
+
+      if (!isRead(notif)) {
         await api.put(
           `/notificaciones/${notif.id}/leida`,
           {},
@@ -261,6 +294,7 @@ export default function EmpresaLayout() {
             },
           }
         );
+
         setNotificaciones((prev) =>
           prev.map((n) => (n.id === notif.id ? { ...n, leido: 1 } : n))
         );
@@ -270,12 +304,53 @@ export default function EmpresaLayout() {
     }
   };
 
+  // ===== Header responsive (mobile): solo search al bajar, vuelve al subir =====
+  const [compactHeader, setCompactHeader] = useState(false);
+  const lastScrollYRef = useRef(0);
+  const tickingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setCompactHeader(false);
+      return;
+    }
+
+    lastScrollYRef.current = window.scrollY || 0;
+
+    const MIN_Y_TO_COLLAPSE = 56;
+    const DELTA = 10;
+
+    const onScroll = () => {
+      if (tickingRef.current) return;
+      tickingRef.current = true;
+
+      window.requestAnimationFrame(() => {
+        const y = window.scrollY || 0;
+        const prev = lastScrollYRef.current;
+        const diff = y - prev;
+
+        if (y < 10) {
+          setCompactHeader(false);
+        } else {
+          const goingDown = diff > DELTA;
+          const goingUp = diff < -DELTA;
+
+          if (goingDown && y > MIN_Y_TO_COLLAPSE) setCompactHeader(true);
+          if (goingUp) setCompactHeader(false);
+        }
+
+        lastScrollYRef.current = y;
+        tickingRef.current = false;
+      });
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isMobile]);
+
   // ===== Navegación =====
   const profileLabel =
-    user?.razon_social ||
-    user?.nombre_empresa ||
-    user?.username ||
-    "Mi empresa";
+    user?.razon_social || user?.nombre_empresa || user?.username || "Mi empresa";
 
   const userDisplayName =
     user?.razon_social ||
@@ -283,22 +358,11 @@ export default function EmpresaLayout() {
     user?.username ||
     "Usuario empresa";
 
-  const userEmail =
-    user?.contact_email || user?.email || "empresa@ferreexpress.com";
+  const userEmail = user?.contact_email || user?.email || "empresa@ferreexpress.com";
 
-  // 🔹 MISMO esquema que Cliente: Inicio, Acerca de, Puntos físicos
-  // y luego el nuevo: Beneficios empresa
   const navLeft = [
-    {
-      to: `${basePath}`, // ← /empresa
-      label: "Inicio",
-      icon: FiHome,
-    },
-    {
-      to: `${basePath}/catalogo`, // ← nueva ruta explícita
-      label: "Catálogo",
-      icon: FiBriefcase,
-    },
+    { to: `${basePath}`, label: "Inicio", icon: FiHome },
+    { to: `${basePath}/catalogo`, label: "Catálogo", icon: FiBriefcase },
     { to: `${basePath}/about`, label: "Acerca de", icon: FiInfo },
     { to: `${basePath}/puntos-fisicos`, label: "Puntos físicos", icon: FiMapPin },
   ];
@@ -320,13 +384,10 @@ export default function EmpresaLayout() {
     setCartSkus(cartCountSkus());
 
     const unsubscribe = onCartChanged((detail) => {
-      if (typeof detail.skus === "number") {
-        setCartSkus(detail.skus);
-      } else {
-        setCartSkus(cartCountSkus());
-      }
+      if (typeof detail?.skus === "number") setCartSkus(detail.skus);
+      else setCartSkus(cartCountSkus());
 
-      if (detail.lastAction === "add" && detail.addedUnits > 0) {
+      if (detail?.lastAction === "add" && detail?.addedUnits > 0) {
         setCartBump(true);
         setTimeout(() => setCartBump(false), 220);
       }
@@ -350,152 +411,149 @@ export default function EmpresaLayout() {
       >
         <Container maxW="7xl" px={{ base: 3, md: 5 }} py={{ base: 2, md: 3 }}>
           {/* FILA 1: Logo + texto modo contratista + acciones */}
-          <Flex
-            align="center"
-            justify="space-between"
-            gap={{ base: 2, md: 4 }}
-            wrap="nowrap"
-          >
-            <HStack spacing={3} minW={0}>
-              <Image
-                src="/LOGOFERREEXPRESS.jpg"
-                alt="FerreExpress S.A.S."
-                h={{ base: "32px", md: "40px" }}
-                objectFit="contain"
-              />
-              <Box
-                display={{ base: "none", md: "block" }}
-                ml={2}
-                pl={3}
-                borderLeft="1px solid"
-                borderColor="blackAlpha.300"
-              >
-                <Text
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  letterSpacing="0.08em"
-                  color="gray.800"
-                  fontWeight="semibold"
+          <Collapse in={!isMobile || !compactHeader} animateOpacity unmountOnExit>
+            <Flex
+              align="center"
+              justify="space-between"
+              gap={{ base: 2, md: 4 }}
+              wrap="nowrap"
+            >
+              <HStack spacing={3} minW={0}>
+                <Image
+                  src="/LOGOFERREEXPRESS.jpg"
+                  alt="FerreExpress S.A.S."
+                  h={{ base: "32px", md: "40px" }}
+                  objectFit="contain"
+                />
+                <Box
+                  display={{ base: "none", md: "block" }}
+                  ml={2}
+                  pl={3}
+                  borderLeft="1px solid"
+                  borderColor="blackAlpha.300"
                 >
-                  Modo contratista
-                </Text>
-                <Text fontSize="xs" color="gray.800">
-                  Centraliza compras y beneficios para tu empresa.
-                </Text>
-              </Box>
-            </HStack>
-
-            <HStack spacing={3}>
-              {isMobile ? (
-                <>
-                  {/* Carrito móvil */}
-                  <Box position="relative">
-                    <Tooltip label="Carrito empresa" hasArrow>
-                      <IconButton
-                        aria-label="Carrito empresa"
-                        variant="ghost"
-                        color="gray.900"
-                        onClick={() => navigate(`${basePath}/carrito`)}
-                        icon={
-                          <MotionBox
-                            display="inline-flex"
-                            animate={
-                              cartBump ? { scale: [1, 1.18, 1] } : { scale: 1 }
-                            }
-                            transition={{ duration: 0.25 }}
-                          >
-                            <FiShoppingCart />
-                          </MotionBox>
-                        }
-                      />
-                    </Tooltip>
-                    {cartSkus > 0 && (
-                      <Box
-                        position="absolute"
-                        top="2px"
-                        right="2px"
-                        bg="red.500"
-                        color="white"
-                        borderRadius="full"
-                        minW="16px"
-                        h="16px"
-                        px={0.5}
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                        fontSize="0.65rem"
-                        fontWeight="bold"
-                        lineHeight="1"
-                      >
-                        {cartSkus > 9 ? "9+" : cartSkus}
-                      </Box>
-                    )}
-                  </Box>
-
-                  {/* Notificaciones móvil */}
-                  <Popover
-                    placement="bottom-end"
-                    onOpen={fetchNotificaciones}
-                    closeOnBlur
+                  <Text
+                    fontSize="xs"
+                    textTransform="uppercase"
+                    letterSpacing="0.08em"
+                    color="gray.800"
+                    fontWeight="semibold"
                   >
-                    <PopoverTrigger>
-                      <Box position="relative">
-                        <Tooltip label="Notificaciones" hasArrow>
-                          <IconButton
-                            aria-label="Notificaciones"
-                            icon={<FiBell />}
-                            variant="ghost"
-                            color="gray.900"
-                          />
-                        </Tooltip>
-                        {unreadCount > 0 && (
-                          <Box
-                            position="absolute"
-                            top="2px"
-                            right="2px"
-                            bg="red.500"
-                            color="white"
-                            borderRadius="full"
-                            minW="16px"
-                            h="16px"
-                            px={0.5}
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                            fontSize="0.65rem"
-                            fontWeight="bold"
-                            lineHeight="1"
-                          >
-                            {unreadCount > 9 ? "9+" : unreadCount}
-                          </Box>
-                        )}
-                      </Box>
-                    </PopoverTrigger>
-                    {renderNotificationsPanel({
-                      notifLoading,
-                      notificaciones,
-                      fetchNotificaciones,
-                      handleNotificacionClick,
-                      borderColor,
-                    })}
-                  </Popover>
+                    Modo contratista
+                  </Text>
+                  <Text fontSize="xs" color="gray.800">
+                    Centraliza compras y beneficios para tu empresa.
+                  </Text>
+                </Box>
+              </HStack>
 
-                  <IconButton
-                    aria-label="Menú"
-                    icon={<FiMenu />}
-                    variant="ghost"
-                    color="gray.900"
-                    onClick={onOpen}
-                  />
-                </>
-              ) : (
-                <Box h="32px" w="1px" />
-              )}
-            </HStack>
-          </Flex>
+              <HStack spacing={3}>
+                {isMobile ? (
+                  <>
+                    {/* Carrito móvil */}
+                    <Box position="relative">
+                      <Tooltip label="Carrito empresa" hasArrow>
+                        <IconButton
+                          aria-label="Carrito empresa"
+                          variant="ghost"
+                          color="gray.900"
+                          onClick={() => navigate(`${basePath}/carrito-empresa`)}
+                          icon={
+                            <MotionBox
+                              display="inline-flex"
+                              animate={cartBump ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+                              transition={{ duration: 0.25 }}
+                            >
+                              <FiShoppingCart />
+                            </MotionBox>
+                          }
+                        />
+                      </Tooltip>
+                      {cartSkus > 0 && (
+                        <Box
+                          position="absolute"
+                          top="2px"
+                          right="2px"
+                          bg="red.500"
+                          color="white"
+                          borderRadius="full"
+                          minW="16px"
+                          h="16px"
+                          px={0.5}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          fontSize="0.65rem"
+                          fontWeight="bold"
+                          lineHeight="1"
+                        >
+                          {cartSkus > 9 ? "9+" : cartSkus}
+                        </Box>
+                      )}
+                    </Box>
 
-          {/* FILA 2: Buscador */}
-          <Box mt={{ base: 2, md: 3 }} position="relative">
+                    {/* Notificaciones móvil */}
+                    <Popover placement="bottom-end" onOpen={fetchNotificaciones} closeOnBlur>
+                      <PopoverTrigger>
+                        <Box position="relative">
+                          <Tooltip label="Notificaciones" hasArrow>
+                            <IconButton
+                              aria-label="Notificaciones"
+                              icon={<FiBell />}
+                              variant="ghost"
+                              color="gray.900"
+                            />
+                          </Tooltip>
+                          {unreadCount > 0 && (
+                            <Box
+                              position="absolute"
+                              top="2px"
+                              right="2px"
+                              bg="red.500"
+                              color="white"
+                              borderRadius="full"
+                              minW="16px"
+                              h="16px"
+                              px={0.5}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="0.65rem"
+                              fontWeight="bold"
+                              lineHeight="1"
+                            >
+                              {unreadCount > 9 ? "9+" : unreadCount}
+                            </Box>
+                          )}
+                        </Box>
+                      </PopoverTrigger>
+
+                      {renderNotificationsPanel({
+                        notifLoading,
+                        notificaciones,
+                        fetchNotificaciones,
+                        handleNotificacionClick,
+                        borderColor,
+                      })}
+                    </Popover>
+
+                    <IconButton
+                      aria-label="Menú"
+                      icon={<FiMenu />}
+                      variant="ghost"
+                      color="gray.900"
+                      onClick={onOpen}
+                    />
+                  </>
+                ) : (
+                  <Box h="32px" w="1px" />
+                )}
+              </HStack>
+            </Flex>
+          </Collapse>
+
+          {/* FILA 2: Buscador (siempre visible) */}
+          <Box mt={{ base: compactHeader ? 0 : 2, md: 3 }} position="relative">
             <Box as="form" onSubmit={handleSearchSubmit}>
               <InputGroup>
                 <InputLeftElement pointerEvents="none" h="100%" pl="3">
@@ -525,17 +583,10 @@ export default function EmpresaLayout() {
                     setShowSuggestions(value.trim().length >= 2);
                   }}
                   onFocus={() => {
-                    if (search.trim().length >= 2) {
-                      setShowSuggestions(true);
-                    }
+                    if (search.trim().length >= 2) setShowSuggestions(true);
                   }}
                 />
-                <InputRightElement
-                  width="88px"
-                  h="100%"
-                  pr="3"
-                  justifyContent="flex-end"
-                >
+                <InputRightElement width="88px" h="100%" pr="3" justifyContent="flex-end">
                   {!isMobile && (
                     <HStack spacing={2} color="gray.700" fontSize="xs">
                       <Text>Atajo</Text>
@@ -585,8 +636,7 @@ export default function EmpresaLayout() {
                         <Text as="span" fontWeight="semibold">
                           “{debouncedSearch}”
                         </Text>
-                        . Prueba con otra referencia, medida o línea de
-                        producto.
+                        . Prueba con otra referencia, medida o línea de producto.
                       </Text>
                     </Box>
                   )}
@@ -598,14 +648,11 @@ export default function EmpresaLayout() {
                           ? `${API_BASE_URL}${p.imagen_principal}`
                           : "https://via.placeholder.com/80x80?text=Sin+imagen";
 
-                        const price = Number(p.precio ?? 0).toLocaleString(
-                          "es-CO",
-                          {
-                            style: "currency",
-                            currency: "COP",
-                            maximumFractionDigits: 0,
-                          }
-                        );
+                        const price = Number(p.precio ?? 0).toLocaleString("es-CO", {
+                          style: "currency",
+                          currency: "COP",
+                          maximumFractionDigits: 0,
+                        });
 
                         return (
                           <Box
@@ -630,41 +677,18 @@ export default function EmpresaLayout() {
                                 borderColor="blackAlpha.100"
                                 flexShrink={0}
                               >
-                                <Image
-                                  src={img}
-                                  alt={p.nombre}
-                                  w="100%"
-                                  h="100%"
-                                  objectFit="contain"
-                                />
+                                <Image src={img} alt={p.nombre} w="100%" h="100%" objectFit="contain" />
                               </Box>
-                              <VStack
-                                align="flex-start"
-                                spacing={0.5}
-                                flex="1"
-                                minW={0}
-                              >
-                                <Text
-                                  fontSize="sm"
-                                  fontWeight="semibold"
-                                  noOfLines={1}
-                                >
+                              <VStack align="flex-start" spacing={0.5} flex="1" minW={0}>
+                                <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
                                   {p.nombre}
                                 </Text>
                                 <HStack spacing={2}>
-                                  <Text
-                                    fontSize="sm"
-                                    fontWeight="bold"
-                                    color="gray.900"
-                                  >
+                                  <Text fontSize="sm" fontWeight="bold" color="gray.900">
                                     {price}
                                   </Text>
                                   {p.categoria && (
-                                    <Badge
-                                      variant="subtle"
-                                      colorScheme="yellow"
-                                      fontSize="0.65rem"
-                                    >
+                                    <Badge variant="subtle" colorScheme="yellow" fontSize="0.65rem">
                                       {p.categoria}
                                     </Badge>
                                   )}
@@ -701,19 +725,10 @@ export default function EmpresaLayout() {
           </Box>
 
           {/* FILA 3: Navegación DESKTOP */}
-          <Box
-            mt={{ base: 0, md: 3 }}
-            display={{ base: "none", md: "block" }}
-          >
+          <Box mt={{ base: 0, md: 3 }} display={{ base: "none", md: "block" }}>
             <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
-            <Flex
-              mt={1}
-              align="center"
-              justify="space-between"
-              gap={4}
-              wrap="nowrap"
-            >
-              {/* IZQUIERDA: Explorar / beneficios */}
+            <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
+              {/* IZQUIERDA */}
               <Flex
                 as="nav"
                 align="center"
@@ -739,22 +754,9 @@ export default function EmpresaLayout() {
                 ))}
               </Flex>
 
-              {/* DERECHA: Operaciones empresa */}
-              <Flex
-                as="nav"
-                align="center"
-                gap={3}
-                flexWrap="wrap"
-                justify="flex-end"
-                pb={1}
-              >
-                {/* Grupo principal: Mis cotizaciones, Mis pedidos, Carrito */}
-                <HStack
-                  spacing={2}
-                  flexWrap="wrap"
-                  justify="flex-end"
-                >
-                  {/* Mis cotizaciones empresa */}
+              {/* DERECHA */}
+              <Flex as="nav" align="center" gap={3} flexWrap="wrap" justify="flex-end" pb={1}>
+                <HStack spacing={2} flexWrap="wrap" justify="flex-end">
                   <EmpresaNavItem
                     to={navRight[0].to}
                     icon={navRight[0].icon}
@@ -764,8 +766,6 @@ export default function EmpresaLayout() {
                     navActiveBg={navActiveBg}
                     navActiveColor={navActiveColor}
                   />
-
-                  {/* Mis pedidos empresa */}
                   <EmpresaNavItem
                     to={navRight[1].to}
                     icon={navRight[1].icon}
@@ -775,8 +775,6 @@ export default function EmpresaLayout() {
                     navActiveBg={navActiveBg}
                     navActiveColor={navActiveColor}
                   />
-
-                  {/* Carrito empresa */}
                   <EmpresaNavItem
                     to={navRight[2].to}
                     icon={navRight[2].icon}
@@ -791,14 +789,8 @@ export default function EmpresaLayout() {
                   />
                 </HStack>
 
-                {/* Grupo secundario: Notificaciones + Perfil */}
                 <HStack spacing={2}>
-                  {/* Notificaciones escritorio */}
-                  <Popover
-                    placement="bottom-end"
-                    onOpen={fetchNotificaciones}
-                    closeOnBlur
-                  >
+                  <Popover placement="bottom-end" onOpen={fetchNotificaciones} closeOnBlur>
                     <PopoverTrigger>
                       <Box position="relative">
                         <Tooltip label="Notificaciones" hasArrow>
@@ -833,6 +825,7 @@ export default function EmpresaLayout() {
                         )}
                       </Box>
                     </PopoverTrigger>
+
                     {renderNotificationsPanel({
                       notifLoading,
                       notificaciones,
@@ -842,7 +835,6 @@ export default function EmpresaLayout() {
                     })}
                   </Popover>
 
-                  {/* Menú perfil empresa */}
                   <Popover placement="bottom-end">
                     <PopoverTrigger>
                       <HStack
@@ -851,11 +843,7 @@ export default function EmpresaLayout() {
                         px={2.5}
                         py={1.5}
                         borderRadius="full"
-                        bg={
-                          isActive(`${basePath}/perfil-empresa`)
-                            ? navActiveBg
-                            : "transparent"
-                        }
+                        bg={isActive(`${basePath}/perfil-empresa`) ? navActiveBg : "transparent"}
                         color={navInactive}
                         _hover={{
                           textDecoration: "none",
@@ -939,12 +927,7 @@ export default function EmpresaLayout() {
           <DrawerBody>
             <Stack spacing={4}>
               <Box>
-                <Text
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  color="gray.500"
-                  mb={1}
-                >
+                <Text fontSize="xs" textTransform="uppercase" color="gray.500" mb={1}>
                   Explorar
                 </Text>
                 <Stack spacing={1}>
@@ -967,12 +950,7 @@ export default function EmpresaLayout() {
               </Box>
 
               <Box>
-                <Text
-                  fontSize="xs"
-                  textTransform="uppercase"
-                  color="gray.500"
-                  mb={1}
-                >
+                <Text fontSize="xs" textTransform="uppercase" color="gray.500" mb={1}>
                   Mi cuenta empresa
                 </Text>
                 <Stack spacing={1}>
@@ -1015,13 +993,7 @@ export default function EmpresaLayout() {
       </Drawer>
 
       {/* ===== CONTENIDO ===== */}
-      <Box
-        as="main"
-        flex="1"
-        bg={bgPage}
-        px={{ base: 2, md: 4 }}
-        py={{ base: 3, md: 4 }}
-      >
+      <Box as="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
         <Container maxW="7xl">
           <Outlet />
         </Container>
@@ -1038,21 +1010,15 @@ export default function EmpresaLayout() {
         mt="auto"
         boxShadow="0 -4px 20px rgba(0,0,0,0.06)"
       >
-        <Container
-          maxW={{ base: "100%", md: "95%", lg: "8xl" }}
-          px={{ base: 4, md: 6, lg: 8 }}
-        >
+        <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 6, lg: 8 }}>
           <Grid
-            templateColumns={{
-              base: "1fr",
-              md: "1fr auto 1fr",
-            }}
+            templateColumns={{ base: "1fr", md: "1fr auto 1fr" }}
             alignItems="center"
             gap={{ base: 6, md: 8 }}
           >
             <HStack justify={{ base: "center", md: "flex-start" }}>
               <Image
-                src="/ferreexpress.png"
+                src="/LOGOFERREEXPRESS.png"
                 alt="FerreExpress S.A.S."
                 h={{ base: "36px", sm: "42px", md: "48px" }}
                 objectFit="contain"
@@ -1067,41 +1033,22 @@ export default function EmpresaLayout() {
               fontSize={{ base: "sm", md: "md" }}
               fontWeight="medium"
             >
-              <Button
-                as={RouterLink}
-                to="/condiciones-uso"
-                variant="link"
-                color="blue.600"
-                _hover={{ color: "blue.700" }}
-              >
+              <Button as={RouterLink} to="/empresa/condiciones-uso-empresa" variant="link" color="blue.600" _hover={{ color: "blue.700" }}>
                 Condiciones de uso
               </Button>
-              <Button
-                as={RouterLink}
-                to="/avisos-privacidad"
-                variant="link"
-                color="blue.600"
-                _hover={{ color: "blue.700" }}
-              >
+              <Button as={RouterLink} to="/empresa/avisos-privacidad-empresa" variant="link" color="blue.600" _hover={{ color: "blue.700" }}>
                 Avisos de privacidad
               </Button>
             </HStack>
 
-            <HStack
-              spacing={{ base: 5, md: 6 }}
-              justify={{ base: "center", md: "flex-end" }}
-            >
+            <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
               {[
                 { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366" },
                 { Icon: FaInstagram, label: "Instagram", color: "#E4405F" },
                 { Icon: FaFacebook, label: "Facebook", color: "#1877F2" },
                 { Icon: FaXTwitter, label: "X", color: "#000000" },
               ].map((social) => (
-                <MotionBox
-                  key={social.label}
-                  whileHover={{ scale: 1.22 }}
-                  whileTap={{ scale: 0.92 }}
-                >
+                <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
                   <IconButton
                     as="a"
                     href="#"
@@ -1125,8 +1072,7 @@ export default function EmpresaLayout() {
                 textAlign="center"
                 fontWeight="medium"
               >
-                © {new Date().getFullYear()} FerreExpress® • Todos los derechos
-                reservados
+                © {new Date().getFullYear()} FerreExpress® • Todos los derechos reservados
               </Text>
             </GridItem>
           </Grid>
@@ -1145,7 +1091,7 @@ function EmpresaNavItem({
   navInactive,
   navActiveBg,
   navActiveColor,
-  badgeValue,
+  badgeValue = 0,
   isCart,
   bump,
 }) {
@@ -1207,11 +1153,8 @@ function EmpresaNavItem({
           </Box>
         )}
       </Box>
-      <Text
-        fontSize="sm"
-        fontWeight={active ? "semibold" : "normal"}
-        noOfLines={1}
-      >
+
+      <Text fontSize="sm" fontWeight={active ? "semibold" : "normal"} noOfLines={1}>
         {label}
       </Text>
     </HStack>
@@ -1249,6 +1192,7 @@ function renderNotificationsPanel({
           </Button>
         </HStack>
       </Box>
+
       <Box p={3}>
         {notifLoading ? (
           <HStack spacing={3}>
@@ -1261,41 +1205,47 @@ function renderNotificationsPanel({
           </Text>
         ) : (
           <Stack spacing={2}>
-            {notificaciones.map((n) => (
-              <Box
-                key={n.id}
-                borderRadius="md"
-                border="1px solid"
-                borderColor={n.leido ? "gray.200" : "yellow.400"}
-                bg={n.leido ? "white" : "yellow.50"}
-                _hover={{ bg: n.leido ? "gray.50" : "yellow.100" }}
-                px={3}
-                py={2}
-                cursor="pointer"
-                onClick={() => handleNotificacionClick(n)}
-              >
-                <HStack justify="space-between" align="flex-start">
-                  <VStack align="flex-start" spacing={0.5}>
-                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
-                      {n.titulo}
+            {notificaciones.map((n) => {
+              const read = n?.leido === 1 || n?.leido === true || n?.leido === "1";
+
+              return (
+                <Box
+                  key={n.id}
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor={read ? "gray.200" : "yellow.400"}
+                  bg={read ? "white" : "yellow.50"}
+                  _hover={{ bg: read ? "gray.50" : "yellow.100" }}
+                  px={3}
+                  py={2}
+                  cursor="pointer"
+                  onClick={() => handleNotificacionClick(n)}
+                >
+                  <HStack justify="space-between" align="flex-start">
+                    <VStack align="flex-start" spacing={0.5}>
+                      <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
+                        {n.titulo}
+                      </Text>
+                      <Text fontSize="xs" color="gray.600">
+                        {n.mensaje}
+                      </Text>
+                    </VStack>
+
+                    {!read && (
+                      <Badge colorScheme="yellow" fontSize="0.6rem">
+                        Nuevo
+                      </Badge>
+                    )}
+                  </HStack>
+
+                  {n.fecha && (
+                    <Text mt={1} fontSize="xs" color="gray.500">
+                      {new Date(n.fecha).toLocaleString("es-CO")}
                     </Text>
-                    <Text fontSize="xs" color="gray.600">
-                      {n.mensaje}
-                    </Text>
-                  </VStack>
-                  {!n.leido && (
-                    <Badge colorScheme="yellow" fontSize="0.6rem">
-                      Nuevo
-                    </Badge>
                   )}
-                </HStack>
-                {n.fecha && (
-                  <Text mt={1} fontSize="xs" color="gray.500">
-                    {new Date(n.fecha).toLocaleString("es-CO")}
-                  </Text>
-                )}
-              </Box>
-            ))}
+                </Box>
+              );
+            })}
           </Stack>
         )}
       </Box>

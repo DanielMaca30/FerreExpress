@@ -1,24 +1,53 @@
 // src/pages/cliente/Checkout.jsx
 import { useEffect, useMemo, useState } from "react";
 import {
-  Box, Heading, Text, HStack, VStack, Input, Textarea, Button, Divider,
-  useColorModeValue, useToast, SimpleGrid, Badge, Radio, RadioGroup, Stack,
-  Skeleton, Alert, AlertIcon, AlertTitle, AlertDescription, Tooltip,
-  FormControl, FormLabel, FormHelperText, Modal, ModalOverlay, ModalContent,
-  ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Checkbox, Tabs, TabList,
-  TabPanels, Tab, TabPanel, Tag, TagLabel, Image
+  Box,
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  Input,
+  Textarea,
+  Button,
+  Divider,
+  useColorModeValue,
+  useToast,
+  SimpleGrid,
+  Badge,
+  Radio,
+  RadioGroup,
+  Stack,
+  Skeleton,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  Tooltip,
+  FormControl,
+  FormLabel,
+  FormHelperText,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter,
+  Checkbox,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Tag,
+  TagLabel,
+  Image,
 } from "@chakra-ui/react";
 import { FiCreditCard, FiTruck, FiCheckCircle } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link as RouterLink } from "react-router-dom";
 import api, { API_BASE_URL } from "../../utils/axiosInstance";
 
-/* ✅ Store del carrito */
-import {
-  readCart,
-  writeCart,
-  effectiveUnitPrice,
-  onCartChanged,
-} from "../../utils/cartStore";
+import { readCart, effectiveUnitPrice, onCartChanged } from "../../utils/cartStore";
 
 /* =================== Utils =================== */
 const fmtCop = (n) =>
@@ -66,8 +95,8 @@ const PaymentMethods = ({ logos }) => {
           display="flex"
           alignItems="center"
           justifyContent="center"
-          h="40px" // Altura fija del contenedor
-          w="60px" // Ancho fijo para uniformidad
+          h="40px"
+          w="60px"
         >
           <Image
             src={logo}
@@ -75,7 +104,7 @@ const PaymentMethods = ({ logos }) => {
             maxH="100%"
             maxW="100%"
             objectFit="contain"
-            fallbackSrc="https://via.placeholder.com/60x40?text=..." // Fallback por si la imagen falla
+            fallbackSrc="https://via.placeholder.com/60x40?text=..."
           />
         </Box>
       ))}
@@ -89,10 +118,10 @@ export default function Checkout() {
   const toast = useToast();
 
   // Paleta / tokens visuales
-  const muted   = useColorModeValue("gray.600", "gray.300");
-  const cardBg  = useColorModeValue("white", "gray.850");
-  const border  = useColorModeValue("gray.200", "gray.700");
-  const pageBg  = useColorModeValue("#f6f7f9", "#0f1117");
+  const muted = useColorModeValue("gray.600", "gray.300");
+  const cardBg = useColorModeValue("white", "gray.850");
+  const border = useColorModeValue("gray.200", "gray.700");
+  const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
   const shadowSm = useColorModeValue("0 6px 18px rgba(31,38,135,0.10)", "0 6px 18px rgba(0,0,0,0.35)");
   const shadowMd = useColorModeValue("0 8px 24px rgba(31,38,135,0.12)", "0 8px 24px rgba(0,0,0,0.35)");
 
@@ -134,10 +163,7 @@ export default function Checkout() {
   const [errorTop, setErrorTop] = useState("");
 
   // Totales
-  const { subtotal, envio, total } = useMemo(
-    () => computeTotals(items, entrega),
-    [items, entrega]
-  );
+  const { subtotal, envio, total } = useMemo(() => computeTotals(items, entrega), [items, entrega]);
 
   /* ===== Ciclo de vida & sync ===== */
   useEffect(() => {
@@ -146,32 +172,38 @@ export default function Checkout() {
       navigate("/cliente/carrito", { replace: true });
       return;
     }
-    let mounted = true;
+
+    let cancelled = false;
+
     (async () => {
       try {
         setCargandoDir(true);
         const res = await api.get("/direcciones");
-        if (!mounted) return;
+        if (cancelled) return;
+
         const list = Array.isArray(res.data) ? res.data : res.data?.direcciones || [];
         setDirecciones(list);
+
         const principal = list.find((d) => d.es_principal) || list[0];
         if (principal) setDireccionId(String(principal.id));
       } catch {
-        // opcional
+        // opcional: manejar error de direcciones
       } finally {
-        mounted = false;
-        setCargandoDir(false);
+        if (!cancelled) setCargandoDir(false);
       }
     })();
 
     const off = onCartChanged(() => setItems(readCart()));
-    return () => off?.();
+
+    return () => {
+      cancelled = true;
+      off?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Tabs bloqueados hasta cumplir requisitos
-  const readyForPago =
-    entrega === "TIENDA" || (entrega === "DOMICILIO" && !!direccionId);
+  const readyForPago = entrega === "TIENDA" || (entrega === "DOMICILIO" && !!direccionId);
 
   const handleTabChange = (next) => {
     if (next === 1 && !readyForPago) return;
@@ -206,6 +238,7 @@ export default function Checkout() {
         telefono: formDir.telefono?.trim() || null,
         es_principal: formDir.es_principal ? 1 : 0,
       };
+
       const res = await api.post("/direcciones", payload);
       const newId = res?.data?.id;
 
@@ -223,6 +256,7 @@ export default function Checkout() {
         telefono: "",
         es_principal: false,
       });
+
       toast({ title: "Dirección creada", status: "success", duration: 1500 });
     } catch (e) {
       const msg = e?.response?.data?.error || "No se pudo crear la dirección";
@@ -233,11 +267,10 @@ export default function Checkout() {
     }
   };
 
-  /* ===== Confirmar: back crea pedido y procesa pago simulado ===== */
+  /* ===== Confirmar: guarda intención y pasa a “procesando” ===== */
   const pagar = async () => {
     setErrorTop("");
 
-    // 1) Validaciones previas
     if (!items.length) {
       toast({ title: "Carrito vacío", status: "warning", duration: 1500 });
       return;
@@ -252,46 +285,30 @@ export default function Checkout() {
       return;
     }
 
-    // 2) Validación simple de tarjeta (solo si es pago en línea)
     if (metodoPago === "PAGO_LINEA") {
       const cardRaw = (tarjeta || "").replace(/\s+/g, "");
-      if (cardRaw.length < 12) {
-        setErrorTop("Número de tarjeta muy corto. Usa un demo de 12 a 19 dígitos.");
-        return;
-      }
-      if (!titular.trim()) {
-        setErrorTop("Ingresa el nombre del titular.");
-        return;
-      }
-      if (!/^\d{2}\/\d{2}$/.test(exp)) {
-        setErrorTop("Fecha inválida. Usa formato MM/AA.");
-        return;
-      }
-      if (!/^\d{3,4}$/.test(cvv)) {
-        setErrorTop("CVV inválido (3–4 dígitos).");
-        return;
-      }
+      if (cardRaw.length < 12) return setErrorTop("Número de tarjeta muy corto. Usa un demo de 12 a 19 dígitos.");
+      if (!titular.trim()) return setErrorTop("Ingresa el nombre del titular.");
+      if (!/^\d{2}\/\d{2}$/.test(exp)) return setErrorTop("Fecha inválida. Usa formato MM/AA.");
+      if (!/^\d{3,4}$/.test(cvv)) return setErrorTop("CVV inválido (3–4 dígitos).");
     }
 
-    // 3) Guardar intención para que la pantalla de procesamiento ejecute el flujo real
     const intent = {
       items,
-      entrega,                                            // "DOMICILIO" | "TIENDA"
+      entrega,
       direccion_id: entrega === "DOMICILIO" ? Number(direccionId) : null,
-      metodo_pago: metodoPago,                            // "PAGO_LINEA" | "CONTRAENTREGA"
-      tarjeta: (tarjeta || "").replace(/\s+/g, ""),       // limpio espacios
+      metodo_pago: metodoPago,
+      tarjeta: (tarjeta || "").replace(/\s+/g, ""),
       titular,
       exp,
       cvv,
       nota: nota?.trim() || null,
       totales: { subtotal, envio, total },
     };
-    sessionStorage.setItem("fe_checkout_intent", JSON.stringify(intent));
 
-    // 4) Ir a pantalla de carga/procesamiento
+    sessionStorage.setItem("fe_checkout_intent", JSON.stringify(intent));
     navigate("/cliente/pedido-procesando");
   };
-
 
   /* =================== UI =================== */
   return (
@@ -310,22 +327,16 @@ export default function Checkout() {
       )}
 
       <SimpleGrid columns={{ base: 1, lg: 3 }} gap={{ base: 3, md: 4 }}>
-        {/* Columna principal con Tabs (pasarela) */}
+        {/* Columna principal con Tabs */}
         <Box gridColumn={{ lg: "1 / span 2" }}>
           <Tabs index={tabIndex} onChange={handleTabChange} variant="enclosed" isFitted>
-            <TabList
-              bg={cardBg}
-              border="1px solid"
-              borderColor={border}
-              borderRadius="lg"
-              boxShadow={shadowSm}
-            >
-              <Tab _selected={{ bg: useColorModeValue("gray.50","gray.800"), borderColor: "transparent" }}>
+            <TabList bg={cardBg} border="1px solid" borderColor={border} borderRadius="lg" boxShadow={shadowSm}>
+              <Tab _selected={{ bg: useColorModeValue("gray.50", "gray.800"), borderColor: "transparent" }}>
                 1. Entrega / Dirección
               </Tab>
               <Tab
                 isDisabled={!readyForPago}
-                _selected={{ bg: useColorModeValue("gray.50","gray.800"), borderColor: "transparent" }}
+                _selected={{ bg: useColorModeValue("gray.50", "gray.800"), borderColor: "transparent" }}
               >
                 2. Pago
               </Tab>
@@ -334,14 +345,7 @@ export default function Checkout() {
             <TabPanels mt={3}>
               {/* ====== Tab 1: Entrega / Dirección ====== */}
               <TabPanel p={0}>
-                <Box
-                  bg={cardBg}
-                  border="1px solid"
-                  borderColor={border}
-                  borderRadius="lg"
-                  p={{ base: 3, md: 4 }}
-                  boxShadow={shadowSm}
-                >
+                <Box bg={cardBg} border="1px solid" borderColor={border} borderRadius="lg" p={{ base: 3, md: 4 }} boxShadow={shadowSm}>
                   <HStack justify="space-between" mb={2}>
                     <HStack><FiTruck /><Heading size="md">Entrega</Heading></HStack>
                     <Badge colorScheme="teal">Paso 1/2</Badge>
@@ -380,7 +384,9 @@ export default function Checkout() {
                                         <TagLabel>{d.es_principal ? "Principal" : "Secundaria"}</TagLabel>
                                       </Tag>
                                       <Text fontSize="sm" noOfLines={1}>
-                                        {d.direccion} — {d.ciudad}{d.departamento ? `, ${d.departamento}` : ""}{d.pais ? `, ${d.pais}` : ""}
+                                        {d.direccion} — {d.ciudad}
+                                        {d.departamento ? `, ${d.departamento}` : ""}
+                                        {d.pais ? `, ${d.pais}` : ""}
                                       </Text>
                                     </HStack>
                                     <Text fontSize="xs" color={muted} noOfLines={1}>{d.telefono || ""}</Text>
@@ -427,52 +433,41 @@ export default function Checkout() {
 
               {/* ====== Tab 2: Pago ====== */}
               <TabPanel p={0}>
-                <Box
-                  bg={cardBg}
-                  border="1px solid"
-                  borderColor={border}
-                  borderRadius="lg"
-                  p={{ base: 3, md: 4 }}
-                  boxShadow={shadowSm}
-                >
+                <Box bg={cardBg} border="1px solid" borderColor={border} borderRadius="lg" p={{ base: 3, md: 4 }} boxShadow={shadowSm}>
                   <HStack justify="space-between" mb={2} align="center">
                     <HStack><FiCreditCard /><Heading size="md">Pago</Heading></HStack>
                     <Badge colorScheme="teal">Paso 2/2</Badge>
                   </HStack>
 
-                  {/* ======================= MODIFICACIÓN AQUI ======================= */}
-                  {/* Medios recomendados / marcas aceptadas (IMÁGENES) */}
+                  {/* Medios aceptados */}
                   <VStack align="stretch" spacing={2} mb={3}>
                     <Text color={muted} fontSize="sm">Medios aceptados:</Text>
-                    <PaymentMethods
-                      logos={[
-                        "/Visa.png",
-                        "/Mastercard.png",
-                        "/PSE.png",
-                        "/Nequi.png",
-                        "/DaviPlata.png"
-                      ]}
-                    />
+                    <PaymentMethods logos={["/Visa.png", "/Mastercard.png", "/PSE.png", "/Nequi.png", "/DaviPlata.png"]} />
                   </VStack>
-                  {/* ================================================================= */}
 
                   <RadioGroup
                     value={
                       entrega === "TIENDA"
                         ? metodoPago
-                        : metodoPago === "CONTRAENTREGA" ? "PAGO_LINEA" : metodoPago
+                        : metodoPago === "CONTRAENTREGA"
+                          ? "PAGO_LINEA"
+                          : metodoPago
                     }
                     onChange={setMetodoPago}
                   >
                     <VStack align="stretch">
                       <Radio value="PAGO_LINEA">Pago en línea (simulado)</Radio>
                       <Radio value="CONTRAENTREGA" isDisabled={entrega !== "TIENDA"}>
-                        Contraentrega {entrega !== "TIENDA" && <Text as="span" color={muted}>(solo disponible en retiro)</Text>}
+                        Contraentrega{" "}
+                        {entrega !== "TIENDA" && (
+                          <Text as="span" color={muted}>
+                            (solo disponible en retiro)
+                          </Text>
+                        )}
                       </Radio>
                     </VStack>
                   </RadioGroup>
 
-                  {/* Datos demo de tarjeta solo cuando aplica */}
                   {metodoPago === "PAGO_LINEA" && (
                     <SimpleGrid columns={{ base: 1, md: 2 }} gap={3} mt={3}>
                       <FormControl isRequired>
@@ -537,17 +532,44 @@ export default function Checkout() {
                     </FormControl>
                   </Box>
 
-                  <Checkbox mt={4} isChecked={acepto} onChange={(e) => setAcepto(e.target.checked)}>
-                    Acepto las{" "}
-                    <Button variant="link" onClick={() => navigate("/condiciones-uso")}>condiciones de uso</Button>{" "}
-                    y los{" "}
-                    <Button variant="link" onClick={() => navigate("/avisos-privacidad")}>avisos de privacidad</Button>.
-                  </Checkbox>
+                  <VStack align="stretch" spacing={3} mt={4}>
+                    <Checkbox isChecked={acepto} onChange={(e) => setAcepto(e.target.checked)} colorScheme="yellow" size="md">
+                      Acepto las condiciones de uso y avisos de privacidad
+                    </Checkbox>
+
+                    {/* ✅ AQUÍ ESTABA FALLANDO: rutas absolutas */}
+                    <Text fontSize="sm" color={muted} pl={6}>
+                      Al continuar, confirmas haber leído y aceptas nuestras{" "}
+                      <Button
+                        as={RouterLink}
+                        to="/cliente/condiciones-uso-cliente"
+                        variant="link"
+                        color="blue.600"
+                        fontWeight="normal"
+                        _hover={{ textDecoration: "underline" }}
+                      >
+                        condiciones de uso
+                      </Button>{" "}
+                      y{" "}
+                      <Button
+                        as={RouterLink}
+                        to="/cliente/avisos-privacidad-cliente"
+                        variant="link"
+                        color="blue.600"
+                        fontWeight="normal"
+                        _hover={{ textDecoration: "underline" }}
+                      >
+                        avisos de privacidad
+                      </Button>
+                      .
+                    </Text>
+                  </VStack>
 
                   <HStack justify="space-between" mt={4} flexWrap="wrap" gap={2}>
                     <Button variant="outline" onClick={goBackEntrega} isDisabled={enviando}>
                       Volver a Entrega
                     </Button>
+
                     <Tooltip hasArrow isDisabled={acepto} label="Debes aceptar condiciones y privacidad">
                       <Button
                         colorScheme="yellow"
@@ -568,7 +590,7 @@ export default function Checkout() {
           </Tabs>
         </Box>
 
-        {/* ===== Columna derecha: Resumen (con detalle de productos) ===== */}
+        {/* ===== Columna derecha: Resumen ===== */}
         <Box
           bg={cardBg}
           border="1px solid"
@@ -582,17 +604,18 @@ export default function Checkout() {
         >
           <Heading size="md" mb={3}>Resumen</Heading>
 
-          {/* Lista de productos (responsive) */}
           <VStack align="stretch" spacing={2} mb={3}>
             {items.map((it) => {
               const unit = effectiveUnitPrice(it);
               const qty = Math.max(1, Number(it.cantidad) || 1);
               const line = unit * qty;
+
               const src = it.imagen_principal
                 ? it.imagen_principal.startsWith("http")
                   ? it.imagen_principal
                   : `${API_BASE_URL}${it.imagen_principal}`
                 : "https://via.placeholder.com/300x200?text=Sin+Imagen";
+
               return (
                 <HStack
                   key={it.id}
@@ -615,14 +638,7 @@ export default function Checkout() {
                     overflow="hidden"
                     flexShrink={0}
                   >
-                    <Image
-                      src={src}
-                      alt={it.nombre}
-                      maxW="100%"
-                      maxH="100%"
-                      objectFit="contain"
-                      loading="lazy"
-                    />
+                    <Image src={src} alt={it.nombre} maxW="100%" maxH="100%" objectFit="contain" loading="lazy" />
                   </Box>
 
                   <VStack align="stretch" spacing={0} flex="1" minW={0}>
@@ -683,6 +699,7 @@ export default function Checkout() {
                   placeholder="Calle 12 #34-56 Apto 301"
                 />
               </FormControl>
+
               <FormControl isRequired>
                 <FormLabel>Ciudad</FormLabel>
                 <Input
@@ -691,6 +708,7 @@ export default function Checkout() {
                   placeholder="Cali"
                 />
               </FormControl>
+
               <FormControl>
                 <FormLabel>Departamento</FormLabel>
                 <Input
@@ -699,6 +717,7 @@ export default function Checkout() {
                   placeholder="Valle del Cauca"
                 />
               </FormControl>
+
               <FormControl>
                 <FormLabel>País</FormLabel>
                 <Input
@@ -707,6 +726,7 @@ export default function Checkout() {
                   placeholder="Colombia"
                 />
               </FormControl>
+
               <FormControl>
                 <FormLabel>Teléfono</FormLabel>
                 <Input
@@ -715,6 +735,7 @@ export default function Checkout() {
                   placeholder="+57 3xx xxx xxxx"
                 />
               </FormControl>
+
               <Checkbox
                 isChecked={formDir.es_principal}
                 onChange={(e) => setFormDir((s) => ({ ...s, es_principal: e.target.checked }))}
@@ -723,6 +744,7 @@ export default function Checkout() {
               </Checkbox>
             </VStack>
           </ModalBody>
+
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={() => setShowAddModal(false)}>
               Cancelar

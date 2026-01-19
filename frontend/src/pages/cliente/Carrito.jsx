@@ -1,28 +1,46 @@
 // src/pages/cliente/Carrito.jsx
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
-  Box, Heading, Text, HStack, VStack, Image, Button, IconButton,
-  useColorModeValue, useToast, SimpleGrid, Divider, NumberInput, NumberInputField,
-  NumberInputStepper, NumberIncrementStepper, NumberDecrementStepper, Badge, Checkbox,
-  AlertDialog, AlertDialogOverlay, AlertDialogContent, AlertDialogHeader,
-  AlertDialogBody, AlertDialogFooter, Tooltip, Kbd,
+  Box,
+  Heading,
+  Text,
+  HStack,
+  VStack,
+  Image,
+  Button,
+  IconButton,
+  useColorModeValue,
+  useToast,
+  SimpleGrid,
+  Divider,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
+  Badge,
+  Checkbox,
+  AlertDialog,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
+  Tooltip,
+  Kbd,
 } from "@chakra-ui/react";
 import { FiTrash2, FiShoppingBag, FiArrowRight, FiRefreshCw } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
-import api, { API_BASE_URL } from "../../utils/axiosInstance";
+import { useNavigate, Link as RouterLink } from "react-router-dom";
+import { API_BASE_URL } from "../../utils/axiosInstance";
 
-export { CART_KEY } from "../../utils/cartStore";
-
-// ---- usa TU store central para sincronizar contador/animación en la navbar ----
 import {
   readCart,
-  writeCart,
   updateQty as storeUpdateQty,
   removeFromCart as storeRemove,
   clearCart as storeClear,
   effectiveUnitPrice,
-  cartTotals,
-  CART_KEY
+  CART_KEY,
+  onCartChanged,
 } from "../../utils/cartStore";
 
 /* =================== util =================== */
@@ -33,86 +51,106 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
-/* =================== Componente =================== */
 export default function Carrito() {
   const [items, setItems] = useState(() => readCart());
   const [agree, setAgree] = useState(true);
   const [pendingRemove, setPendingRemove] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const cancelRef = useRef();
+  const cancelRef = useRef(null);
 
   const toast = useToast();
   const navigate = useNavigate();
 
-  // ======== tokens visuales tipo "Admin" / glass ========
-  const pageBg  = useColorModeValue("#f6f7f9", "#0f1117");
-  const cardBg  = useColorModeValue("rgba(255,255,255,0.96)", "rgba(23,25,35,0.86)");
-  const border  = useColorModeValue("rgba(226,232,240,0.9)", "rgba(45,55,72,0.7)");
-  const muted   = useColorModeValue("gray.600", "gray.300");
-  const title   = useColorModeValue("gray.900", "gray.100");
-  const shadowSm = useColorModeValue("0 6px 18px rgba(31,38,135,0.10)", "0 6px 18px rgba(0,0,0,0.35)");
-  const shadowLg = useColorModeValue("0 10px 30px rgba(31,38,135,0.15)", "0 10px 30px rgba(0,0,0,0.45)");
+  // ======== tokens visuales ========
+  const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
+  const cardBg = useColorModeValue("rgba(255,255,255,0.96)", "rgba(23,25,35,0.86)");
+  const border = useColorModeValue("rgba(226,232,240,0.9)", "rgba(45,55,72,0.7)");
+  const muted = useColorModeValue("gray.600", "gray.300");
+  const title = useColorModeValue("gray.900", "gray.100");
+  const shadowSm = useColorModeValue(
+    "0 6px 18px rgba(31,38,135,0.10)",
+    "0 6px 18px rgba(0,0,0,0.35)"
+  );
+  const shadowLg = useColorModeValue(
+    "0 10px 30px rgba(31,38,135,0.15)",
+    "0 10px 30px rgba(0,0,0,0.45)"
+  );
 
-  // ======== sincroniza con cambios del carrito (misma pestaña u otras) ========
+  // ✅ Sync carrito: (1) mismo tab via onCartChanged, (2) otras pestañas via storage
   useEffect(() => {
-    const onStorage = (e) => { if (e.key === CART_KEY) setItems(readCart()); };
-    const onCustom  = () => setItems(readCart());
+    const sync = () => setItems(readCart());
+
+    const off = onCartChanged?.(sync);
+
+    const onStorage = (e) => {
+      if (e.key === CART_KEY) sync();
+    };
+
     window.addEventListener("storage", onStorage);
-    window.addEventListener("cart:changed", onCustom);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("cart:changed", onCustom);
+      off?.();
     };
   }, []);
 
-  // Guarda en LS y emite evento en cada cambio local
-  useEffect(() => { writeCart(items, { lastAction: "carrito:set" }); }, [items]);
+  // Totales
+  const subtotal = useMemo(() => {
+    let sum = 0;
+    for (const it of items) {
+      const unit = effectiveUnitPrice(it);
+      const q = Math.max(1, Number(it.cantidad) || 1);
+      sum += unit * q;
+    }
+    return sum;
+  }, [items]);
 
-  // Totales (usa la misma lógica de store → coherencia)
-  const { subtotal } = useMemo(() => cartTotals(), [items]);
-
-  // === Acciones de línea ===
-  const changeQty = (id, qty) => {
-    // valida y escribe en store (esto emite cart:changed)
+  // === Acciones ===
+  const changeQty = useCallback((id, qty) => {
     const n = Math.max(1, Math.min(99, Number(qty) || 1));
-    storeUpdateQty(id, n);
-    setItems(readCart());
-  };
+    storeUpdateQty(id, n); // store escribe + emite evento
+    setItems(readCart());  // refresco inmediato
+  }, []);
 
   const askRemove = (id) => setPendingRemove(id);
+
   const confirmRemove = () => {
     if (pendingRemove == null) return;
-    storeRemove(pendingRemove);
+    storeRemove(pendingRemove); // store escribe + emite evento
     setItems(readCart());
     toast({ title: "Producto eliminado", status: "info", duration: 1200 });
     setPendingRemove(null);
   };
 
   const clearAll = () => setConfirmClear(true);
+
   const doClearAll = () => {
-    storeClear();
+    storeClear(); // store escribe + emite evento
     setItems(readCart());
     toast({ title: "Carrito vaciado", status: "info", duration: 1200 });
     setConfirmClear(false);
   };
 
   const goCheckout = () => {
-    if (!items.length)
+    if (!items.length) {
       return toast({ title: "Tu carrito está vacío", status: "warning", duration: 1500 });
-    if (!agree)
+    }
+    if (!agree) {
       return toast({ title: "Debes aceptar condiciones y privacidad", status: "warning", duration: 1600 });
+    }
     navigate("/cliente/checkout");
   };
 
   return (
     <Box px={{ base: 3, md: 6, lg: 10 }} py={{ base: 4, md: 6 }} bg={pageBg}>
-      <Heading size="lg" color={title} mb={1}>Tu carrito</Heading>
-      <HStack justify="space-between" align="baseline" mb={4}>
-        <Text color={muted}>
-          Revisa cantidades, elimina productos y continúa al pago.
-        </Text>
+      <Heading size="lg" color={title} mb={1}>
+        Tu carrito
+      </Heading>
+
+      <HStack justify="space-between" align="baseline" mb={4} flexWrap="wrap" gap={2}>
+        <Text color={muted}>Revisa cantidades, elimina productos y continúa al pago.</Text>
         <HStack fontSize="sm" color={muted}>
-          <Text>Atajo:</Text><Kbd>Alt</Kbd> + <Kbd>P</Kbd> <Text>para pagar</Text>
+          <Text>Atajo:</Text>
+          <Kbd>Alt</Kbd> + <Kbd>P</Kbd> <Text>para pagar</Text>
         </HStack>
       </HStack>
 
@@ -135,22 +173,33 @@ export default function Carrito() {
           />
           <Heading size="md">Tu carrito está vacío</Heading>
           <Text color={muted}>Explora el catálogo y agrega productos para verlos aquí.</Text>
-          <Button leftIcon={<FiShoppingBag />} onClick={() => navigate("/cliente")} colorScheme="yellow" color="black">
+
+          <Button
+            leftIcon={<FiShoppingBag />}
+            as={RouterLink}
+            to="/cliente"
+            colorScheme="yellow"
+            color="black"
+            type="button"
+          >
             Ir al catálogo
           </Button>
         </VStack>
       ) : (
         <SimpleGrid columns={{ base: 1, lg: 3 }} gap={5}>
-          {/* Lista de items */}
+          {/* Lista */}
           <Box gridColumn={{ lg: "1 / span 2" }}>
             <VStack align="stretch" spacing={3}>
               {items.map((it) => {
                 const img = it?.imagen_principal
                   ? `${API_BASE_URL}${it.imagen_principal}`
                   : "https://via.placeholder.com/300x200?text=Sin+Imagen";
+
                 const unit = effectiveUnitPrice(it);
-                const line = unit * Math.max(1, Number(it.cantidad) || 1);
-                const hasOffer = (Number(it.precio_oferta) > 0) || (Number(it.descuento) > 0);
+                const q = Math.max(1, Number(it.cantidad) || 1);
+                const line = unit * q;
+                const hasOffer = Number(it.precio_oferta) > 0 || Number(it.descuento) > 0;
+
                 return (
                   <HStack
                     key={it.id}
@@ -164,7 +213,6 @@ export default function Carrito() {
                     boxShadow={shadowSm}
                     sx={{ backdropFilter: "saturate(140%) blur(6px)" }}
                   >
-                    {/* imagen */}
                     <Box
                       w="96px"
                       h="96px"
@@ -186,7 +234,6 @@ export default function Carrito() {
                       />
                     </Box>
 
-                    {/* info */}
                     <VStack flex={1} align="stretch" spacing={1}>
                       <HStack justify="space-between" align="start" wrap="wrap" gap={2}>
                         <VStack align="start" spacing={0}>
@@ -199,22 +246,24 @@ export default function Carrito() {
                         </VStack>
 
                         <VStack spacing={0} align="end">
-                          {/* precio unitario (con oferta si aplica) */}
                           <HStack spacing={2} align="baseline">
                             <Text fontWeight="bold">{fmtCop(unit)}</Text>
                             {hasOffer && <Text color={muted} as="s">{fmtCop(it.precio)}</Text>}
                           </HStack>
-                          {/* total de línea */}
                           <Text fontSize="sm" color={muted}>
-                            Línea: <Text as="span" fontWeight="semibold">{fmtCop(line)}</Text>
+                            Línea:{" "}
+                            <Text as="span" fontWeight="semibold">
+                              {fmtCop(line)}
+                            </Text>
                           </Text>
                         </VStack>
                       </HStack>
 
-                      {/* qty + eliminar */}
                       <HStack justify="space-between" pt={2} wrap="wrap" gap={2}>
                         <HStack>
-                          <Text fontSize="sm" color={muted} id={`qty-${it.id}`}>Cantidad:</Text>
+                          <Text fontSize="sm" color={muted} id={`qty-${it.id}`}>
+                            Cantidad:
+                          </Text>
                           <NumberInput
                             aria-labelledby={`qty-${it.id}`}
                             size="sm"
@@ -238,6 +287,7 @@ export default function Carrito() {
                             icon={<FiTrash2 />}
                             variant="ghost"
                             onClick={() => askRemove(it.id)}
+                            type="button"
                           />
                         </Tooltip>
                       </HStack>
@@ -254,6 +304,7 @@ export default function Carrito() {
                   icon={<FiRefreshCw />}
                   variant="ghost"
                   onClick={clearAll}
+                  type="button"
                 />
               </Tooltip>
               <Text color={muted} fontSize="sm">Vaciar carrito</Text>
@@ -293,12 +344,45 @@ export default function Carrito() {
               </HStack>
             </VStack>
 
-            <Checkbox mt={4} isChecked={agree} onChange={(e) => setAgree(e.target.checked)}>
-              Acepto las{" "}
-              <Button variant="link" onClick={() => navigate("/condiciones-uso")}>condiciones de uso</Button>{" "}
-              y los{" "}
-              <Button variant="link" onClick={() => navigate("/avisos-privacidad")}>avisos de privacidad</Button>.
-            </Checkbox>
+            <VStack align="stretch" spacing={3} mt={4}>
+              <Checkbox
+                isChecked={agree}
+                onChange={(e) => setAgree(e.target.checked)}
+                colorScheme="yellow"
+                size="md"
+              >
+                Acepto las condiciones de uso y avisos de privacidad
+              </Checkbox>
+
+              {/* ✅ RUTAS CORRECTAS desde /cliente/carrito */}
+              <Text fontSize="sm" color={muted} pl={6}>
+                Al continuar, confirmas que has leído y aceptas nuestras{" "}
+                <Button
+                  as={RouterLink}
+                  to="../condiciones-uso-cliente"
+                  variant="link"
+                  color="blue.600"
+                  fontWeight="normal"
+                  _hover={{ textDecoration: "underline" }}
+                  type="button"
+                >
+                  condiciones de uso
+                </Button>{" "}
+                y{" "}
+                <Button
+                  as={RouterLink}
+                  to="../avisos-privacidad-cliente"
+                  variant="link"
+                  color="blue.600"
+                  fontWeight="normal"
+                  _hover={{ textDecoration: "underline" }}
+                  type="button"
+                >
+                  avisos de privacidad
+                </Button>
+                .
+              </Text>
+            </VStack>
 
             <VStack mt={4} spacing={2}>
               <Button
@@ -308,10 +392,18 @@ export default function Carrito() {
                 onClick={goCheckout}
                 leftIcon={<FiArrowRight />}
                 isDisabled={!items.length || !agree}
+                type="button"
               >
                 Continuar a pagar
               </Button>
-              <Button variant="outline" w="full" onClick={() => navigate("/cliente")}>
+
+              <Button
+                variant="outline"
+                w="full"
+                as={RouterLink}
+                to="/cliente"
+                type="button"
+              >
                 Seguir comprando
               </Button>
             </VStack>
@@ -329,14 +421,12 @@ export default function Carrito() {
         <AlertDialogOverlay />
         <AlertDialogContent>
           <AlertDialogHeader>Eliminar producto</AlertDialogHeader>
-          <AlertDialogBody>
-            ¿Deseas eliminar este producto del carrito?
-          </AlertDialogBody>
+          <AlertDialogBody>¿Deseas eliminar este producto del carrito?</AlertDialogBody>
           <AlertDialogFooter>
-            <Button ref={cancelRef} onClick={() => setPendingRemove(null)}>
+            <Button ref={cancelRef} onClick={() => setPendingRemove(null)} type="button">
               Cancelar
             </Button>
-            <Button colorScheme="red" onClick={confirmRemove} ml={3}>
+            <Button colorScheme="red" onClick={confirmRemove} ml={3} type="button">
               Eliminar
             </Button>
           </AlertDialogFooter>
@@ -353,14 +443,12 @@ export default function Carrito() {
         <AlertDialogOverlay />
         <AlertDialogContent>
           <AlertDialogHeader>Vaciar carrito</AlertDialogHeader>
-          <AlertDialogBody>
-            Se eliminarán todos los productos. ¿Deseas continuar?
-          </AlertDialogBody>
+          <AlertDialogBody>Se eliminarán todos los productos. ¿Deseas continuar?</AlertDialogBody>
           <AlertDialogFooter>
-            <Button ref={cancelRef} onClick={() => setConfirmClear(false)}>
+            <Button ref={cancelRef} onClick={() => setConfirmClear(false)} type="button">
               Cancelar
             </Button>
-            <Button colorScheme="red" onClick={doClearAll} ml={3}>
+            <Button colorScheme="red" onClick={doClearAll} ml={3} type="button">
               Vaciar
             </Button>
           </AlertDialogFooter>

@@ -2,17 +2,15 @@
 import { extendTheme } from "@chakra-ui/react";
 
 const theme = extendTheme({
-  // === Breakpoints personalizados ===
   breakpoints: {
     base: "0px",
     sm: "480px",
     md: "768px",
-    lmd: "1080px", // 👈 personalizado para pantallas medianas/grandes
+    lmd: "1080px",
     lg: "1280px",
     xl: "1536px",
   },
 
-  // === Paleta de colores FerreExpress ===
   colors: {
     brandYellow: {
       50: "#fff9e6",
@@ -20,7 +18,7 @@ const theme = extendTheme({
       200: "#ffe680",
       300: "#ffda47",
       400: "#ffce1f",
-      500: "#f7b500", // color principal
+      500: "#f7b500",
       600: "#d19800",
       700: "#a37300",
       800: "#705000",
@@ -41,13 +39,14 @@ const theme = extendTheme({
     brandBlack: "#0f1117",
   },
 
-  // === Tipografía ===
+  // ✅ así es como va
   fonts: {
-    heading: "'Inter', 'Poppins', sans-serif",
-    body: "'Inter', 'Poppins', sans-serif",
+    heading:
+      "Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+    body:
+      "Inter, Poppins, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
   },
 
-  // === Sombra y bordes por defecto ===
   shadows: {
     outline: "0 0 0 3px rgba(247,181,0,0.45)",
     card: "0 4px 12px rgba(0,0,0,0.08)",
@@ -62,7 +61,6 @@ const theme = extendTheme({
     "2xl": "28px",
   },
 
-  // === Componentes globales ===
   components: {
     Button: {
       baseStyle: {
@@ -104,7 +102,6 @@ const theme = extendTheme({
     },
   },
 
-  // === Configuración inicial ===
   config: {
     initialColorMode: "light",
     useSystemColorMode: false,

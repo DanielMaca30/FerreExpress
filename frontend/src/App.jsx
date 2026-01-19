@@ -1,3 +1,4 @@
+// src/App.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 
 // ================== LAYOUTS ==================
@@ -12,8 +13,8 @@ import Login from "./pages/public/Login";
 import ProductDetail from "./pages/public/ProductDetail";
 import About from "./pages/public/About";
 import PuntosFisicos from "./pages/public/PuntosFisicos";
-import CondicionesUso from "./pages/public/legal/CondicionesUso";
-import AvisosPrivacidad from "./pages/public/legal/AvisosPrivacidad";
+import CondicionesUsoPublic from "./pages/public/legal/CondicionesUso";
+import AvisosPrivacidadPublic from "./pages/public/legal/AvisosPrivacidad";
 
 // ================== AUTH (REGISTRO) ==================
 import RegisterCliente from "./pages/auth/RegisterCliente";
@@ -32,32 +33,37 @@ import PedidoResultado from "./pages/cliente/PedidoResultado";
 import Perfil from "./pages/cliente/Perfil";
 import MisCasos from "./pages/cliente/MisCasos";
 import AyudaFAQ from "./pages/cliente/AyudaFAQ";
+import CondicionesUsoCliente from "./pages/cliente/legal/CondicionesUsoCliente";
+import AvisosPrivacidadCliente from "./pages/cliente/legal/AvisosPrivacidadCliente";
 
 // ================== ZONA PRIVADA EMPRESA / CONTRATISTA ==================
-import EmpresaCatalogo from "./pages/empresa/EmpresaCatalogo"; // Catálogo tipo cliente
+import EmpresaCatalogo from "./pages/empresa/EmpresaCatalogo";
 import EmpresaAbout from "./pages/empresa/About";
 import EmpresaPuntosFisicos from "./pages/empresa/PuntosFisicos";
 import EmpresaProductDetail from "./pages/empresa/ProductDetail";
 import Inicio from "./pages/empresa/Inicio";
 import MisCotizaciones from "./pages/empresa/MisCotizaciones";
-import MisPedidosEmpresa from "./pages/empresa/MisPedidosEmpresa"
+import MisPedidosEmpresa from "./pages/empresa/MisPedidosEmpresa";
 import CarritoEmpresa from "./pages/empresa/CarritoEmpresa";
 import CheckoutEmpresa from "./pages/empresa/checkoutEmpresa";
 import PedidoProcesandoEmpresa from "./pages/empresa/PedidoProcesandoEmpresa";
 import PedidoResultadoEmpresa from "./pages/empresa/PedidoResultadoEmpresa";
 import PerfilEmpresa from "./pages/empresa/PerfilEmpresa";
 import MisCasosEmpresa from "./pages/empresa/MisCasosEmpresa";
+import CondicionesUsoEmpresa from "./pages/empresa/legal/CondicionesUsoEmpresa";
+import AvisosPrivacidadEmpresa from "./pages/empresa/legal/AvisosPrivacidadEmpresa";
+import AyudaFAQEmpresa from "./pages/empresa/AyudaFAQEmpresa";
 
 // ================== ZONA PRIVADA ADMIN ==================
-import AdminDashboard from "./pages/admin/Dashboard";        // Resumen
-import AdminProductos from "./pages/admin/Productos";        // Productos
-import AdminPedidos from "./pages/admin/Pedidos";            // Pedidos
-import AdminCotizaciones from "./pages/admin/Cotizaciones";  // Cotizaciones
-import AdminCasos from "./pages/admin/Casos";                // Casos / Soporte
-import AdminFaq from "./pages/admin/Faq";                    // Centro de ayuda
-import AdminUsuarios from "./pages/admin/Usuarios";          // Usuarios
-import AdminDescuentos from "./pages/admin/Descuentos";      // Reglas de descuento
-import AdminAuditoria from "./pages/admin/Auditoria";        // Auditoría
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminProductos from "./pages/admin/Productos";
+import AdminPedidos from "./pages/admin/Pedidos";
+import AdminCotizaciones from "./pages/admin/Cotizaciones";
+import AdminCasos from "./pages/admin/Casos";
+import AdminFaq from "./pages/admin/Faq";
+import AdminUsuarios from "./pages/admin/Usuarios";
+import AdminDescuentos from "./pages/admin/Descuentos";
+import AdminAuditoria from "./pages/admin/Auditoria";
 
 // ================== GUARD ==================
 import PrivateRoute from "./components/PrivateRoute";
@@ -85,8 +91,8 @@ export default function App() {
           element={<Navigate to="/puntos-fisicos" replace />}
         />
 
-        <Route path="/condiciones-uso" element={<CondicionesUso />} />
-        <Route path="/avisos-privacidad" element={<AvisosPrivacidad />} />
+        <Route path="/condiciones-uso" element={<CondicionesUsoPublic />} />
+        <Route path="/avisos-privacidad" element={<AvisosPrivacidadPublic />} />
 
         {/* Registro */}
         <Route path="/register/cliente" element={<RegisterCliente />} />
@@ -96,10 +102,8 @@ export default function App() {
       {/* ========== CLIENTE (PROTEGIDO) ========== */}
       <Route element={<PrivateRoute allowedRoles={["CLIENTE"]} />}>
         <Route path="/cliente" element={<ClienteLayout />}>
-          {/* Inicio catálogo cliente */}
           <Route index element={<Cliente />} />
 
-          {/* Internas cliente (todas relativas a /cliente) */}
           <Route path="casos" element={<MisCasos />} />
           <Route path="ayuda" element={<AyudaFAQ />} />
           <Route path="categorias" element={<Cliente />} />
@@ -109,18 +113,16 @@ export default function App() {
           <Route path="carrito" element={<Carrito />} />
           <Route path="checkout" element={<Checkout />} />
           <Route path="producto/:id" element={<ClienteProductDetail />} />
-          <Route path="faq" element={<AyudaFAQ/>} />          
+          <Route path="faq" element={<AyudaFAQ />} />
+          <Route path="condiciones-uso-cliente" element={<CondicionesUsoCliente />} />
+          <Route path="avisos-privacidad-cliente" element={<AvisosPrivacidadCliente />} />
 
-          {/* Perfil del cliente */}
           <Route path="perfil" element={<Perfil />} />
 
-          {/* Flujo de pedido */}
           <Route path="pedido-procesando" element={<PedidoProcesando />} />
           <Route path="pedido-resultado" element={<PedidoResultado />} />
 
-          {/* Listado de pedidos */}
           <Route path="pedidos" element={<MisPedidos />} />
-          {/* Alias opcional: /cliente/mis-pedidos con mismo layout */}
           <Route path="mis-pedidos" element={<MisPedidos />} />
         </Route>
       </Route>
@@ -129,37 +131,37 @@ export default function App() {
       {/* ========== EMPRESA / CONTRATISTA (PROTEGIDO) ========== */}
       <Route element={<PrivateRoute allowedRoles={["CONTRATISTA"]} />}>
         <Route path="/empresa" element={<EmpresaLayout />}>
-
-          {/* AHORA: el dashboard/inicio es la página por defecto */}
           <Route index element={<Inicio />} />
 
-          {/* El resto de rutas siguen igual */}
-          <Route path="catalogo" element={<EmpresaCatalogo />} />     
+          <Route path="catalogo" element={<EmpresaCatalogo />} />
           <Route path="about" element={<EmpresaAbout />} />
           <Route path="puntos-fisicos" element={<EmpresaPuntosFisicos />} />
           <Route path="producto/:id" element={<EmpresaProductDetail />} />
+
           <Route path="cotizaciones" element={<MisCotizaciones />} />
           <Route path="mis-pedidos" element={<MisPedidosEmpresa />} />
+
           <Route path="carrito-empresa" element={<CarritoEmpresa />} />
           <Route path="checkout-empresa" element={<CheckoutEmpresa />} />
           <Route path="pedido-procesando" element={<PedidoProcesandoEmpresa />} />
           <Route path="pedido-resultado" element={<PedidoResultadoEmpresa />} />
-          <Route path="perfil-empresa" element={<PerfilEmpresa/>} />
-          <Route path="casos-empresa" element={<MisCasosEmpresa />} />
 
+          <Route path="perfil-empresa" element={<PerfilEmpresa />} />
+          <Route path="casos-empresa" element={<MisCasosEmpresa />} />
+          <Route path="/empresa/ayuda" element={<AyudaFAQEmpresa />} />
+
+          {/* ✅ Nuevas legales empresa */}
+          <Route path="condiciones-uso-empresa" element={<CondicionesUsoEmpresa />} />
+          <Route path="avisos-privacidad-empresa" element={<AvisosPrivacidadEmpresa />} />
         </Route>
       </Route>
-
-      {/* Redirección para mayúscula (opcional, sigue funcionando) */}
       <Route path="/Empresa" element={<Navigate to="/empresa" replace />} />
 
       {/* ========== ADMIN (PROTEGIDO) ========== */}
       <Route element={<PrivateRoute allowedRoles={["ADMIN"]} />}>
         <Route path="/admin" element={<AdminLayout />}>
-          {/* Resumen / Dashboard */}
           <Route index element={<AdminDashboard />} />
 
-          {/* Módulos administrativos */}
           <Route path="productos" element={<AdminProductos />} />
           <Route path="pedidos" element={<AdminPedidos />} />
           <Route path="cotizaciones" element={<AdminCotizaciones />} />

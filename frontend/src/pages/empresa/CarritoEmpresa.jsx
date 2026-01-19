@@ -1,9 +1,5 @@
 // src/pages/empresa/CarritoEmpresa.jsx
-// Carrito para Empresas / Contratistas
-// Misma vista que el carrito de Cliente, pero orientado a pedido normal
-// (lleva a /empresa/checkout, NO crea cotización aquí).
-
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   Box,
   Heading,
@@ -32,27 +28,20 @@ import {
   AlertDialogFooter,
   Tooltip,
   Kbd,
+  Link,
+  Spacer,
 } from "@chakra-ui/react";
-import {
-  FiTrash2,
-  FiShoppingBag,
-  FiArrowRight,
-  FiRefreshCw,
-} from "react-icons/fi";
+import { FiTrash2, FiShoppingBag, FiArrowRight, FiRefreshCw } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../../utils/axiosInstance";
 
-export { CART_KEY } from "../../utils/cartStore";
-
-// ---- usa TU store central para sincronizar contador/animación en la navbar ----
+// ✅ SOLO importa, no re-exportes CART_KEY aquí (evita duplicidades raras)
 import {
   readCart,
-  writeCart,
   updateQty as storeUpdateQty,
   removeFromCart as storeRemove,
   clearCart as storeClear,
   effectiveUnitPrice,
-  cartTotals,
   CART_KEY,
 } from "../../utils/cartStore";
 
@@ -64,27 +53,29 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
+const buildImg = (src) => {
+  if (!src) return "https://via.placeholder.com/300x200?text=Sin+Imagen";
+  const s = String(src);
+  if (s.startsWith("http")) return s;
+  // asegura slash
+  return `${API_BASE_URL}${s.startsWith("/") ? "" : "/"}${s}`;
+};
+
 /* =================== Componente =================== */
 export default function CarritoEmpresa() {
   const [items, setItems] = useState(() => readCart());
   const [agree, setAgree] = useState(true);
   const [pendingRemove, setPendingRemove] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
-  const cancelRef = useRef();
+  const cancelRef = useRef(null);
 
   const toast = useToast();
   const navigate = useNavigate();
 
   // ======== tokens visuales tipo "Admin" / glass ========
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
-  const cardBg = useColorModeValue(
-    "rgba(255,255,255,0.96)",
-    "rgba(23,25,35,0.86)"
-  );
-  const border = useColorModeValue(
-    "rgba(226,232,240,0.9)",
-    "rgba(45,55,72,0.7)"
-  );
+  const cardBg = useColorModeValue("rgba(255,255,255,0.96)", "rgba(23,25,35,0.86)");
+  const border = useColorModeValue("rgba(226,232,240,0.9)", "rgba(45,55,72,0.7)");
   const muted = useColorModeValue("gray.600", "gray.300");
   const title = useColorModeValue("gray.900", "gray.100");
   const shadowSm = useColorModeValue(
@@ -96,49 +87,53 @@ export default function CarritoEmpresa() {
     "0 10px 30px rgba(0,0,0,0.45)"
   );
 
-  // ======== sincroniza con cambios del carrito (misma pestaña u otras) ========
+  // ✅ Sync: cambios desde otras pestañas o desde el store (eventos)
   useEffect(() => {
+    const sync = () => setItems(readCart());
+
     const onStorage = (e) => {
-      if (e.key === CART_KEY) setItems(readCart());
+      if (e.key === CART_KEY) sync();
     };
-    const onCustom = () => setItems(readCart());
+
     window.addEventListener("storage", onStorage);
-    window.addEventListener("cart:changed", onCustom);
+    window.addEventListener("cart:changed", sync);
+
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("cart:changed", onCustom);
+      window.removeEventListener("cart:changed", sync);
     };
   }, []);
 
-  // Guarda en LS y emite evento en cada cambio local
-  useEffect(() => {
-    writeCart(items, { lastAction: "empresa:carrito:set" });
+  // ✅ Totales calculados desde items (no dependas del storage para UI)
+  const { subtotal, totalItems } = useMemo(() => {
+    const subtotalCalc = items.reduce((acc, it) => {
+      const qty = Math.max(1, Number(it.cantidad) || 1);
+      const unit = effectiveUnitPrice(it);
+      return acc + unit * qty;
+    }, 0);
+    const totalItemsCalc = items.reduce((acc, it) => acc + Math.max(1, Number(it.cantidad) || 1), 0);
+    return { subtotal: subtotalCalc, totalItems: totalItemsCalc };
   }, [items]);
 
-  // Totales (usa la misma lógica de store → coherencia)
-  const { subtotal } = useMemo(() => cartTotals(), [items]);
-
   // === Acciones de línea ===
-  const changeQty = (id, qty) => {
+  const changeQty = useCallback((id, qty) => {
     const n = Math.max(1, Math.min(99, Number(qty) || 1));
-    storeUpdateQty(id, n); // esto ya emite cart:changed
-    setItems(readCart());
-  };
+    storeUpdateQty(id, n);       // store persiste + emite cart:changed
+    setItems(readCart());        // refleja inmediatamente
+  }, []);
 
   const askRemove = (id) => setPendingRemove(id);
+
   const confirmRemove = () => {
     if (pendingRemove == null) return;
     storeRemove(pendingRemove);
     setItems(readCart());
-    toast({
-      title: "Producto eliminado del carrito",
-      status: "info",
-      duration: 1400,
-    });
+    toast({ title: "Producto eliminado del carrito", status: "info", duration: 1400 });
     setPendingRemove(null);
   };
 
   const clearAll = () => setConfirmClear(true);
+
   const doClearAll = () => {
     storeClear();
     setItems(readCart());
@@ -146,8 +141,12 @@ export default function CarritoEmpresa() {
     setConfirmClear(false);
   };
 
-  // === Flujo EMPRESA: ir al checkout de pedido normal ===
+  // ✅ Flujo EMPRESA: ir al checkout
   const goCheckout = () => {
+    // cierra modales por si acaso (evita overlays raros)
+    setPendingRemove(null);
+    setConfirmClear(false);
+
     if (!items.length) {
       return toast({
         title: "Tu carrito está vacío",
@@ -163,29 +162,46 @@ export default function CarritoEmpresa() {
         duration: 2000,
       });
     }
-    navigate("/empresa/checkout-empresa");
+
+    // ✅ navegación robusta en rutas anidadas
+    navigate("../checkout-empresa", { relative: "path" });
   };
 
-  const seguirComprando = () => {
-    // puedes cambiar a "/empresa" si prefieres el dashboard
-    navigate("/empresa/catalogo");
-  };
+  const seguirComprando = () => navigate("/empresa/catalogo");
+
+  // ✅ Atajo real: Alt + P
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.altKey && (e.key === "p" || e.key === "P")) {
+        e.preventDefault();
+        goCheckout();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, agree]);
 
   return (
-    <Box px={{ base: 3, md: 6, lg: 10 }} py={{ base: 4, md: 6 }} bg={pageBg}>
+    <Box
+      px={{ base: 3, md: 6, lg: 10 }}
+      py={{ base: 4, md: 6 }}
+      bg={pageBg}
+      // ✅ espacio extra para barra fija móvil
+      pb={{ base: items.length ? 24 : 6, md: 6 }}
+      minH="100vh"
+    >
       <Heading size="lg" color={title} mb={1}>
         Carrito de empresa
       </Heading>
+
       <HStack justify="space-between" align="baseline" mb={4} spacing={3}>
         <Text color={muted}>
-          Revisa cantidades, elimina productos y continúa para generar tu
-          pedido como empresa/contratista.
+          Revisa cantidades, elimina productos y continúa para generar tu pedido
+          como empresa/contratista.
         </Text>
-        <HStack
-          fontSize="sm"
-          color={muted}
-          display={{ base: "none", md: "flex" }}
-        >
+
+        <HStack fontSize="sm" color={muted} display={{ base: "none", md: "flex" }}>
           <Text>Atajo:</Text>
           <Kbd>Alt</Kbd> + <Kbd>P</Kbd>
           <Text>para pagar</Text>
@@ -219,6 +235,7 @@ export default function CarritoEmpresa() {
             onClick={() => navigate("/empresa/catalogo")}
             colorScheme="yellow"
             color="black"
+            minH="44px"
           >
             Ir al catálogo de empresa
           </Button>
@@ -229,15 +246,12 @@ export default function CarritoEmpresa() {
           <Box gridColumn={{ lg: "1 / span 2" }}>
             <VStack align="stretch" spacing={3}>
               {items.map((it) => {
-                const img = it?.imagen_principal
-                  ? `${API_BASE_URL}${it.imagen_principal}`
-                  : "https://via.placeholder.com/300x200?text=Sin+Imagen";
+                const img = buildImg(it?.imagen_principal);
                 const unit = effectiveUnitPrice(it);
-                const line =
-                  unit * Math.max(1, Number(it.cantidad) || 1);
-                const hasOffer =
-                  Number(it.precio_oferta) > 0 ||
-                  Number(it.descuento) > 0;
+                const qty = Math.max(1, Number(it.cantidad) || 1);
+                const line = unit * qty;
+                const hasOffer = Number(it.precio_oferta) > 0 || Number(it.descuento) > 0;
+
                 return (
                   <HStack
                     key={it.id}
@@ -262,6 +276,7 @@ export default function CarritoEmpresa() {
                       display="grid"
                       placeItems="center"
                       overflow="hidden"
+                      flexShrink={0}
                     >
                       <Image
                         src={img}
@@ -274,29 +289,20 @@ export default function CarritoEmpresa() {
                     </Box>
 
                     {/* info */}
-                    <VStack flex={1} align="stretch" spacing={1}>
-                      <HStack
-                        justify="space-between"
-                        align="start"
-                        wrap="wrap"
-                        gap={2}
-                      >
-                        <VStack align="start" spacing={0}>
-                          <Text fontWeight="semibold">{it.nombre}</Text>
+                    <VStack flex={1} align="stretch" spacing={1} minW={0}>
+                      <HStack justify="space-between" align="start" wrap="wrap" gap={2}>
+                        <VStack align="start" spacing={0} minW={0}>
+                          <Text fontWeight="semibold" noOfLines={2}>
+                            {it.nombre}
+                          </Text>
                           <HStack spacing={1} flexWrap="wrap">
                             {it.marca && (
-                              <Badge
-                                colorScheme="purple"
-                                variant="subtle"
-                              >
+                              <Badge colorScheme="purple" variant="subtle">
                                 {it.marca}
                               </Badge>
                             )}
                             {it.categoria && (
-                              <Badge
-                                colorScheme="blue"
-                                variant="subtle"
-                              >
+                              <Badge colorScheme="blue" variant="subtle">
                                 {it.categoria}
                               </Badge>
                             )}
@@ -309,18 +315,14 @@ export default function CarritoEmpresa() {
                         </VStack>
 
                         <VStack spacing={0} align="end">
-                          {/* precio unitario (con oferta si aplica) */}
                           <HStack spacing={2} align="baseline">
-                            <Text fontWeight="bold">
-                              {fmtCop(unit)}
-                            </Text>
+                            <Text fontWeight="bold">{fmtCop(unit)}</Text>
                             {hasOffer && (
                               <Text color={muted} as="s">
                                 {fmtCop(it.precio)}
                               </Text>
                             )}
                           </HStack>
-                          {/* total de línea */}
                           <Text fontSize="sm" color={muted}>
                             Línea:{" "}
                             <Text as="span" fontWeight="semibold">
@@ -331,30 +333,21 @@ export default function CarritoEmpresa() {
                       </HStack>
 
                       {/* qty + eliminar */}
-                      <HStack
-                        justify="space-between"
-                        pt={2}
-                        wrap="wrap"
-                        gap={2}
-                      >
+                      <HStack justify="space-between" pt={2} wrap="wrap" gap={2}>
                         <HStack>
-                          <Text
-                            fontSize="sm"
-                            color={muted}
-                            id={`qty-${it.id}`}
-                          >
+                          <Text fontSize="sm" color={muted} id={`qty-${it.id}`}>
                             Cantidad:
                           </Text>
                           <NumberInput
                             aria-labelledby={`qty-${it.id}`}
                             size="sm"
-                            value={it.cantidad}
+                            value={qty}
                             min={1}
                             max={99}
                             onChange={(_, v) => changeQty(it.id, v)}
                             w="92px"
                           >
-                            <NumberInputField />
+                            <NumberInputField minH="36px" />
                             <NumberInputStepper>
                               <NumberIncrementStepper />
                               <NumberDecrementStepper />
@@ -368,6 +361,8 @@ export default function CarritoEmpresa() {
                             icon={<FiTrash2 />}
                             variant="ghost"
                             onClick={() => askRemove(it.id)}
+                            minW="44px"
+                            minH="44px"
                           />
                         </Tooltip>
                       </HStack>
@@ -384,6 +379,8 @@ export default function CarritoEmpresa() {
                   icon={<FiRefreshCw />}
                   variant="ghost"
                   onClick={clearAll}
+                  minW="44px"
+                  minH="44px"
                 />
               </Tooltip>
               <Text color={muted} fontSize="sm">
@@ -392,7 +389,7 @@ export default function CarritoEmpresa() {
             </HStack>
           </Box>
 
-          {/* Resumen + acción principal: ir al CHECKOUT EMPRESA */}
+          {/* Resumen (desktop/tablet) */}
           <Box
             bg={cardBg}
             border="1px solid"
@@ -404,6 +401,7 @@ export default function CarritoEmpresa() {
             alignSelf="start"
             boxShadow={shadowLg}
             sx={{ backdropFilter: "saturate(140%) blur(8px)" }}
+            display={{ base: "none", lg: "block" }}
           >
             <Heading size="md" mb={3}>
               Resumen
@@ -427,27 +425,38 @@ export default function CarritoEmpresa() {
               </HStack>
             </VStack>
 
-            <Checkbox
-              mt={4}
-              isChecked={agree}
-              onChange={(e) => setAgree(e.target.checked)}
-            >
-              Acepto las{" "}
-              <Button
-                variant="link"
-                onClick={() => navigate("/condiciones-uso")}
-              >
-                condiciones de uso
-              </Button>{" "}
-              y los{" "}
-              <Button
-                variant="link"
-                onClick={() => navigate("/avisos-privacidad")}
-              >
-                avisos de privacidad
-              </Button>{" "}
-              para pedidos de mi empresa.
-            </Checkbox>
+            {/* ✅ checkbox + links sin romper el toggle */}
+            <Box mt={4}>
+              <Checkbox isChecked={agree} onChange={(e) => setAgree(e.target.checked)}>
+                Acepto condiciones y privacidad
+              </Checkbox>
+
+              <Text fontSize="xs" color={muted} mt={2}>
+                Ver{" "}
+                <Link
+                  color="yellow.500"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate("/empresa/condiciones-uso-empresa");
+                  }}
+                >
+                  condiciones de uso
+                </Link>{" "}
+                y{" "}
+                <Link
+                  color="yellow.500"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate("/empresa/avisos-privacidad-empresa");
+                  }}
+                >
+                  avisos de privacidad
+                </Link>
+                .
+              </Text>
+            </Box>
 
             <VStack mt={4} spacing={2}>
               <Button
@@ -457,15 +466,65 @@ export default function CarritoEmpresa() {
                 onClick={goCheckout}
                 leftIcon={<FiArrowRight />}
                 isDisabled={!items.length || !agree}
+                minH="44px"
               >
                 Continuar a pagar
               </Button>
-              <Button variant="outline" w="full" onClick={seguirComprando}>
+              <Button variant="outline" w="full" onClick={seguirComprando} minH="44px">
                 Seguir comprando
               </Button>
             </VStack>
           </Box>
         </SimpleGrid>
+      )}
+
+      {/* ✅ Barra fija móvil (CTA siempre visible) */}
+      {items.length > 0 && (
+        <Box
+          position="fixed"
+          left={0}
+          right={0}
+          bottom={0}
+          zIndex={20}
+          display={{ base: "block", lg: "none" }}
+          bg={useColorModeValue("rgba(255,255,255,0.92)", "rgba(17,24,39,0.92)")}
+          backdropFilter="blur(12px)"
+          borderTop="1px solid"
+          borderColor={border}
+          px={3}
+          py={3}
+          pb="calc(env(safe-area-inset-bottom) + 12px)"
+        >
+          <HStack spacing={3} align="center">
+            <VStack spacing={0} align="start" minW={0}>
+              <Text fontSize="xs" color={muted}>
+                {totalItems} ítem{totalItems !== 1 ? "s" : ""}
+              </Text>
+              <Text fontWeight="bold" fontSize="md" noOfLines={1}>
+                Total: {fmtCop(subtotal)}
+              </Text>
+            </VStack>
+
+            <Spacer />
+
+            <Button
+              colorScheme="yellow"
+              color="black"
+              onClick={goCheckout}
+              leftIcon={<FiArrowRight />}
+              isDisabled={!agree}
+              minH="44px"
+            >
+              Continuar
+            </Button>
+          </HStack>
+
+          {!agree && (
+            <Text mt={2} fontSize="xs" color="orange.400">
+              Acepta condiciones y privacidad para continuar.
+            </Text>
+          )}
+        </Box>
       )}
 
       {/* Dialog: eliminar item */}

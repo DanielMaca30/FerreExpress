@@ -1,4 +1,4 @@
-// src/controllers/pagosController.js
+// src/controllers/pagoController.js
 const pool = require("../db");
 const { sendMail } = require("../utils/mailer");
 
