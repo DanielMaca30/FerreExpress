@@ -696,24 +696,27 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     };
   }, [handleScroll, loading, items]);
 
-  // ✅ FIX: wheel horizontal con listener NO passive (para que preventDefault funcione)
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-
-    if (isMobile) return;
+    if (!el || isMobile) return;
 
     const wheel = (e) => {
-      // Scroll vertical -> horizontal
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-      }
+      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5; // trackpad / rueda horizontal
+      const wantsHorizontalByShift = e.shiftKey && Math.abs(e.deltaY) > 0.5; // Shift + wheel
+
+      if (!hasRealHorizontal && !wantsHorizontalByShift) return;
+
+      // ✅ Solo aquí prevenimos el default, porque VAMOS a mover horizontal
+      e.preventDefault();
+
+      const delta = wantsHorizontalByShift ? e.deltaY : e.deltaX;
+      el.scrollLeft += delta;
     };
 
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
+
 
   const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 

@@ -23,7 +23,6 @@ import {
   InputRightElement,
   Kbd,
   Button,
-  Collapse,
   Drawer,
   DrawerOverlay,
   DrawerContent,
@@ -54,7 +53,7 @@ import {
   FiBell,
 } from "react-icons/fi";
 import { FaWhatsapp, FaInstagram, FaFacebook, FaXTwitter } from "react-icons/fa6";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import api, { API_BASE_URL } from "../utils/axiosInstance";
@@ -66,7 +65,8 @@ export default function ClienteLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const disclosure = useDisclosure();
+  const { isOpen, onOpen, onClose } = disclosure;
 
   const bgPage = useColorModeValue("#f6f7f9", "#0f1117");
   const headerBg = "#f8bd22";
@@ -79,8 +79,17 @@ export default function ClienteLayout() {
   const panelSubtleBg = useColorModeValue("gray.50", "whiteAlpha.100");
   const muted = useColorModeValue("gray.600", "gray.300");
 
-  const isMobile = useBreakpointValue({ base: true, md: false });
   const pathname = location.pathname;
+
+  // ================== BREAKPOINTS “GENERALES” ==================
+  // 2xl (≥1536): desktop grande -> nav completa visible
+  // <2xl: drawer (mobile/tablet/laptop) -> evita header gigante y bugs
+  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true });
+  const showDesktopNav = !!isDesktopLarge;
+  const useDrawerNav = !showDesktopNav;
+
+  // ✅ Ocultar header SOLO en móvil + tablet (base/md). NO en laptop/pc.
+  const hideOnScroll = useBreakpointValue({ base: true, md: true, lg: false });
 
   const isActive = (to) => {
     if (to === "/cliente") return pathname === "/cliente" || pathname === "/cliente/";
@@ -105,16 +114,13 @@ export default function ClienteLayout() {
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
     const term = search.trim();
-
     if (!term) return;
 
     setShowSuggestions(false);
-    setSearch(""); // opcional: limpiar el input después de buscar
-
-    // Navegamos a la página principal pública con el parámetro de búsqueda
+    setSearch("");
+    // ⚠️ Si quieres que busque dentro de cliente, cambia a:
+    // navigate(`/cliente?search=${encodeURIComponent(term)}`);
     navigate(`/Home?search=${encodeURIComponent(term)}`);
-    // O si tu página principal es simplemente "/", puedes usar:
-    // navigate(`/?search=${encodeURIComponent(term)}`);
   };
 
   useEffect(() => {
@@ -132,7 +138,6 @@ export default function ClienteLayout() {
       }
 
       if (e.key === "Escape" && document.activeElement === input) {
-        input.value = "";
         setSearch("");
         setShowSuggestions(false);
         input.blur();
@@ -146,10 +151,8 @@ export default function ClienteLayout() {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!showSuggestions) return;
-
-      if (searchInputRef.current && searchInputRef.current.contains(e.target)) return;
-      if (suggestionsRef.current && suggestionsRef.current.contains(e.target)) return;
-
+      if (searchInputRef.current?.contains(e.target)) return;
+      if (suggestionsRef.current?.contains(e.target)) return;
       setShowSuggestions(false);
     };
 
@@ -196,11 +199,12 @@ export default function ClienteLayout() {
   };
 
   const hasQuery = debouncedSearch.length >= 2;
-  const hasResults = searchResults && searchResults.length > 0;
+  const hasResults = Array.isArray(searchResults) && searchResults.length > 0;
 
-  // ================== NOTIFICACIONES (AUTO-REFRESH) ==================
+  // ================== NOTIFICACIONES ==================
   const [notificaciones, setNotificaciones] = useState([]);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const notifInFlightRef = useRef(false);
   const mountedRef = useRef(true);
@@ -228,7 +232,6 @@ export default function ClienteLayout() {
         setNotificaciones(Array.isArray(res.data) ? res.data : []);
       }
     } catch (error) {
-      // Si falla en background, no “ensucies” UI; solo log
       console.error("Error al cargar notificaciones:", error);
     } finally {
       if (mountedRef.current && !silent) setNotifLoading(false);
@@ -236,16 +239,13 @@ export default function ClienteLayout() {
     }
   };
 
-  // ✅ Auto refresco: inicial + polling + focus/visibility
   useEffect(() => {
     if (!user?.token) return;
 
-    const NOTIF_POLL_MS = 30000; // <-- AJUSTA AQUÍ
-    fetchNotificaciones({ silent: true }); // initial badge load
+    const NOTIF_POLL_MS = 30000;
+    fetchNotificaciones({ silent: true });
 
-    const id = setInterval(() => {
-      fetchNotificaciones({ silent: true });
-    }, NOTIF_POLL_MS);
+    const id = setInterval(() => fetchNotificaciones({ silent: true }), NOTIF_POLL_MS);
 
     const onFocus = () => fetchNotificaciones({ silent: true });
     const onVisibility = () => {
@@ -324,191 +324,258 @@ export default function ClienteLayout() {
     return unsubscribe;
   }, []);
 
-  // ================== HEADER MÓVIL COMPACTO (SCROLL) ==================
-  const [compactHeader, setCompactHeader] = useState(false);
-  const lastScrollYRef = useRef(0);
-  const tickingRef = useRef(false);
+  // ================== HEADER HIDE (PRO) ==================
+  const headerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(0);
+
+  const [hideHeader, setHideHeader] = useState(false);
+  const hideHeaderRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    const measure = () => setHeaderH(el.getBoundingClientRect().height || 0);
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   useEffect(() => {
-    if (!isMobile) {
-      setCompactHeader(false);
+    // Si NO aplica hideOnScroll (laptop/pc) -> siempre visible
+    if (!hideOnScroll) {
+      hideHeaderRef.current = false;
+      setHideHeader(false);
       return;
     }
 
-    lastScrollYRef.current = window.scrollY || 0;
+    let lastY = window.scrollY || 0;
+    let ticking = false;
 
-    const MIN_Y_TO_COLLAPSE = 56;
+    const THRESHOLD = Math.max(90, headerH + 12);
     const DELTA = 10;
 
     const onScroll = () => {
-      if (tickingRef.current) return;
-      tickingRef.current = true;
+      // Evita toggles cuando hay overlays o focus
+      if (isOpen) return;
+      if (notifOpen) return;
+      if (showSuggestions) return;
+      if (document.activeElement === searchInputRef.current) return;
+
+      if (ticking) return;
+      ticking = true;
 
       window.requestAnimationFrame(() => {
         const y = window.scrollY || 0;
-        const prev = lastScrollYRef.current;
-        const diff = y - prev;
+        const diff = y - lastY;
 
-        if (y < 10) {
-          setCompactHeader(false);
-        } else {
-          const goingDown = diff > DELTA;
-          const goingUp = diff < -DELTA;
+        let next = hideHeaderRef.current;
 
-          if (goingDown && y > MIN_Y_TO_COLLAPSE) setCompactHeader(true);
-          if (goingUp) setCompactHeader(false);
+        if (y < 10) next = false;
+        else if (diff > DELTA && y > THRESHOLD) next = true;
+        else if (diff < -DELTA) next = false;
+
+        if (next !== hideHeaderRef.current) {
+          hideHeaderRef.current = next;
+          setHideHeader(next);
+          if (next) setShowSuggestions(false);
         }
 
-        lastScrollYRef.current = y;
-        tickingRef.current = false;
+        lastY = y;
+        ticking = false;
       });
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [isMobile]);
+  }, [hideOnScroll, headerH, isOpen, notifOpen, showSuggestions]);
+
+  const logoH = useBreakpointValue({
+    base: "28px",
+    sm: "30px",
+    md: "34px",
+    lg: "36px",
+    "2xl": "40px",
+  });
+
+  const searchH = useBreakpointValue({
+    base: "40px",
+    md: "44px",
+    lg: "44px",
+    "2xl": "46px",
+  });
+
+  const searchFont = useBreakpointValue({ base: "sm", md: "md" });
+
+  const effectiveHeaderH = headerH;
 
   return (
-    <Box minH="100vh" bg={bgPage} display="flex" flexDirection="column">
-      {/* ===== HEADER CLIENTE ===== */}
-      <Box
+    <Box bg={bgPage} minH="100vh">
+      {/* ===== HEADER CLIENTE (fixed + hide on scroll solo base/md) ===== */}
+      <MotionBox
         as="header"
-        position="sticky"
+        ref={headerRef}
+        position="fixed"
         top={0}
+        left={0}
+        right={0}
         zIndex="overlay"
         bg={headerBg}
         borderBottom="1px solid"
         borderColor={borderColor}
         boxShadow={headerShadow}
+        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        style={{
+          willChange: "transform",
+          pointerEvents: hideOnScroll && hideHeader ? "none" : "auto",
+        }}
       >
-        <Container maxW="7xl" px={{ base: 3, md: 5 }} py={{ base: 2, md: 3 }}>
-          {/* FILA 1 (MOBILE: se oculta al bajar) */}
-          <Collapse in={!isMobile || !compactHeader} animateOpacity unmountOnExit>
-            <Flex align="center" justify="space-between" gap={{ base: 2, md: 4 }} wrap="nowrap">
-              <HStack spacing={3} minW={0}>
-                <Image
-                  src="/LOGOFERREEXPRESS.jpg"
-                  alt="FerreExpress S.A.S."
-                  h={{ base: "32px", md: "40px" }}
-                  objectFit="contain"
-                />
-              </HStack>
+        <Container
+          maxW="7xl"
+          px={{ base: 3, sm: 4, md: 5, lg: 6, "2xl": 8 }}
+          py={{ base: 2, md: 3 }}
+        >
+          {/* FILA 1: Logo + acciones (Drawer en <2xl) */}
+          <Flex align="center" justify="space-between" gap={{ base: 2, md: 4 }} wrap="nowrap">
+            <HStack spacing={3} minW={0}>
+              <Image
+                src="/LOGOFERREEXPRESS.jpg"
+                alt="FerreExpress S.A.S."
+                h={logoH}
+                objectFit="contain"
+              />
+            </HStack>
 
-              <HStack spacing={3}>
-                {isMobile ? (
-                  <>
-                    {/* Carrito móvil */}
-                    <Box position="relative">
-                      <Tooltip label="Carrito" hasArrow>
-                        <IconButton
-                          aria-label="Carrito"
-                          variant="ghost"
-                          color="gray.900"
-                          onClick={() => navigate("/cliente/carrito")}
-                          icon={
-                            <MotionBox
-                              display="inline-flex"
-                              animate={cartBump ? { scale: [1, 1.18, 1] } : { scale: 1 }}
-                              transition={{ duration: 0.25 }}
-                            >
-                              <FiShoppingCart />
-                            </MotionBox>
-                          }
-                        />
-                      </Tooltip>
-                      {cartSkus > 0 && (
-                        <Box
-                          position="absolute"
-                          top="2px"
-                          right="2px"
-                          bg="red.500"
-                          color="white"
-                          borderRadius="full"
-                          minW="16px"
-                          h="16px"
-                          px={0.5}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          fontSize="0.65rem"
-                          fontWeight="bold"
-                          lineHeight="1"
-                        >
-                          {cartSkus > 9 ? "9+" : cartSkus}
-                        </Box>
-                      )}
-                    </Box>
+            <HStack spacing={2}>
+              {/* ✅ En <2xl: iconos + menú. En 2xl: (nav completa abajo) */}
+              {useDrawerNav && (
+                <>
+                  {/* Carrito */}
+                  <Box position="relative">
+                    <Tooltip label="Carrito" hasArrow>
+                      <IconButton
+                        aria-label="Carrito"
+                        variant="ghost"
+                        color="gray.900"
+                        onClick={() => navigate("/cliente/carrito")}
+                        icon={
+                          <MotionBox
+                            display="inline-flex"
+                            animate={cartBump ? { scale: [1, 1.18, 1] } : { scale: 1 }}
+                            transition={{ duration: 0.25 }}
+                          >
+                            <FiShoppingCart />
+                          </MotionBox>
+                        }
+                      />
+                    </Tooltip>
+                    {cartSkus > 0 && (
+                      <Box
+                        position="absolute"
+                        top="2px"
+                        right="2px"
+                        bg="red.500"
+                        color="white"
+                        borderRadius="full"
+                        minW="16px"
+                        h="16px"
+                        px={0.5}
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                        fontSize="0.65rem"
+                        fontWeight="bold"
+                        lineHeight="1"
+                      >
+                        {cartSkus > 9 ? "9+" : cartSkus}
+                      </Box>
+                    )}
+                  </Box>
 
-                    {/* Campanita móvil */}
-                    <Popover
-                      placement="bottom-end"
-                      onOpen={() => fetchNotificaciones({ silent: false })}
-                      closeOnBlur
-                    >
-                      <PopoverTrigger>
-                        <Box position="relative">
-                          <Tooltip label="Notificaciones" hasArrow>
-                            <IconButton
-                              aria-label="Notificaciones"
-                              icon={<FiBell />}
-                              variant="ghost"
-                              color="gray.900"
-                            />
-                          </Tooltip>
-                          {unreadCount > 0 && (
-                            <Box
-                              position="absolute"
-                              top="2px"
-                              right="2px"
-                              bg="red.500"
-                              color="white"
-                              borderRadius="full"
-                              minW="16px"
-                              h="16px"
-                              px={0.5}
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="center"
-                              fontSize="0.65rem"
-                              fontWeight="bold"
-                              lineHeight="1"
-                            >
-                              {unreadCount > 9 ? "9+" : unreadCount}
-                            </Box>
-                          )}
-                        </Box>
-                      </PopoverTrigger>
-                      {renderNotificationsPanel({
-                        notifLoading,
-                        notificaciones,
-                        fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
-                        handleNotificacionClick,
-                        borderColor,
-                      })}
-                    </Popover>
+                  {/* Notificaciones */}
+                  <Popover
+                    placement="bottom-end"
+                    closeOnBlur
+                    onOpen={() => {
+                      setNotifOpen(true);
+                      fetchNotificaciones({ silent: false });
+                    }}
+                    onClose={() => setNotifOpen(false)}
+                  >
+                    <PopoverTrigger>
+                      <Box position="relative">
+                        <Tooltip label="Notificaciones" hasArrow>
+                          <IconButton
+                            aria-label="Notificaciones"
+                            icon={<FiBell />}
+                            variant="ghost"
+                            color="gray.900"
+                          />
+                        </Tooltip>
+                        {unreadCount > 0 && (
+                          <Box
+                            position="absolute"
+                            top="2px"
+                            right="2px"
+                            bg="red.500"
+                            color="white"
+                            borderRadius="full"
+                            minW="16px"
+                            h="16px"
+                            px={0.5}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize="0.65rem"
+                            fontWeight="bold"
+                            lineHeight="1"
+                          >
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </Box>
+                        )}
+                      </Box>
+                    </PopoverTrigger>
+                    {renderNotificationsPanel({
+                      notifLoading,
+                      notificaciones,
+                      fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
+                      handleNotificacionClick,
+                      borderColor,
+                    })}
+                  </Popover>
 
-                    <IconButton
-                      aria-label="Menú"
-                      icon={<FiMenu />}
-                      variant="ghost"
-                      color="gray.900"
-                      onClick={onOpen}
-                    />
-                  </>
-                ) : (
-                  <Box h="32px" w="1px" />
-                )}
-              </HStack>
-            </Flex>
-          </Collapse>
+                  {/* Menú */}
+                  <IconButton
+                    aria-label="Menú"
+                    icon={<FiMenu />}
+                    variant="ghost"
+                    color="gray.900"
+                    onClick={() => {
+                      setShowSuggestions(false);
+                      onOpen();
+                    }}
+                  />
+                </>
+              )}
+            </HStack>
+          </Flex>
 
-          {/* FILA 2: Buscador (siempre visible) */}
-          <Box mt={{ base: compactHeader ? 0 : 2, md: 3 }} position="relative">
+          {/* FILA 2: Buscador */}
+          <Box mt={{ base: 2, md: 3 }} position="relative">
             <Box as="form" onSubmit={handleSearchSubmit}>
               <InputGroup>
                 <InputLeftElement pointerEvents="none" h="100%" pl="3">
                   <FiSearch />
                 </InputLeftElement>
+
                 <Input
                   id="cliente-search"
                   ref={searchInputRef}
@@ -520,10 +587,10 @@ export default function ClienteLayout() {
                     boxShadow: "0 0 0 3px rgba(51,65,85,0.4)",
                   }}
                   rounded="full"
-                  h={{ base: "40px", md: "44px" }}
+                  h={searchH}
                   pl="44px"
-                  pr="96px"
-                  fontSize={{ base: "sm", md: "sm" }}
+                  pr={{ base: "64px", md: "84px", "2xl": "120px" }}
+                  fontSize={searchFont}
                   placeholder="Buscar productos, marcas o códigos…"
                   aria-label="Buscar productos en FerreExpress"
                   value={search}
@@ -536,8 +603,10 @@ export default function ClienteLayout() {
                     if (search.trim().length >= 2) setShowSuggestions(true);
                   }}
                 />
-                <InputRightElement width="88px" h="100%" pr="3" justifyContent="flex-end">
-                  {!isMobile && (
+
+                <InputRightElement width="auto" h="100%" pr="3">
+                  {/* Atajo solo en 2xl */}
+                  {showDesktopNav && search.trim() === "" && (
                     <HStack spacing={2} color="gray.700" fontSize="xs">
                       <Text>Atajo</Text>
                       <Kbd>/</Kbd>
@@ -547,7 +616,7 @@ export default function ClienteLayout() {
               </InputGroup>
             </Box>
 
-            {/* Panel de sugerencias */}
+            {/* Panel sugerencias */}
             <AnimatePresence>
               {showSuggestions && (hasQuery || searchLoading) && (
                 <MotionBox
@@ -567,8 +636,10 @@ export default function ClienteLayout() {
                   borderRadius="xl"
                   boxShadow="lg"
                   zIndex="popover"
-                  maxH="360px"
+                  maxH={{ base: "55vh", md: "360px" }}
                   overflowY="auto"
+                  overscrollBehavior="contain"
+                  sx={{ WebkitOverflowScrolling: "touch" }}
                 >
                   {searchLoading && (
                     <HStack px={4} py={3} spacing={3}>
@@ -627,8 +698,15 @@ export default function ClienteLayout() {
                                 borderColor="blackAlpha.100"
                                 flexShrink={0}
                               >
-                                <Image src={img} alt={p.nombre} w="100%" h="100%" objectFit="contain" />
+                                <Image
+                                  src={img}
+                                  alt={p.nombre}
+                                  w="100%"
+                                  h="100%"
+                                  objectFit="contain"
+                                />
                               </Box>
+
                               <VStack align="flex-start" spacing={0.5} flex="1" minW={0}>
                                 <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
                                   {p.nombre}
@@ -673,195 +751,188 @@ export default function ClienteLayout() {
             </AnimatePresence>
           </Box>
 
-          {/* FILA 3: DESKTOP */}
-          <Box mt={{ base: 0, md: 3 }} display={{ base: "none", md: "block" }}>
-            <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
-            <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
-              <Flex
-                as="nav"
-                align="center"
-                gap={2}
-                overflowX="auto"
-                pb={1}
-                sx={{ "::-webkit-scrollbar": { display: "none" }, scrollbarWidth: "none" }}
-              >
-                {navLeft.map((item) => (
+          {/* FILA 3: NAV COMPLETA SOLO en 2xl */}
+          {showDesktopNav && (
+            <Box mt={3}>
+              <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
+              <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
+                <Flex as="nav" align="center" gap={2} pb={1}>
+                  {navLeft.map((item) => (
+                    <ClienteNavItem
+                      key={item.to}
+                      to={item.to}
+                      icon={item.icon}
+                      label={item.label}
+                      active={isActive(item.to)}
+                      navInactive={navInactive}
+                      navActiveBg={navActiveBg}
+                      navActiveColor={navActiveColor}
+                    />
+                  ))}
+                </Flex>
+
+                <Flex as="nav" align="center" gap={2} pb={1}>
                   <ClienteNavItem
-                    key={item.to}
-                    to={item.to}
-                    icon={item.icon}
-                    label={item.label}
-                    active={isActive(item.to)}
+                    to={navRight[0].to}
+                    icon={navRight[0].icon}
+                    label={navRight[0].label}
+                    active={isActive(navRight[0].to)}
                     navInactive={navInactive}
                     navActiveBg={navActiveBg}
                     navActiveColor={navActiveColor}
                   />
-                ))}
-              </Flex>
 
-              <Flex
-                as="nav"
-                align="center"
-                gap={2}
-                overflowX="auto"
-                pb={1}
-                sx={{ "::-webkit-scrollbar": { display: "none" }, scrollbarWidth: "none" }}
-              >
-                <ClienteNavItem
-                  to={navRight[0].to}
-                  icon={navRight[0].icon}
-                  label={navRight[0].label}
-                  active={isActive(navRight[0].to)}
-                  navInactive={navInactive}
-                  navActiveBg={navActiveBg}
-                  navActiveColor={navActiveColor}
-                />
+                  <ClienteNavItem
+                    to={navRight[1].to}
+                    icon={navRight[1].icon}
+                    label={navRight[1].label}
+                    active={isActive(navRight[1].to)}
+                    navInactive={navInactive}
+                    navActiveBg={navActiveBg}
+                    navActiveColor={navActiveColor}
+                    badgeValue={cartSkus}
+                    isCart
+                    bump={cartBump}
+                  />
 
-                <ClienteNavItem
-                  to={navRight[1].to}
-                  icon={navRight[1].icon}
-                  label={navRight[1].label}
-                  active={isActive(navRight[1].to)}
-                  navInactive={navInactive}
-                  navActiveBg={navActiveBg}
-                  navActiveColor={navActiveColor}
-                  badgeValue={cartSkus}
-                  isCart
-                  bump={cartBump}
-                />
-
-                <Popover
-                  placement="bottom-end"
-                  onOpen={() => fetchNotificaciones({ silent: false })}
-                  closeOnBlur
-                >
-                  <PopoverTrigger>
-                    <Box position="relative">
-                      <Tooltip label="Notificaciones" hasArrow>
-                        <IconButton
-                          aria-label="Notificaciones"
-                          icon={<FiBell />}
-                          size="sm"
-                          variant="ghost"
-                          color="gray.900"
-                        />
-                      </Tooltip>
-                      {unreadCount > 0 && (
-                        <Box
-                          position="absolute"
-                          top="-2px"
-                          right="-2px"
-                          bg="red.500"
-                          color="white"
-                          borderRadius="full"
-                          minW="14px"
-                          h="14px"
-                          px={0.5}
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                          fontSize="0.6rem"
-                          fontWeight="bold"
-                          lineHeight="1"
-                        >
-                          {unreadCount > 9 ? "9+" : unreadCount}
-                        </Box>
-                      )}
-                    </Box>
-                  </PopoverTrigger>
-                  {renderNotificationsPanel({
-                    notifLoading,
-                    notificaciones,
-                    fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
-                    handleNotificacionClick,
-                    borderColor,
-                  })}
-                </Popover>
-
-                <Popover placement="bottom-end">
-                  <PopoverTrigger>
-                    <HStack
-                      as="button"
-                      spacing={1}
-                      px={2.5}
-                      py={1.5}
-                      borderRadius="full"
-                      bg={isActive("/cliente/perfil") ? navActiveBg : "transparent"}
-                      color={navInactive}
-                      _hover={{
-                        textDecoration: "none",
-                        bg: "whiteAlpha.800",
-                        transform: "translateY(-1px)",
-                      }}
-                      transition="background 0.15s ease, transform 0.12s ease"
-                      flexShrink={0}
-                    >
-                      <FiUser size={14} />
-                      <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
-                        {userDisplayName}
-                      </Text>
-                    </HStack>
-                  </PopoverTrigger>
-
-                  <PopoverContent
-                    w="190px"
-                    p={0.5}
-                    bg={navActiveBg}
-                    borderRadius="lg"
-                    boxShadow="xl"
-                    borderColor={borderColor}
-                    _focus={{ boxShadow: "xl" }}
+                  <Popover
+                    placement="bottom-end"
+                    onOpen={() => fetchNotificaciones({ silent: false })}
+                    closeOnBlur
                   >
-                    <VStack spacing={0} align="stretch">
-                      <Box px={3} py={2} mb={1}>
-                        <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                    <PopoverTrigger>
+                      <Box position="relative">
+                        <Tooltip label="Notificaciones" hasArrow>
+                          <IconButton
+                            aria-label="Notificaciones"
+                            icon={<FiBell />}
+                            size="sm"
+                            variant="ghost"
+                            color="gray.900"
+                          />
+                        </Tooltip>
+                        {unreadCount > 0 && (
+                          <Box
+                            position="absolute"
+                            top="-2px"
+                            right="-2px"
+                            bg="red.500"
+                            color="white"
+                            borderRadius="full"
+                            minW="14px"
+                            h="14px"
+                            px={0.5}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize="0.6rem"
+                            fontWeight="bold"
+                            lineHeight="1"
+                          >
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </Box>
+                        )}
+                      </Box>
+                    </PopoverTrigger>
+                    {renderNotificationsPanel({
+                      notifLoading,
+                      notificaciones,
+                      fetchNotificaciones: () => fetchNotificaciones({ silent: false }),
+                      handleNotificacionClick,
+                      borderColor,
+                    })}
+                  </Popover>
+
+                  <Popover placement="bottom-end">
+                    <PopoverTrigger>
+                      <HStack
+                        as="button"
+                        spacing={1}
+                        px={2.5}
+                        py={1.5}
+                        borderRadius="full"
+                        bg={isActive("/cliente/perfil") ? navActiveBg : "transparent"}
+                        color={navInactive}
+                        _hover={{
+                          textDecoration: "none",
+                          bg: "whiteAlpha.800",
+                          transform: "translateY(-1px)",
+                        }}
+                        transition="background 0.15s ease, transform 0.12s ease"
+                        flexShrink={0}
+                      >
+                        <FiUser size={14} />
+                        <Text fontSize="xs" fontWeight="medium" noOfLines={1}>
                           {userDisplayName}
                         </Text>
-                        <Text fontSize="xs" color="gray.500" noOfLines={1}>
-                          {userEmail}
-                        </Text>
-                      </Box>
+                      </HStack>
+                    </PopoverTrigger>
 
-                      <Divider my={1} borderColor={borderColor} />
+                    <PopoverContent
+                      w="190px"
+                      p={0.5}
+                      bg={navActiveBg}
+                      borderRadius="lg"
+                      boxShadow="xl"
+                      borderColor={borderColor}
+                      _focus={{ boxShadow: "xl" }}
+                    >
+                      <VStack spacing={0} align="stretch">
+                        <Box px={3} py={2} mb={1}>
+                          <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                            {userDisplayName}
+                          </Text>
+                          <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                            {userEmail}
+                          </Text>
+                        </Box>
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        justifyContent="flex-start"
-                        leftIcon={<FiUser />}
-                        onClick={() => navigate("/cliente/perfil")}
-                        color={navInactive}
-                        _hover={{ bg: panelSubtleBg, color: "gray.900" }}
-                        borderRadius="md"
-                        fontSize="sm"
-                      >
-                        Mi Perfil
-                      </Button>
+                        <Divider my={1} borderColor={borderColor} />
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        justifyContent="flex-start"
-                        leftIcon={<FiLogOut />}
-                        onClick={handleLogout}
-                        color="red.500"
-                        _hover={{ bg: "red.50", color: "red.600" }}
-                        borderRadius="md"
-                        fontSize="sm"
-                      >
-                        Cerrar Sesión
-                      </Button>
-                    </VStack>
-                  </PopoverContent>
-                </Popover>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          justifyContent="flex-start"
+                          leftIcon={<FiUser />}
+                          onClick={() => navigate("/cliente/perfil")}
+                          color={navInactive}
+                          _hover={{ bg: panelSubtleBg, color: "gray.900" }}
+                          borderRadius="md"
+                          fontSize="sm"
+                        >
+                          Mi Perfil
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          justifyContent="flex-start"
+                          leftIcon={<FiLogOut />}
+                          onClick={handleLogout}
+                          color="red.500"
+                          _hover={{ bg: "red.50", color: "red.600" }}
+                          borderRadius="md"
+                          fontSize="sm"
+                        >
+                          Cerrar Sesión
+                        </Button>
+                      </VStack>
+                    </PopoverContent>
+                  </Popover>
+                </Flex>
               </Flex>
-            </Flex>
-          </Box>
+            </Box>
+          )}
         </Container>
-      </Box>
+      </MotionBox>
 
-      {/* ===== DRAWER MOBILE ===== */}
-      <Drawer isOpen={isOpen} onClose={onClose} placement="right">
+      {/* ===== DRAWER (<2xl) ===== */}
+      <Drawer
+        isOpen={useDrawerNav ? isOpen : false}
+        onClose={onClose}
+        placement="right"
+        size={{ base: "full", sm: "sm" }}
+      >
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
@@ -934,94 +1005,113 @@ export default function ClienteLayout() {
         </DrawerContent>
       </Drawer>
 
-      {/* ===== CONTENIDO ===== */}
-      <Box as="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
-        <Container maxW="7xl">
-          <Outlet />
-        </Container>
-      </Box>
-
-      {/* ===== FOOTER ===== */}
-      <Box
-        as="footer"
-        w="full"
-        bg={footerBg}
-        py={{ base: 6, md: 8 }}
-        borderTop="1px solid"
-        borderColor={borderColor}
-        mt="auto"
-        boxShadow="0 -4px 20px rgba(0,0,0,0.06)"
+      {/* ===== CONTENIDO + FOOTER (se mueve junto con el header) ===== */}
+      <MotionBox
+        style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
+        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        minH="100vh"
+        display="flex"
+        flexDirection="column"
       >
-        <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 6, lg: 8 }}>
-          <Grid
-            templateColumns={{ base: "1fr", md: "1fr auto 1fr" }}
-            alignItems="center"
-            gap={{ base: 6, md: 8 }}
-          >
-            <HStack justify={{ base: "center", md: "flex-start" }}>
-              <Image
-                src="/LOGOFERREEXPRESS.png"
-                alt="FerreExpress S.A.S."
-                h={{ base: "36px", sm: "42px", md: "48px" }}
-                objectFit="contain"
-                transition="transform 0.2s"
-                _hover={{ transform: "scale(1.06)" }}
-              />
-            </HStack>
+        <Box as="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
+          <Container maxW="7xl">
+            <Outlet />
+          </Container>
+        </Box>
 
-            <HStack spacing={{ base: 6, md: 10 }} justify="center" fontSize={{ base: "sm", md: "md" }} fontWeight="medium">
-              <Button
-                as={RouterLink}
-                to="condiciones-uso-cliente"   // ← sin barra inicial
-                variant="link"
-                color="blue.600"
-                _hover={{ color: "blue.700" }}
+        {/* ===== FOOTER ===== */}
+        <Box
+          as="footer"
+          w="full"
+          bg={footerBg}
+          py={{ base: 6, md: 8 }}
+          borderTop="1px solid"
+          borderColor={borderColor}
+          mt="auto"
+          boxShadow="0 -4px 20px rgba(0,0,0,0.06)"
+        >
+          <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 6, lg: 8 }}>
+            <Grid
+              templateColumns={{ base: "1fr", md: "1fr auto 1fr" }}
+              alignItems="center"
+              gap={{ base: 6, md: 8 }}
+            >
+              <HStack justify={{ base: "center", md: "flex-start" }}>
+                <Image
+                  src="/LOGOFERREEXPRESS.png"
+                  alt="FerreExpress S.A.S."
+                  h={{ base: "36px", sm: "42px", md: "48px" }}
+                  objectFit="contain"
+                  transition="transform 0.2s"
+                  _hover={{ transform: "scale(1.06)" }}
+                />
+              </HStack>
+
+              <HStack
+                spacing={{ base: 6, md: 10 }}
+                justify="center"
+                fontSize={{ base: "sm", md: "md" }}
+                fontWeight="medium"
               >
-                Condiciones de uso
-              </Button>
-              <Button
-                as={RouterLink}
-                to="avisos-privacidad-cliente" // ← sin barra inicial
-                variant="link"
-                color="blue.600"
-                _hover={{ color: "blue.700" }}
-              >
-                Avisos de privacidad
-              </Button>
-            </HStack>
+                <Button
+                  as={RouterLink}
+                  to="condiciones-uso-cliente"
+                  variant="link"
+                  color="blue.600"
+                  _hover={{ color: "blue.700" }}
+                >
+                  Condiciones de uso
+                </Button>
+                <Button
+                  as={RouterLink}
+                  to="avisos-privacidad-cliente"
+                  variant="link"
+                  color="blue.600"
+                  _hover={{ color: "blue.700" }}
+                >
+                  Avisos de privacidad
+                </Button>
+              </HStack>
 
-            <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
-              {[
-                { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366" },
-                { Icon: FaInstagram, label: "Instagram", color: "#E4405F" },
-                { Icon: FaFacebook, label: "Facebook", color: "#1877F2" },
-                { Icon: FaXTwitter, label: "X", color: "#000000" },
-              ].map((social) => (
-                <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
-                  <IconButton
-                    as="a"
-                    href="#"
-                    target="_blank"
-                    rel="noopener"
-                    aria-label={social.label}
-                    icon={<social.Icon size={24} />}
-                    variant="ghost"
-                    color={muted}
-                    _hover={{ color: social.color, bg: "blackAlpha.100" }}
-                    rounded="full"
-                  />
-                </MotionBox>
-              ))}
-            </HStack>
+              <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
+                {[
+                  { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366" },
+                  { Icon: FaInstagram, label: "Instagram", color: "#E4405F" },
+                  { Icon: FaFacebook, label: "Facebook", color: "#1877F2" },
+                  { Icon: FaXTwitter, label: "X", color: "#000000" },
+                ].map((social) => (
+                  <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
+                    <IconButton
+                      as="a"
+                      href="#"
+                      target="_blank"
+                      rel="noopener"
+                      aria-label={social.label}
+                      icon={<social.Icon size={24} />}
+                      variant="ghost"
+                      color={muted}
+                      _hover={{ color: social.color, bg: "blackAlpha.100" }}
+                      rounded="full"
+                    />
+                  </MotionBox>
+                ))}
+              </HStack>
 
-            <GridItem colSpan={{ base: 1, md: 3 }} mt={{ base: 6, md: 8 }}>
-              <Text fontSize={{ base: "xs", md: "sm" }} color={muted} textAlign="center" fontWeight="medium">
-                © {new Date().getFullYear()} FerreExpress® • Todos los derechos reservados
-              </Text>
-            </GridItem>
-          </Grid>
-        </Container>
-      </Box>
+              <GridItem colSpan={{ base: 1, md: 3 }} mt={{ base: 6, md: 8 }}>
+                <Text
+                  fontSize={{ base: "xs", md: "sm" }}
+                  color={muted}
+                  textAlign="center"
+                  fontWeight="medium"
+                >
+                  © {new Date().getFullYear()} FerreExpress® • Todos los derechos reservados
+                </Text>
+              </GridItem>
+            </Grid>
+          </Container>
+        </Box>
+      </MotionBox>
     </Box>
   );
 }

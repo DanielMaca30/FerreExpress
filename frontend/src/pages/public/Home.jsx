@@ -469,22 +469,33 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     };
   }, [handleScroll, loading, items]);
 
-  // wheel horizontal SOLO desktop (listener NO passive)
+  // wheel horizontal SOLO desktop (solo cuando el usuario lo indica)
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-    if (isMobile) return;
+    if (!el || isMobile) return;
 
     const wheel = (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-      }
+      const isTrackpadHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      const wantsHorizontal = e.shiftKey || isTrackpadHorizontal;
+
+      // Si NO es intención horizontal, deja que el scroll vertical suba/baje la página
+      if (!wantsHorizontal) return;
+
+      // Si no hay overflow horizontal real, no bloquees nada
+      if (el.scrollWidth <= el.clientWidth + 1) return;
+
+      // Shift+Wheel usa deltaY; trackpad horizontal usa deltaX
+      const delta = e.shiftKey ? e.deltaY : e.deltaX;
+      if (!delta) return;
+
+      e.preventDefault();
+      el.scrollLeft += delta;
     };
 
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
+
 
   const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 

@@ -2,6 +2,8 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const swaggerUi = require("swagger-ui-express");
+const YAML = require("yamljs");
 require("dotenv").config();
 
 // Autenticación Google / sesiones
@@ -20,6 +22,9 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1); // ✅ necesario si estás detrás de proxy (Railway/Render/etc)
 
 app.use(express.json({ limit: "2mb" }));
+
+const swaggerDocument = YAML.load(path.join(__dirname, "../docs/openapi.yaml"));
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Archivos estáticos
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));

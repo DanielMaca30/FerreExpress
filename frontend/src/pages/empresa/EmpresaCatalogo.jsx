@@ -450,19 +450,23 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
 
   useEffect(() => {
     const el = scrollerRef.current;
-    if (!el) return;
-    if (isMobile) return;
+    if (!el || isMobile) return;
 
     const wheel = (e) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY;
-      }
+      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5;       
+      const wantsHorizontalByShift = e.shiftKey && Math.abs(e.deltaY) > 0.5;
+
+      if (!hasRealHorizontal && !wantsHorizontalByShift) return;
+
+      e.preventDefault();
+      const delta = wantsHorizontalByShift ? e.deltaY : e.deltaX;
+      el.scrollLeft += delta;
     };
 
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
+
 
   const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 

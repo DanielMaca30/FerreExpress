@@ -17,8 +17,7 @@ import {
   InputLeftElement,
   InputRightElement,
   Kbd,
-  Button,                    // ← AQUÍ ESTABA EL PROBLEMA - ahora está importado
-  Collapse,
+  Button,
   Drawer,
   DrawerOverlay,
   DrawerContent,
@@ -43,25 +42,20 @@ import {
   FiMapPin,
   FiMenu,
 } from "react-icons/fi";
-import {
-  FaWhatsapp,
-  FaInstagram,
-  FaFacebook,
-  FaXTwitter,
-} from "react-icons/fa6";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import api, { API_BASE_URL } from "../utils/axiosInstance";
+
 const MotionBox = motion(Box);
 
 export default function PublicLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const disclosure = useDisclosure();
+  const { isOpen, onOpen, onClose } = disclosure;
 
   const bgPage = useColorModeValue("#f6f7f9", "#0f1117");
   const headerBg = "#f8bd22";
-  const footerBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("blackAlpha.200", "blackAlpha.400");
   const navInactive = useColorModeValue("gray.800", "gray.100");
   const navActiveBg = useColorModeValue("white", "whiteAlpha.200");
@@ -70,13 +64,24 @@ export default function PublicLayout() {
   const panelBg = useColorModeValue("white", "gray.800");
   const panelSubtleBg = useColorModeValue("gray.50", "whiteAlpha.100");
 
-  const isMobile = useBreakpointValue({ base: true, md: false });
   const pathname = location.pathname;
 
+  const hideNavbarRoutes = ["/forgot-password", "/verify-reset", "/reset-password"];
+  const hideNavbar = hideNavbarRoutes.includes(pathname);
+
+  // ================== BREAKPOINTS “GENERALES” ==================
+  // - base/sm/md: móvil + tablet
+  // - lg/xl: laptop
+  // - 2xl: desktop grande (PC de mesa)
+  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true }); // ≥1536px
+  const showDesktopNav = !!isDesktopLarge; // fila 3 solo en 2xl (evita header gigante en laptop)
+  const useDrawerNav = !showDesktopNav;
+
+  // ✅ Ocultar header SOLO en móvil+tablet (base–md), NO en laptop/pc
+  const hideOnScroll = useBreakpointValue({ base: true, md: true, lg: false });
+
   const isActive = (to) => {
-    if (to === "/Home") {
-      return pathname === "/Home" || pathname === "/";
-    }
+    if (to === "/Home") return pathname === "/Home" || pathname === "/";
     return pathname === to || pathname.startsWith(to + "/");
   };
 
@@ -93,16 +98,11 @@ export default function PublicLayout() {
   const handleSearchSubmit = (e) => {
     if (e) e.preventDefault();
     const term = search.trim();
-
     if (!term) return;
 
     setShowSuggestions(false);
-    setSearch(""); // opcional: limpiar el input después de buscar
-
-    // Navegamos a la página principal pública con el parámetro de búsqueda
+    setSearch("");
     navigate(`/Home?search=${encodeURIComponent(term)}`);
-    // O si tu página principal es simplemente "/", puedes usar:
-    // navigate(`/?search=${encodeURIComponent(term)}`);
   };
 
   // Atajos de teclado
@@ -112,7 +112,8 @@ export default function PublicLayout() {
       if (!input) return;
 
       const tag = (e.target.tagName || "").toLowerCase();
-      const typing = tag === "input" || tag === "textarea" || e.target.isContentEditable;
+      const typing =
+        tag === "input" || tag === "textarea" || e.target.isContentEditable;
 
       if (e.key === "/" && !typing) {
         e.preventDefault();
@@ -144,16 +145,13 @@ export default function PublicLayout() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showSuggestions]);
 
-  // Debounce para búsqueda de sugerencias
+  // Debounce sugerencias
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search.trim());
-    }, 300);
-
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Búsqueda real a la API para sugerencias
+  // Llamado API sugerencias
   useEffect(() => {
     if (debouncedSearch.length < 2) {
       setSearchResults([]);
@@ -165,13 +163,9 @@ export default function PublicLayout() {
     setSearchLoading(true);
 
     api
-      .get("/productos", {
-        params: { search: debouncedSearch, limit: 8, page: 1 },
-      })
+      .get("/productos", { params: { search: debouncedSearch, limit: 8, page: 1 } })
       .then((res) => {
-        if (!cancelled) {
-          setSearchResults(res.data?.productos || []);
-        }
+        if (!cancelled) setSearchResults(res.data?.productos || []);
       })
       .catch((err) => {
         if (!cancelled) console.error("Error buscando productos:", err);
@@ -188,59 +182,88 @@ export default function PublicLayout() {
   const handleSelectProduct = (producto) => {
     setShowSuggestions(false);
     setSearch("");
-    if (producto?.id) {
-      navigate(`/producto/${producto.id}`);
-    }
+    if (producto?.id) navigate(`/producto/${producto.id}`);
   };
 
   const hasQuery = debouncedSearch.length >= 2;
   const hasResults = searchResults.length > 0;
 
-  // ================== Compact header en mobile ==================
-  const [compactHeader, setCompactHeader] = useState(false);
-  const lastScrollYRef = useRef(0);
-  const tickingRef = useRef(false);
+  // ================== HEADER HIDE “PRO” (transform, sin reflow) ==================
+  const headerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(0);
 
+  const [hideHeader, setHideHeader] = useState(false);
+  const hideHeaderRef = useRef(false);
+
+  // medir altura real del header
+  useLayoutEffect(() => {
+    if (hideNavbar) return;
+    const el = headerRef.current;
+    if (!el) return;
+
+    const measure = () => setHeaderH(el.getBoundingClientRect().height || 0);
+    measure();
+
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [hideNavbar]);
+
+  // si no aplica hideOnScroll (laptop/pc), forzar visible
   useEffect(() => {
-    if (!isMobile || hideNavbar) {
-      setCompactHeader(false);
+    if (hideNavbar || !hideOnScroll) {
+      hideHeaderRef.current = false;
+      setHideHeader(false);
       return;
     }
 
-    lastScrollYRef.current = window.scrollY || 0;
+    let lastY = window.scrollY || 0;
+    let ticking = false;
 
-    const MIN_Y_TO_COLLAPSE = 56;
+    const THRESHOLD = Math.max(90, headerH + 12);
     const DELTA = 10;
 
     const onScroll = () => {
-      if (tickingRef.current) return;
-      tickingRef.current = true;
+      // Evita toggles mientras hay overlays o foco en input
+      if (isOpen) return;
+      if (showSuggestions) return;
+      if (document.activeElement === searchInputRef.current) return;
+
+      if (ticking) return;
+      ticking = true;
 
       window.requestAnimationFrame(() => {
         const y = window.scrollY || 0;
-        const prev = lastScrollYRef.current;
-        const diff = y - prev;
+        const diff = y - lastY;
 
-        if (y < 10) {
-          setCompactHeader(false);
-        } else {
-          if (diff > DELTA && y > MIN_Y_TO_COLLAPSE) setCompactHeader(true);
-          if (diff < -DELTA) setCompactHeader(false);
+        let next = hideHeaderRef.current;
+
+        if (y < 10) next = false;
+        else if (diff > DELTA && y > THRESHOLD) next = true;
+        else if (diff < -DELTA) next = false;
+
+        if (next !== hideHeaderRef.current) {
+          hideHeaderRef.current = next;
+          setHideHeader(next);
+          if (next) setShowSuggestions(false);
         }
 
-        lastScrollYRef.current = y;
-        tickingRef.current = false;
+        lastY = y;
+        ticking = false;
       });
     };
 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [isMobile]);
-
-  const hideNavbarRoutes = ["/forgot-password", "/verify-reset", "/reset-password"];
-  const hideNavbar = hideNavbarRoutes.includes(pathname);
+  }, [hideNavbar, hideOnScroll, headerH, isOpen, showSuggestions]);
 
   const headerShadow = "0 3px 14px rgba(0,0,0,0.25)";
+  const effectiveHeaderH = hideNavbar ? 0 : headerH;
 
   // Navegación
   const navLeft = [
@@ -255,70 +278,88 @@ export default function PublicLayout() {
     { to: "/Login", label: "Iniciar sesión", icon: FiUser },
   ];
 
+  // tamaños “responsivos” clave (altura/logo/input)
+  const logoH = useBreakpointValue({ base: "28px", sm: "30px", md: "34px", lg: "36px", "2xl": "40px" });
+  const searchH = useBreakpointValue({ base: "40px", md: "44px", lg: "44px", "2xl": "46px" });
+  const searchFont = useBreakpointValue({ base: "sm", md: "md" });
+
   return (
-    <Box minH="100vh" bg={bgPage} display="flex" flexDirection="column">
+    <Box bg={bgPage} minH="100vh">
       {/* ===== HEADER ===== */}
       {!hideNavbar && (
-        <Box
+        <MotionBox
           as="header"
-          position="sticky"
+          ref={headerRef}
+          position="fixed"
           top={0}
+          left={0}
+          right={0}
           zIndex="overlay"
           bg={headerBg}
           borderBottom="1px solid"
           borderColor={borderColor}
           boxShadow={headerShadow}
+          animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          style={{
+            willChange: "transform",
+            pointerEvents: hideOnScroll && hideHeader ? "none" : "auto",
+          }}
         >
           <VisuallyHidden as="a" href="#main">
             Saltar al contenido
           </VisuallyHidden>
 
-          <Container maxW="7xl" px={{ base: 3, md: 5 }} py={{ base: 2, md: 3 }}>
+          <Container
+            maxW="7xl"
+            px={{ base: 3, sm: 4, md: 5, lg: 6, "2xl": 8 }}
+            py={{ base: 2, md: 3 }}
+          >
             {/* FILA 1 - Logo + acciones */}
-            <Collapse in={!isMobile || !compactHeader} animateOpacity unmountOnExit>
-              <Flex align="center" justify="space-between" gap={{ base: 2, md: 4 }}>
-                <HStack spacing={3} minW={0}>
-                  <CLink as={RouterLink} to="/Home" _hover={{ opacity: 0.9 }} aria-label="Ir al inicio">
-                    <Image
-                      src="/LOGOFERREEXPRESS.jpg"
-                      alt="FerreExpress S.A.S."
-                      h={{ base: "32px", md: "40px" }}
-                      objectFit="contain"
+            <Flex align="center" justify="space-between" gap={{ base: 2, md: 4 }}>
+              <HStack spacing={3} minW={0}>
+                <CLink as={RouterLink} to="/Home" _hover={{ opacity: 0.9 }} aria-label="Ir al inicio">
+                  <Image
+                    src="/LOGOFERREEXPRESS.jpg"
+                    alt="FerreExpress S.A.S."
+                    h={logoH}
+                    objectFit="contain"
+                  />
+                </CLink>
+              </HStack>
+
+              {/* ✅ Carrito + Menú solo cuando usamos Drawer (NO en desktop 2xl) */}
+              <HStack spacing={2}>
+                {useDrawerNav && (
+                  <>
+                    <CLink as={RouterLink} to="/Login" aria-label="Carrito">
+                      <Tooltip label="Carrito" hasArrow>
+                        <IconButton
+                          aria-label="Carrito"
+                          variant="ghost"
+                          color="gray.900"
+                          icon={<FiShoppingCart />}
+                        />
+                      </Tooltip>
+                    </CLink>
+
+                    <IconButton
+                      aria-label="Menú"
+                      icon={<FiMenu />}
+                      variant="ghost"
+                      color="gray.900"
+                      onClick={() => {
+                        setShowSuggestions(false);
+                        onOpen();
+                      }}
                     />
-                  </CLink>
-                </HStack>
+                  </>
+                )}
+              </HStack>
+            </Flex>
 
-                <HStack spacing={3}>
-                  {isMobile ? (
-                    <>
-                      <CLink as={RouterLink} to="/Login" aria-label="Carrito">
-                        <Tooltip label="Carrito" hasArrow>
-                          <IconButton
-                            aria-label="Carrito"
-                            variant="ghost"
-                            color="gray.900"
-                            icon={<FiShoppingCart />}
-                          />
-                        </Tooltip>
-                      </CLink>
-
-                      <IconButton
-                        aria-label="Menú"
-                        icon={<FiMenu />}
-                        variant="ghost"
-                        color="gray.900"
-                        onClick={onOpen}
-                      />
-                    </>
-                  ) : (
-                    <Box h="32px" w="1px" />
-                  )}
-                </HStack>
-              </Flex>
-            </Collapse>
-
-            {/* FILA 2: BUSCADOR + BOTÓN DE LUPA */}
-            <Box mt={{ base: compactHeader ? 0 : 2, md: 3 }} position="relative">
+            {/* FILA 2: BUSCADOR */}
+            <Box mt={{ base: 2, md: 3 }} position="relative">
               <Box as="form" onSubmit={handleSearchSubmit}>
                 <InputGroup>
                   <InputLeftElement pointerEvents="none" h="100%" pl="3">
@@ -336,16 +377,17 @@ export default function PublicLayout() {
                       boxShadow: "0 0 0 3px rgba(51,65,85,0.4)",
                     }}
                     rounded="full"
-                    h={{ base: "40px", md: "44px" }}
+                    h={searchH}
                     pl="44px"
-                    pr={{ base: "80px", md: "120px" }} // espacio para botón + atajo
-                    fontSize={{ base: "sm", md: "md" }}
+                    pr={{ base: "64px", md: "84px", "2xl": "120px" }}
+                    fontSize={searchFont}
                     placeholder="Buscar productos, marcas o códigos…"
                     aria-label="Buscar productos en FerreExpress"
                     value={search}
                     onChange={(e) => {
-                      setSearch(e.target.value);
-                      setShowSuggestions(e.target.value.trim().length >= 2);
+                      const v = e.target.value;
+                      setSearch(v);
+                      setShowSuggestions(v.trim().length >= 2);
                     }}
                     onFocus={() => {
                       if (search.trim().length >= 2) setShowSuggestions(true);
@@ -354,15 +396,14 @@ export default function PublicLayout() {
 
                   <InputRightElement width="auto" pr={3} h="100%">
                     <HStack spacing={2}>
-                      {/* Atajo solo cuando está vacío (desktop) */}
-                      {!isMobile && search.trim() === "" && (
+                      {/* ✅ Atajo solo en desktop grande (2xl) */}
+                      {showDesktopNav && search.trim() === "" && (
                         <HStack spacing={1} color="gray.600" fontSize="xs" pr={2}>
                           <Text>Atajo</Text>
                           <Kbd>/</Kbd>
                         </HStack>
                       )}
 
-                      {/* Botón de búsqueda - aparece cuando hay texto */}
                       {search.trim() !== "" && (
                         <IconButton
                           aria-label="Realizar búsqueda"
@@ -399,8 +440,10 @@ export default function PublicLayout() {
                     borderRadius="xl"
                     boxShadow="lg"
                     zIndex="popover"
-                    maxH="360px"
+                    maxH={{ base: "55vh", md: "360px" }}
                     overflowY="auto"
+                    overscrollBehavior="contain"
+                    sx={{ WebkitOverflowScrolling: "touch" }}
                   >
                     {searchLoading && (
                       <HStack px={4} py={3} spacing={3}>
@@ -467,6 +510,7 @@ export default function PublicLayout() {
                                     objectFit="contain"
                                   />
                                 </Box>
+
                                 <VStack align="flex-start" spacing={0.5} flex="1" minW={0}>
                                   <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>
                                     {p.nombre}
@@ -476,11 +520,7 @@ export default function PublicLayout() {
                                       {price}
                                     </Text>
                                     {p.categoria && (
-                                      <Badge
-                                        variant="subtle"
-                                        colorScheme="yellow"
-                                        fontSize="0.65rem"
-                                      >
+                                      <Badge variant="subtle" colorScheme="yellow" fontSize="0.65rem">
                                         {p.categoria}
                                       </Badge>
                                     )}
@@ -501,7 +541,7 @@ export default function PublicLayout() {
                       bg={panelSubtleBg}
                       fontSize="xs"
                       color={muted}
-                      display={{ base: "none", md: "flex" }}
+                      display={{ base: "none", "2xl": "flex" }}
                       alignItems="center"
                       gap={2}
                     >
@@ -515,67 +555,54 @@ export default function PublicLayout() {
               </AnimatePresence>
             </Box>
 
-            {/* FILA 3: Navegación desktop */}
-            <Box mt={{ base: 0, md: 3 }} display={{ base: "none", md: "block" }}>
-              <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
-              <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
-                <Flex
-                  as="nav"
-                  align="center"
-                  gap={2}
-                  overflowX="auto"
-                  pb={1}
-                  sx={{
-                    "::-webkit-scrollbar": { display: "none" },
-                    scrollbarWidth: "none",
-                  }}
-                >
-                  {navLeft.map((item) => (
-                    <PublicNavItem
-                      key={item.to}
-                      to={item.to}
-                      icon={item.icon}
-                      label={item.label}
-                      active={isActive(item.to)}
-                      navInactive={navInactive}
-                      navActiveBg={navActiveBg}
-                      navActiveColor={navActiveColor}
-                    />
-                  ))}
-                </Flex>
+            {/* FILA 3: Nav visible SOLO en desktop grande (2xl) */}
+            {showDesktopNav && (
+              <Box mt={3}>
+                <Divider borderColor="blackAlpha.200" mb={2} opacity={0.5} />
+                <Flex mt={1} align="center" justify="space-between" gap={4} wrap="nowrap">
+                  <Flex as="nav" align="center" gap={2} pb={1}>
+                    {navLeft.map((item) => (
+                      <PublicNavItem
+                        key={item.to}
+                        to={item.to}
+                        icon={item.icon}
+                        label={item.label}
+                        active={isActive(item.to)}
+                        navInactive={navInactive}
+                        navActiveBg={navActiveBg}
+                        navActiveColor={navActiveColor}
+                      />
+                    ))}
+                  </Flex>
 
-                <Flex
-                  as="nav"
-                  align="center"
-                  gap={2}
-                  overflowX="auto"
-                  pb={1}
-                  sx={{
-                    "::-webkit-scrollbar": { display: "none" },
-                    scrollbarWidth: "none",
-                  }}
-                >
-                  {navRight.map((item) => (
-                    <PublicNavItem
-                      key={item.to + item.label}
-                      to={item.to}
-                      icon={item.icon}
-                      label={item.label}
-                      active={item.label === "Iniciar sesión" ? isActive(item.to) : false}
-                      navInactive={navInactive}
-                      navActiveBg={navActiveBg}
-                      navActiveColor={navActiveColor}
-                    />
-                  ))}
+                  <Flex as="nav" align="center" gap={2} pb={1}>
+                    {navRight.map((item) => (
+                      <PublicNavItem
+                        key={item.to + item.label}
+                        to={item.to}
+                        icon={item.icon}
+                        label={item.label}
+                        active={item.label === "Iniciar sesión" ? isActive(item.to) : false}
+                        navInactive={navInactive}
+                        navActiveBg={navActiveBg}
+                        navActiveColor={navActiveColor}
+                      />
+                    ))}
+                  </Flex>
                 </Flex>
-              </Flex>
-            </Box>
+              </Box>
+            )}
           </Container>
-        </Box>
+        </MotionBox>
       )}
 
-      {/* Drawer Mobile */}
-      <Drawer isOpen={isOpen} onClose={onClose} placement="right">
+      {/* Drawer (móvil/tablet/laptop) */}
+      <Drawer
+        isOpen={useDrawerNav ? isOpen : false}
+        onClose={onClose}
+        placement="right"
+        size={{ base: "full", sm: "sm" }}
+      >
         <DrawerOverlay />
         <DrawerContent>
           <DrawerCloseButton />
@@ -638,26 +665,26 @@ export default function PublicLayout() {
       </Drawer>
 
       {/* Contenido principal */}
-      <Box as="main" id="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
-        <Container maxW="7xl">
-          <Outlet />
-        </Container>
-      </Box>
-
-      {/* Aquí iría tu footer */}
+      <MotionBox
+        style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
+        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        minH="100vh"
+        display="flex"
+        flexDirection="column"
+      >
+        <Box as="main" id="main" flex="1" bg={bgPage} px={{ base: 2, md: 4 }} py={{ base: 3, md: 4 }}>
+          <Container maxW="7xl">
+            <Outlet />
+          </Container>
+        </Box>
+        {/* footer aquí */}
+      </MotionBox>
     </Box>
   );
 }
 
-function PublicNavItem({
-  to,
-  icon: Icon,
-  label,
-  active,
-  navInactive,
-  navActiveBg,
-  navActiveColor,
-}) {
+function PublicNavItem({ to, icon: Icon, label, active, navInactive, navActiveBg, navActiveColor }) {
   return (
     <HStack
       as={RouterLink}

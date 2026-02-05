@@ -1,0 +1,1187 @@
+openapi: 3.0.0
+info:
+  title: API FerreExpress
+  version: 1.0.0
+  description: Documentación de la API (roles, JWT, módulos).
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local (API v1)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Admin
+  - name: Protected
+  - name: Productos
+  - name: Pedidos
+  - name: Cotizaciones
+  - name: Casos
+  - name: FAQ
+  - name: Descuentos
+  - name: Direcciones
+  - name: Notificaciones
+  - name: Pagos
+  - name: Auditoría
+  - name: Carrito
+  - name: Usuarios
+
+paths:
+  # =========================
+  # Health
+  # =========================
+  /ping:
+    get:
+      summary: Health check simple (público)
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: OK
+
+  # Nota: este /health es el que está en la raíz (app.js), NO cuelga de /api/v1.
+  # Si quieres documentarlo aquí mismo, agrega un 2do server (ver nota al final).
+  # Por ahora no lo incluyo para no confundir.
+
+  # =========================
+  # Auth (público)
+  # =========================
+  /auth/register/cliente:
+    post:
+      summary: Registro de cliente (público)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Cliente registrado
+        "400":
+          description: Error de validación
+
+  /auth/register/empresa:
+    post:
+      summary: Registro de empresa/contratista (público)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Empresa registrada
+        "400":
+          description: Error de validación
+
+  /auth/login:
+    post:
+      summary: Login para todos los roles (público)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: admin@ferreexpress.com
+                password:
+                  type: string
+                  example: "123456"
+      responses:
+        "200":
+          description: Login correcto (JWT)
+        "401":
+          description: Credenciales inválidas
+
+  /auth/forgot-password:
+    post:
+      summary: Solicitar código de recuperación (público)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Solicitud registrada
+
+  /auth/verify-reset:
+    post:
+      summary: Verificar código de recuperación (público)
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Código verificado
+
+  /auth/reset-password:
+    put:
+      summary: Restablecer contraseña con token temporal RESET (Bearer)
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  example: "NuevaClave123!"
+      responses:
+        "200":
+          description: Contraseña restablecida correctamente
+        "400":
+          description: Token requerido / inválido / expirado o password inválida
+        "404":
+          description: Usuario no encontrado
+
+  /auth/google:
+    get:
+      summary: Iniciar flujo OAuth con Google (público)
+      tags: [Auth]
+      security: []
+      responses:
+        "302":
+          description: Redirect a Google OAuth
+
+  /auth/google/callback:
+    get:
+      summary: Callback OAuth de Google (público)
+      tags: [Auth]
+      security: []
+      responses:
+        "302":
+          description: Redirect post-login
+
+  # =========================
+  # Auth (protegido)
+  # =========================
+  /auth/change-password:
+    put:
+      summary: Cambiar contraseña autenticado (JWT)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Contraseña cambiada
+        "401":
+          description: No autorizado
+
+  /auth/perfil:
+    get:
+      summary: Obtener perfil del usuario autenticado (JWT)
+      tags: [Auth]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+
+    put:
+      summary: Actualizar perfil del usuario autenticado (JWT)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Perfil actualizado
+        "401":
+          description: No autorizado
+
+  # =========================
+  # Admin (/api/v1/admin) - protegido ADMIN
+  # =========================
+  /admin/usuarios:
+    get:
+      summary: Listar todos los usuarios (ADMIN)
+      tags: [Admin]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /admin/usuarios/{id}/estado:
+    put:
+      summary: Cambiar estado de usuario (ADMIN)
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 8
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Estado actualizado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  # =========================
+  # Protected
+  # =========================
+  /protected/me:
+    get:
+      summary: Información del usuario autenticado (JWT)
+      tags: [Protected]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+
+  /protected/admin/only:
+    get:
+      summary: Solo para administradores (JWT + ADMIN)
+      tags: [Protected]
+      responses:
+        "200":
+          description: OK (ADMIN)
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /protected/empresa/only:
+    get:
+      summary: Para CONTRATISTA o ADMIN (JWT + rol)
+      tags: [Protected]
+      responses:
+        "200":
+          description: OK (CONTRATISTA o ADMIN)
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  # =========================
+  # Productos
+  # =========================
+  /productos:
+    get:
+      summary: Listar productos (público)
+      tags: [Productos]
+      security: []
+      responses:
+        "200":
+          description: OK
+
+    post:
+      summary: Crear producto (ADMIN)
+      tags: [Productos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Producto creado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /productos/{id}:
+    get:
+      summary: Obtener producto por ID (público)
+      tags: [Productos]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: No encontrado
+
+    put:
+      summary: Actualizar producto (ADMIN)
+      tags: [Productos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Producto actualizado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+    delete:
+      summary: Eliminar producto (ADMIN)
+      tags: [Productos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Producto eliminado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /productos/{id}/imagenes:
+    get:
+      summary: Listar imágenes de producto (público)
+      tags: [Productos]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+
+    post:
+      summary: Subir imágenes (ADMIN)
+      tags: [Productos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "200":
+          description: Imágenes subidas
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /productos/{id}/imagenes/{imgId}:
+    delete:
+      summary: Eliminar imagen (ADMIN)
+      tags: [Productos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - in: path
+          name: imgId
+          required: true
+          schema:
+            type: integer
+            example: 10
+      responses:
+        "200":
+          description: Imagen eliminada
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /productos/{id}/imagenes/{imgId}/principal:
+    patch:
+      summary: Marcar imagen principal (ADMIN)
+      tags: [Productos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+        - in: path
+          name: imgId
+          required: true
+          schema:
+            type: integer
+            example: 10
+      responses:
+        "200":
+          description: Imagen principal actualizada
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  # =========================
+  # Pedidos
+  # =========================
+  /pedidos/mios:
+    get:
+      summary: Listar pedidos del usuario autenticado
+      tags: [Pedidos]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+
+  /pedidos/{id}/mio:
+    get:
+      summary: Detalle del propio pedido (JWT)
+      tags: [Pedidos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "404":
+          description: No encontrado
+
+  /pedidos/directo:
+    post:
+      summary: Crear pedido desde carrito (CLIENTE o CONTRATISTA)
+      tags: [Pedidos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Pedido creado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /pedidos/desde-cotizacion:
+    post:
+      summary: Crear pedido desde cotización (CONTRATISTA)
+      tags: [Pedidos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Pedido creado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /pedidos/cotizacion:
+    post:
+      summary: Alias para crear pedido desde cotización (CONTRATISTA)
+      tags: [Pedidos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Pedido creado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /pedidos/{id}/estado:
+    put:
+      summary: Actualizar estado de pedido (JWT)
+      tags: [Pedidos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Estado actualizado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (si aplica por rol)
+
+  /pedidos/{id}/cancelar:
+    put:
+      summary: Cancelar pedido (JWT)
+      tags: [Pedidos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: Pedido cancelado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (si aplica por rol)
+
+  /pedidos:
+    get:
+      summary: Listar todos los pedidos (ADMIN)
+      tags: [Pedidos]
+      responses:
+        "200":
+          description: OK (ADMIN)
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /pedidos/{id}:
+    get:
+      summary: Detalle de pedido (ADMIN)
+      tags: [Pedidos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+        "404":
+          description: No encontrado
+
+  # =========================
+  # Cotizaciones
+  # =========================
+  /cotizaciones:
+    post:
+      summary: Crear cotización (CONTRATISTA)
+      tags: [Cotizaciones]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Cotización creada
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+    get:
+      summary: Listar cotizaciones (CONTRATISTA o ADMIN)
+      tags: [Cotizaciones]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /cotizaciones/{id}:
+    get:
+      summary: Detalle de cotización (CONTRATISTA o ADMIN)
+      tags: [Cotizaciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+        "404":
+          description: No encontrado
+
+  /cotizaciones/{id}/estado:
+    put:
+      summary: Cambiar estado de cotización (ADMIN)
+      tags: [Cotizaciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Estado actualizado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (no ADMIN)
+
+  /cotizaciones/{id}/pdf:
+    get:
+      summary: Descargar PDF de cotización (CONTRATISTA o ADMIN)
+      tags: [Cotizaciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: PDF generado/descargado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  # =========================
+  # Casos de soporte
+  # =========================
+  /casos:
+    post:
+      summary: Crear caso (CLIENTE o CONTRATISTA)
+      tags: [Casos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Caso creado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+    get:
+      summary: Listar casos (CLIENTE, CONTRATISTA, ADMIN)
+      tags: [Casos]
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /casos/{id}:
+    get:
+      summary: Ver detalle de caso (CLIENTE, CONTRATISTA, ADMIN)
+      tags: [Casos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+        "404":
+          description: No encontrado
+
+  /casos/{id}/estado:
+    put:
+      summary: Cambiar estado de caso (ADMIN, CLIENTE, CONTRATISTA)
+      tags: [Casos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Estado actualizado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  /casos/{id}/comentarios:
+    get:
+      summary: Listar comentarios de caso (CLIENTE, CONTRATISTA, ADMIN)
+      tags: [Casos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      responses:
+        "200":
+          description: OK
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+    post:
+      summary: Agregar comentario a caso (CLIENTE, CONTRATISTA, ADMIN)
+      tags: [Casos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Comentario agregado
+        "401":
+          description: No autorizado
+        "403":
+          description: Prohibido (rol no permitido)
+
+  # =========================
+  # FAQ
+  # =========================
+  /faq:
+    get:
+      summary: Listar preguntas frecuentes (requiere auth según backend)
+      tags: [FAQ]
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+
+    post:
+      summary: Crear FAQ (ADMIN)
+      tags: [FAQ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201": { description: FAQ creada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  /faq/{id}:
+    put:
+      summary: Actualizar FAQ (ADMIN)
+      tags: [FAQ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: FAQ actualizada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+    delete:
+      summary: Eliminar FAQ (ADMIN)
+      tags: [FAQ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      responses:
+        "200": { description: FAQ eliminada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  /faq/{id}/orden:
+    put:
+      summary: Reordenar FAQ (ADMIN)
+      tags: [FAQ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Orden actualizado }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  /faq/{id}/feedback:
+    post:
+      summary: Registrar feedback de FAQ (requiere auth según backend)
+      tags: [FAQ]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Feedback registrado }
+        "401": { description: No autorizado }
+
+  # =========================
+  # Descuentos (ADMIN)
+  # =========================
+  /descuentos:
+    get:
+      summary: Listar reglas de descuento (ADMIN)
+      tags: [Descuentos]
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+    post:
+      summary: Crear regla de descuento (ADMIN)
+      tags: [Descuentos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201": { description: Regla creada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  /descuentos/{id}:
+    put:
+      summary: Actualizar regla de descuento (ADMIN)
+      tags: [Descuentos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Regla actualizada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+    delete:
+      summary: Eliminar regla de descuento (ADMIN)
+      tags: [Descuentos]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      responses:
+        "200": { description: Regla eliminada }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  # =========================
+  # Direcciones
+  # =========================
+  /direcciones:
+    post:
+      summary: Crear dirección (JWT)
+      tags: [Direcciones]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "201": { description: Dirección creada }
+        "401": { description: No autorizado }
+
+    get:
+      summary: Listar direcciones del usuario (JWT)
+      tags: [Direcciones]
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+
+  /direcciones/{id}:
+    get:
+      summary: Ver detalle de dirección (JWT)
+      tags: [Direcciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+        "404": { description: No encontrado }
+
+    put:
+      summary: Actualizar dirección (JWT)
+      tags: [Direcciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Dirección actualizada }
+        "401": { description: No autorizado }
+
+    delete:
+      summary: Eliminar dirección (JWT)
+      tags: [Direcciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      responses:
+        "200": { description: Dirección eliminada }
+        "401": { description: No autorizado }
+
+  # =========================
+  # Notificaciones
+  # =========================
+  /notificaciones:
+    get:
+      summary: Listar notificaciones del usuario (JWT)
+      tags: [Notificaciones]
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+
+  /notificaciones/{id}/leida:
+    put:
+      summary: Marcar notificación como leída (JWT)
+      tags: [Notificaciones]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, example: 1 }
+      responses:
+        "200": { description: Notificación marcada como leída }
+        "401": { description: No autorizado }
+
+  # =========================
+  # Pagos
+  # =========================
+  /pagos/simular:
+    post:
+      summary: Simular pago para checkout (CLIENTE o CONTRATISTA)
+      tags: [Pagos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Pago simulado }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (rol no permitido) }
+
+  /pagos:
+    post:
+      summary: Procesar pago de pedidos existentes (CLIENTE o CONTRATISTA)
+      tags: [Pagos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Pago procesado }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (rol no permitido) }
+
+  # =========================
+  # Auditoría
+  # =========================
+  /auditoria:
+    get:
+      summary: Listar logs de auditoría (ADMIN)
+      tags: [Auditoría]
+      responses:
+        "200": { description: OK }
+        "401": { description: No autorizado }
+        "403": { description: Prohibido (no ADMIN) }
+
+  # =========================
+  # Carrito
+  # =========================
+  /carrito/preview:
+    post:
+      summary: Previsualizar carrito (sin auth por ahora)
+      tags: [Carrito]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: OK }
+
+  # =========================
+  # Usuarios
+  # =========================
+  /usuarios:
+    get:
+      summary: Listar todos los usuarios (público, sin protección)
+      tags: [Usuarios]
+      security: []
+      responses:
+        "200":
+          description: OK
