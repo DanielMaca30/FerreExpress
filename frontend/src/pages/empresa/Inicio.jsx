@@ -1252,7 +1252,12 @@ export default function BeneficiosEmpresa() {
                     <motion.div {...pressable(reduceMotion)}>
                       <GlassCard rounded="3xl" overflow="hidden" border="1px solid" borderColor={borderColor}>
                         <PromoHeroFadeBanner
-                          images={["/Publicidad1.png", "/Publicidad2.png", "/publicidad3.jpg", "/Publicidad4.png"]}
+                          images={[
+                            "/Banner1.png",
+                            "/Banner2.png",
+                            "/Banner3.jpg",
+                            "/Banner4.png",
+                          ]}
                           ratio={{ base: 4 / 1, md: 4 / 1, lg: 4 / 1 }}
                           height={{ base: "175px", md: "220px", lg: "245px" }}
                           fit={{ base: "contain", md: "contain", lg: "contain" }}

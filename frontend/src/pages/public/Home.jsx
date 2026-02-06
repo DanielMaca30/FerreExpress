@@ -173,10 +173,10 @@ export default function Home() {
 
       <PromoHeroFadeBanner
         images={[
-          "/Publicidad1.png",
-          "/Publicidad2.png",
-          "/publicidad3.jpg",
-          "/Publicidad4.png",
+          "/Banner1.png",
+          "/Banner2.png",
+          "/Banner3.jpg",
+          "/Banner4.png",
         ]}
         intervalMs={4500}
         ratio={{ base: 16 / 7, md: 16 / 7, lg: 4 / 1 }}

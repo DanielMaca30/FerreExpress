@@ -1,16 +1,4 @@
-// src/pages/cliente/Cliente.jsx — UI/UX + Responsive (Cards minimal + iOS filter + zoom desktop)
-// ✅ FIXES incluidos:
-// - Sin cambios de orden de hooks (no hooks dentro de JSX/condiciones)
-// - Sin kebab-case en css objects (msOverflowStyle)
-// - Sin prop inválido scrollPaddingInline en DOM (va en css)
-// - Sin preventDefault en listener passive (wheel listener manual { passive:false })
-//
-// ✅ Responsive UI FIX (NUEVO):
-// - En MOBILE: layout “full-bleed” (sin efecto modal/popup), sin sombras y sin bordes redondeados en contenedores
-// - Menos padding lateral acumulado (se aprovecha mejor el ancho)
-// - Cards más anchas en mobile para llenar mejor la pantalla (2 cards se ven más “full”)
-// - Hint y títulos alineados con el mismo padding del scroller
-
+// src/pages/cliente/Cliente.jsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box,
@@ -286,7 +274,12 @@ export default function Cliente() {
 
       {/* ===== 3. Banner ===== */}
       <PromoHeroFadeBanner
-        images={["/Publicidad1.png", "/Publicidad2.png", "/publicidad3.jpg", "/Publicidad4.png"]}
+        images={[
+          "/Banner1.png",
+          "/Banner2.png",
+          "/Banner3.jpg",
+          "/Banner4.png",
+        ]}
         mt={searchTerm ? 4 : 0}
         mb={{ base: 3, md: 5 }}
         ratio={{ base: 16 / 7, md: 16 / 7, lg: 4 / 1 }}
