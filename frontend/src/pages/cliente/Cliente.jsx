@@ -41,6 +41,25 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
+/* === Helpers (IDs seguros + categorías reales) === */
+const slugify = (s) =>
+  (s ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // quita tildes
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
+const makeUniqueId = (base, used) => {
+  let id = base;
+  let i = 2;
+  while (used.has(id)) id = `${base}-${i++}`;
+  used.add(id);
+  return id;
+};
+
 /* =================== Página Cliente =================== */
 export default function Cliente() {
   const [productos, setProductos] = useState([]);
@@ -55,7 +74,7 @@ export default function Cliente() {
   const sectionRefs = useRef({});
 
   // ✅ Responsive: “full-bleed” en mobile
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
 
   // Colores base
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
@@ -66,30 +85,42 @@ export default function Cliente() {
   const rawSearch = searchParams.get("search") || "";
   const searchTerm = rawSearch.trim().toLowerCase();
 
+  /* ================== 1) CARGA INICIAL: TRAER TODOS (paginado) ================== */
   useEffect(() => {
+    let alive = true;
+
     (async () => {
+      setLoading(true);
       try {
-        const res = await api.get("/productos?limit=60&page=1");
-        setProductos(res.data?.productos || []);
+        const all = [];
+        const limit = 200; // ajusta si quieres
+        const MAX_PAGES = 50; // tope de seguridad
+        let page = 1;
+
+        while (page <= MAX_PAGES) {
+          const res = await api.get("/productos", { params: { limit, page } });
+          const batch = res.data?.productos || [];
+          all.push(...batch);
+
+          // si ya no hay más resultados, paramos
+          if (batch.length < limit) break;
+          page++;
+        }
+
+        if (alive) setProductos(all);
       } catch (e) {
         console.error("Error productos:", e);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // --- Lógica de filtrado ---
-  const byCat = (needleArr, fallbackSlice = 10) => {
-    const norm = (s) => (s || "").toString().toLowerCase();
-    const hit = productos.filter((p) => {
-      const c1 = norm(p.categoria);
-      const cs = Array.isArray(p.categorias) ? p.categorias.map(norm) : [];
-      return needleArr.some((n) => c1.includes(n) || cs.some((x) => x.includes(n)));
-    });
-    return (hit.length ? hit : productos).slice(0, fallbackSlice);
-  };
-
+  /* ================== 2) RECIENTES ================== */
   const recientes = useMemo(() => {
     const arr = [...productos];
     arr.sort((a, b) => {
@@ -100,6 +131,7 @@ export default function Cliente() {
     return arr.slice(0, 12);
   }, [productos]);
 
+  /* ================== 3) BÚSQUEDA (local, sin quitar nada) ================== */
   const resultadosBusqueda = useMemo(() => {
     if (!searchTerm) return [];
     const norm = (s) => (s || "").toString().toLowerCase();
@@ -118,34 +150,60 @@ export default function Cliente() {
     });
   }, [productos, searchTerm]);
 
-  const tuberias = useMemo(() => byCat(["tuber", "pvc", "cpvc", "hidraul"], 10), [productos]);
-  const cables = useMemo(() => byCat(["cable", "conductor", "alambr"], 10), [productos]);
-  const electrico = useMemo(() => byCat(["eléctr", "breaker", "tomacorr", "ilumin", "led"], 10), [productos]);
-  const adhesivos = useMemo(() => byCat(["adhes", "pegante", "silicon", "soldadura en frío"], 10), [productos]);
-  const pinturas = useMemo(() => byCat(["pintur", "esmalte", "látex", "rodillo"], 10), [productos]);
-  const seguridad = useMemo(() => byCat(["seguridad", "guante", "casc", "protección"], 10), [productos]);
-  const jardineria = useMemo(() => byCat(["jardín", "poda", "manguera"], 10), [productos]);
-  const plomeria = useMemo(() => byCat(["plomer", "válvula", "mezclador", "sifón"], 10), [productos]);
-  const tornilleria = useMemo(() => byCat(["tornillo", "tuerca", "arandela", "fijación"], 10), [productos]);
-  const soldadura = useMemo(() => byCat(["sold", "electrodo", "estaño", "soplete"], 10), [productos]);
+  /* ================== 4) CATEGORÍAS REALES (todas las que existen) ================== */
+  const getCatLabel = (p) => {
+    // prioridad: campo "categoria" string
+    if (p?.categoria && String(p.categoria).trim()) return String(p.categoria).trim();
 
-  /* ===== Lista de secciones ===== */
-  const categorySections = useMemo(
-    () => [
-      { id: "recientes", title: "Recién llegado", data: recientes },
-      { id: "tuberias", title: "Tuberías & PVC", data: tuberias },
-      { id: "cables", title: "Cables & Conductores", data: cables },
-      { id: "electrico", title: "Eléctrico", data: electrico },
-      { id: "adhesivos", title: "Adhesivos & Selladores", data: adhesivos },
-      { id: "pinturas", title: "Pinturas & Acabados", data: pinturas },
-      { id: "seguridad", title: "Seguridad Industrial", data: seguridad },
-      { id: "jardineria", title: "Jardinería", data: jardineria },
-      { id: "plomeria", title: "Plomería", data: plomeria },
-      { id: "tornilleria", title: "Tornillería & Fijación", data: tornilleria },
-      { id: "soldadura", title: "Soldadura", data: soldadura },
-    ],
-    [recientes, tuberias, cables, electrico, adhesivos, pinturas, seguridad, jardineria, plomeria, tornilleria, soldadura]
-  );
+    // alternativa: array "categorias"
+    if (Array.isArray(p?.categorias) && p.categorias.length) {
+      const first = p.categorias.find(Boolean);
+      if (first) return String(first).trim();
+    }
+
+    return "Sin categoría";
+  };
+
+  const groupedByCategoria = useMemo(() => {
+    const map = new Map();
+
+    for (const p of productos) {
+      const label = getCatLabel(p);
+      if (!map.has(label)) map.set(label, []);
+      map.get(label).push(p);
+    }
+
+    // ordenar productos dentro de cada categoría (cambia criterio si quieres)
+    for (const [label, arr] of map.entries()) {
+      arr.sort((a, b) =>
+        String(a?.nombre || "").localeCompare(String(b?.nombre || ""), "es")
+      );
+      map.set(label, arr);
+    }
+
+    // ordenar categorías alfabéticamente, dejando "Sin categoría" al final
+    const ordered = Array.from(map.entries()).sort((a, b) => {
+      if (a[0] === "Sin categoría") return 1;
+      if (b[0] === "Sin categoría") return -1;
+      return String(a[0]).localeCompare(String(b[0]), "es");
+    });
+
+    return ordered;
+  }, [productos]);
+
+  /* ===== Lista de secciones (SIN byCat/keys; ahora es dinámico y completo) ===== */
+  const categorySections = useMemo(() => {
+    const used = new Set(["recientes"]);
+
+    const catSections = groupedByCategoria.map(([catName, items]) => {
+      const base = `cat-${slugify(catName) || "sin-categoria"}`;
+      const id = makeUniqueId(base, used);
+      return { id, title: catName, data: items };
+    });
+
+    // ✅ “Recién llegado” primero, PERO los recientes también se ven en su categoría (NO los quitamos)
+    return [{ id: "recientes", title: "Recién llegado", data: recientes }, ...catSections];
+  }, [groupedByCategoria, recientes]);
 
   const navIds = useMemo(() => new Set(categorySections.map((s) => s.id)), [categorySections]);
 
@@ -274,12 +332,7 @@ export default function Cliente() {
 
       {/* ===== 3. Banner ===== */}
       <PromoHeroFadeBanner
-        images={[
-          "/Banner1.png",
-          "/Banner2.png",
-          "/Banner3.jpg",
-          "/Banner4.png",
-        ]}
+        images={["/Banner1.png", "/Banner2.png", "/Banner3.jpg", "/Banner4.png"]}
         mt={searchTerm ? 4 : 0}
         mb={{ base: 3, md: 5 }}
         ratio={{ base: 16 / 7, md: 16 / 7, lg: 4 / 1 }}
@@ -295,7 +348,7 @@ export default function Cliente() {
         activeSection={activeSection}
       />
 
-      {/* ===== 5. Secciones del Catálogo ===== */}
+      {/* ===== 5. Secciones del Catálogo (AHORA: todas las categorías reales) ===== */}
       {categorySections.map((section, index) => (
         <Section
           key={section.id}
@@ -375,7 +428,7 @@ const StickyCategoryNav = React.forwardRef(({ sections, scrollToSection, activeS
   const closeBtnBg = useColorModeValue("blackAlpha.50", "whiteAlpha.100");
   const closeBtnHoverBg = useColorModeValue("blackAlpha.100", "whiteAlpha.200");
 
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
   const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
 
   const { isOpen, onOpen, onClose } = useDisclosure();
@@ -386,7 +439,6 @@ const StickyCategoryNav = React.forwardRef(({ sections, scrollToSection, activeS
 
   // seguridad del active
   const safeActive = sections.some((s) => s.id === activeSection) ? activeSection : sections[0]?.id;
-
   const activeTitle = sections.find((s) => s.id === safeActive)?.title || "Explorar";
 
   // Desktop tabs index
@@ -643,7 +695,7 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   const scrollerRef = useRef(null);
 
   // ✅ Hooks siempre arriba
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
   const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
 
   const [showLeft, setShowLeft] = useState(false);
@@ -694,12 +746,11 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     if (!el || isMobile) return;
 
     const wheel = (e) => {
-      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5; // trackpad / rueda horizontal
-      const wantsHorizontalByShift = e.shiftKey && Math.abs(e.deltaY) > 0.5; // Shift + wheel
+      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5;
+      const wantsHorizontalByShift = e.shiftKey && Math.abs(e.deltaY) > 0.5;
 
       if (!hasRealHorizontal && !wantsHorizontalByShift) return;
 
-      // ✅ Solo aquí prevenimos el default, porque VAMOS a mover horizontal
       e.preventDefault();
 
       const delta = wantsHorizontalByShift ? e.deltaY : e.deltaX;
@@ -710,12 +761,10 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
 
-
   const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
   return (
     <Box position="relative">
-      {/* ✅ En MOBILE: sin flechas */}
       {!isMobile && showLeft && (
         <Tooltip label="Anterior">
           <IconButton
@@ -769,10 +818,10 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
         py={1}
         px={SAFE_ZONE_PADDING}
         css={{
-          scrollPaddingInline: SAFE_ZONE_PADDING, // ✅ no prop DOM
-          scrollSnapType: "x mandatory", // ✅ evita prop raro en DOM
+          scrollPaddingInline: SAFE_ZONE_PADDING,
+          scrollSnapType: "x mandatory",
           "&::-webkit-scrollbar": { display: "none" },
-          msOverflowStyle: "none", // ✅ camelCase
+          msOverflowStyle: "none",
           scrollbarWidth: "none",
         }}
       >
@@ -784,7 +833,7 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   );
 }
 
-/* ===== ProductCard (minimal, centrada, responsive + zoom SOLO desktop) ===== */
+/* ===== ProductCard ===== */
 function ProductCard({ producto, loading, onView, onAdd, subtextColor }) {
   const cardBg = useColorModeValue("white", "gray.800");
   const borderCo = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
@@ -807,7 +856,6 @@ function ProductCard({ producto, loading, onView, onAdd, subtextColor }) {
 
   return (
     <Box
-      // ✅ MÁS ancho en mobile para aprovechar pantalla (2 cards casi llenan el viewport)
       minW={{ base: "170px", sm: "190px", md: "210px" }}
       maxW={{ base: "170px", sm: "190px", md: "210px" }}
       bg={cardBg}
@@ -831,7 +879,7 @@ function ProductCard({ producto, loading, onView, onAdd, subtextColor }) {
       display="flex"
       flexDirection="column"
       sx={{
-        scrollSnapAlign: "start", // ✅ evita prop raro en DOM
+        scrollSnapAlign: "start",
         "@media (hover: hover) and (pointer: fine)": {
           "&:hover .fe-product-img": { transform: "scale(1.06)" },
         },
@@ -936,7 +984,7 @@ function SkeletonCard() {
       borderColor={border}
       display="flex"
       flexDirection="column"
-      sx={{ scrollSnapAlign: "start" }} // ✅ evita prop raro en DOM
+      sx={{ scrollSnapAlign: "start" }}
     >
       <AspectRatio ratio={1} w="100%">
         <Skeleton w="100%" h="100%" />
@@ -957,7 +1005,7 @@ function SkeletonCard() {
 /* ===== Hint ===== */
 function HintHint({ px }) {
   const color = useColorModeValue("gray.500", "gray.400");
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
 
   return (
     <HStack mt={2} spacing={2} color={color} fontSize="xs" px={px}>

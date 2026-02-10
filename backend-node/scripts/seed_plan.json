@@ -1,0 +1,402 @@
+[
+  {
+    "nombre": "Espuma expansiva PU 750ml",
+    "categoria": "Adhesivos y sellantes",
+    "precio": 32900,
+    "stock": 114,
+    "descripcion": "Producto para sellado/pegado.",
+    "image_stem": "espuma-expansiva-pu-750ml",
+    "file_suggested": "espuma-expansiva-pu-750ml.jpg",
+    "url": "/uploads/seed/espuma-expansiva-pu-750ml.jpg"
+  },
+  {
+    "nombre": "Tubo PVC presión 1/2\" x 3m",
+    "categoria": "Plomería",
+    "precio": 18900,
+    "stock": 45,
+    "descripcion": "Tubo PVC presión. Largo 3m.",
+    "image_stem": "tubo-pvc-presion-1-2-x-3m",
+    "file_suggested": "tubo-pvc-presion-1-2-x-3m.jpg",
+    "url": "/uploads/seed/tubo-pvc-presion-1-2-x-3m.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 3\" x12 und",
+    "categoria": "Tornillos",
+    "precio": 7500,
+    "stock": 205,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x12 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-3-x12-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-3-x12-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-3-x12-und.jpg"
+  },
+  {
+    "nombre": "Clavo corriente 1-1/2\" x libra",
+    "categoria": "Fijaciones",
+    "precio": 7000,
+    "stock": 30,
+    "descripcion": "Presentación por libra. Acero. Uso general.",
+    "image_stem": "clavo-corriente-1-1-2-x-libra",
+    "file_suggested": "clavo-corriente-1-1-2-x-libra.jpg",
+    "url": "/uploads/seed/clavo-corriente-1-1-2-x-libra.jpg"
+  },
+  {
+    "nombre": "Llave de paso PVC 1-1/4\"",
+    "categoria": "Plomería",
+    "precio": 27900,
+    "stock": 64,
+    "descripcion": "Llave de paso PVC.",
+    "image_stem": "llave-de-paso-pvc-1-1-4",
+    "file_suggested": "llave-de-paso-pvc-1-1-4.jpg",
+    "url": "/uploads/seed/llave-de-paso-pvc-1-1-4.jpg"
+  },
+  {
+    "nombre": "Pulidora angular 4-1/2\" 850W",
+    "categoria": "Herramientas eléctricas",
+    "precio": 189900,
+    "stock": 8,
+    "descripcion": "Pulidora 4-1/2\". Ideal para corte y desbaste con discos estándar.",
+    "image_stem": "pulidora-angular-4-1-2-850w",
+    "file_suggested": "pulidora-angular-4-1-2-850w.jpg",
+    "url": "/uploads/seed/pulidora-angular-4-1-2-850w.jpg"
+  },
+  {
+    "nombre": "Disco desbaste 4-1/2\" x unidad",
+    "categoria": "Abrasivos",
+    "precio": 7900,
+    "stock": 41,
+    "descripcion": "Consumible para corte, desbaste o acabado. Uso en metal y/o madera según referencia.",
+    "image_stem": "disco-desbaste-4-1-2-x-unidad",
+    "file_suggested": "disco-desbaste-4-1-2-x-unidad.jpg",
+    "url": "/uploads/seed/disco-desbaste-4-1-2-x-unidad.jpg"
+  },
+  {
+    "nombre": "Interruptor sencillo blanco",
+    "categoria": "Cables y electricidad",
+    "precio": 7900,
+    "stock": 135,
+    "descripcion": "Accesorio eléctrico de uso común.",
+    "image_stem": "interruptor-sencillo-blanco",
+    "file_suggested": "interruptor-sencillo-blanco.jpg",
+    "url": "/uploads/seed/interruptor-sencillo-blanco.jpg"
+  },
+  {
+    "nombre": "Llave ajustable 10\"",
+    "categoria": "Herramientas manuales",
+    "precio": 32900,
+    "stock": 25,
+    "descripcion": "Herramienta de uso frecuente en obra y hogar. Buena relación costo/beneficio.",
+    "image_stem": "llave-ajustable-10",
+    "file_suggested": "llave-ajustable-10.jpg",
+    "url": "/uploads/seed/llave-ajustable-10.jpg"
+  },
+  {
+    "nombre": "Llave de paso PVC 3/4\"",
+    "categoria": "Plomería",
+    "precio": 17900,
+    "stock": 16,
+    "descripcion": "Llave de paso PVC.",
+    "image_stem": "llave-de-paso-pvc-3-4",
+    "file_suggested": "llave-de-paso-pvc-3-4.jpg",
+    "url": "/uploads/seed/llave-de-paso-pvc-3-4.jpg"
+  },
+  {
+    "nombre": "Varilla corrugada 3/8\" x 6m",
+    "categoria": "Materiales de construcción",
+    "precio": 27900,
+    "stock": 68,
+    "descripcion": "Material para obra gris y acabados.",
+    "image_stem": "varilla-corrugada-3-8-x-6m",
+    "file_suggested": "varilla-corrugada-3-8-x-6m.jpg",
+    "url": "/uploads/seed/varilla-corrugada-3-8-x-6m.jpg"
+  },
+  {
+    "nombre": "Epóxico rápido 2x25ml",
+    "categoria": "Adhesivos y sellantes",
+    "precio": 19900,
+    "stock": 111,
+    "descripcion": "Producto para sellado/pegado.",
+    "image_stem": "epoxico-rapido-2x25ml",
+    "file_suggested": "epoxico-rapido-2x25ml.jpg",
+    "url": "/uploads/seed/epoxico-rapido-2x25ml.jpg"
+  },
+  {
+    "nombre": "Segueta arco 12\"",
+    "categoria": "Herramientas manuales",
+    "precio": 21900,
+    "stock": 43,
+    "descripcion": "Herramienta de uso frecuente en obra y hogar. Buena relación costo/beneficio.",
+    "image_stem": "segueta-arco-12",
+    "file_suggested": "segueta-arco-12.jpg",
+    "url": "/uploads/seed/segueta-arco-12.jpg"
+  },
+  {
+    "nombre": "Broca concreto 3mm",
+    "categoria": "Herramientas manuales",
+    "precio": 7200,
+    "stock": 40,
+    "descripcion": "Broca para concreto 3mm.",
+    "image_stem": "broca-concreto-3mm",
+    "file_suggested": "broca-concreto-3mm.jpg",
+    "url": "/uploads/seed/broca-concreto-3mm.jpg"
+  },
+  {
+    "nombre": "Grapa para cerca x libra",
+    "categoria": "Fijaciones",
+    "precio": 12000,
+    "stock": 42,
+    "descripcion": "Presentación por libra. Acero. Uso general.",
+    "image_stem": "grapa-para-cerca-x-libra",
+    "file_suggested": "grapa-para-cerca-x-libra.jpg",
+    "url": "/uploads/seed/grapa-para-cerca-x-libra.jpg"
+  },
+  {
+    "nombre": "Rastrillo jardinero",
+    "categoria": "Jardinería",
+    "precio": 18900,
+    "stock": 61,
+    "descripcion": "Accesorio para cuidado de jardín.",
+    "image_stem": "rastrillo-jardinero",
+    "file_suggested": "rastrillo-jardinero.jpg",
+    "url": "/uploads/seed/rastrillo-jardinero.jpg"
+  },
+  {
+    "nombre": "Broca metal HSS 12mm",
+    "categoria": "Herramientas manuales",
+    "precio": 14100,
+    "stock": 120,
+    "descripcion": "Broca HSS metal 12mm.",
+    "image_stem": "broca-metal-hss-12mm",
+    "file_suggested": "broca-metal-hss-12mm.jpg",
+    "url": "/uploads/seed/broca-metal-hss-12mm.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 1-5/8\" x2500 und",
+    "categoria": "Tornillos",
+    "precio": 59900,
+    "stock": 210,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x2500 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-1-5-8-x2500-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-1-5-8-x2500-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-1-5-8-x2500-und.jpg"
+  },
+  {
+    "nombre": "Tee PVC presión 1\"",
+    "categoria": "Plomería",
+    "precio": 5700,
+    "stock": 104,
+    "descripcion": "Tee PVC presión.",
+    "image_stem": "tee-pvc-presion-1",
+    "file_suggested": "tee-pvc-presion-1.jpg",
+    "url": "/uploads/seed/tee-pvc-presion-1.jpg"
+  },
+  {
+    "nombre": "Reflector LED 50W",
+    "categoria": "Iluminación",
+    "precio": 44900,
+    "stock": 25,
+    "descripcion": "Iluminación eficiente. Ideal hogar/obra.",
+    "image_stem": "reflector-led-50w",
+    "file_suggested": "reflector-led-50w.jpg",
+    "url": "/uploads/seed/reflector-led-50w.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 2\" x100 und",
+    "categoria": "Tornillos",
+    "precio": 9000,
+    "stock": 210,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x100 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-2-x100-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-2-x100-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-2-x100-und.jpg"
+  },
+  {
+    "nombre": "Malla electrosoldada 2.5mm 1x2m",
+    "categoria": "Materiales de construcción",
+    "precio": 32900,
+    "stock": 58,
+    "descripcion": "Material para obra gris y acabados.",
+    "image_stem": "malla-electrosoldada-2-5mm-1x2m",
+    "file_suggested": "malla-electrosoldada-2-5mm-1x2m.jpg",
+    "url": "/uploads/seed/malla-electrosoldada-2-5mm-1x2m.jpg"
+  },
+  {
+    "nombre": "Sierra circular 7-1/4\" 1400W",
+    "categoria": "Herramientas eléctricas",
+    "precio": 369900,
+    "stock": 22,
+    "descripcion": "Sierra circular para madera. Guía y ajuste de profundidad.",
+    "image_stem": "sierra-circular-7-1-4-1400w",
+    "file_suggested": "sierra-circular-7-1-4-1400w.jpg",
+    "url": "/uploads/seed/sierra-circular-7-1-4-1400w.jpg"
+  },
+  {
+    "nombre": "Cuchilla bisturí + repuesto",
+    "categoria": "Herramientas manuales",
+    "precio": 12900,
+    "stock": 12,
+    "descripcion": "Herramienta de uso frecuente en obra y hogar. Buena relación costo/beneficio.",
+    "image_stem": "cuchilla-bisturi-repuesto",
+    "file_suggested": "cuchilla-bisturi-repuesto.jpg",
+    "url": "/uploads/seed/cuchilla-bisturi-repuesto.jpg"
+  },
+  {
+    "nombre": "Tijera de poda",
+    "categoria": "Jardinería",
+    "precio": 35900,
+    "stock": 60,
+    "descripcion": "Accesorio para cuidado de jardín.",
+    "image_stem": "tijera-de-poda",
+    "file_suggested": "tijera-de-poda.jpg",
+    "url": "/uploads/seed/tijera-de-poda.jpg"
+  },
+  {
+    "nombre": "Tee PVC presión 3/4\"",
+    "categoria": "Plomería",
+    "precio": 4300,
+    "stock": 121,
+    "descripcion": "Tee PVC presión.",
+    "image_stem": "tee-pvc-presion-3-4",
+    "file_suggested": "tee-pvc-presion-3-4.jpg",
+    "url": "/uploads/seed/tee-pvc-presion-3-4.jpg"
+  },
+  {
+    "nombre": "Tee PVC presión 1/2\"",
+    "categoria": "Plomería",
+    "precio": 2900,
+    "stock": 31,
+    "descripcion": "Tee PVC presión.",
+    "image_stem": "tee-pvc-presion-1-2",
+    "file_suggested": "tee-pvc-presion-1-2.jpg",
+    "url": "/uploads/seed/tee-pvc-presion-1-2.jpg"
+  },
+  {
+    "nombre": "Broca concreto 4mm",
+    "categoria": "Herramientas manuales",
+    "precio": 8100,
+    "stock": 44,
+    "descripcion": "Broca para concreto 4mm.",
+    "image_stem": "broca-concreto-4mm",
+    "file_suggested": "broca-concreto-4mm.jpg",
+    "url": "/uploads/seed/broca-concreto-4mm.jpg"
+  },
+  {
+    "nombre": "Esmalte sintético 1/4 gal",
+    "categoria": "Pinturas",
+    "precio": 39900,
+    "stock": 42,
+    "descripcion": "Insumo para pintura y acabados.",
+    "image_stem": "esmalte-sintetico-1-4-gal",
+    "file_suggested": "esmalte-sintetico-1-4-gal.jpg",
+    "url": "/uploads/seed/esmalte-sintetico-1-4-gal.jpg"
+  },
+  {
+    "nombre": "Unión PVC presión 1/2\"",
+    "categoria": "Plomería",
+    "precio": 2200,
+    "stock": 34,
+    "descripcion": "Unión PVC presión.",
+    "image_stem": "union-pvc-presion-1-2",
+    "file_suggested": "union-pvc-presion-1-2.jpg",
+    "url": "/uploads/seed/union-pvc-presion-1-2.jpg"
+  },
+  {
+    "nombre": "Unión PVC presión 3/4\"",
+    "categoria": "Plomería",
+    "precio": 3300,
+    "stock": 39,
+    "descripcion": "Unión PVC presión.",
+    "image_stem": "union-pvc-presion-3-4",
+    "file_suggested": "union-pvc-presion-3-4.jpg",
+    "url": "/uploads/seed/union-pvc-presion-3-4.jpg"
+  },
+  {
+    "nombre": "Tee PVC presión 1-1/4\"",
+    "categoria": "Plomería",
+    "precio": 7100,
+    "stock": 91,
+    "descripcion": "Tee PVC presión.",
+    "image_stem": "tee-pvc-presion-1-1-4",
+    "file_suggested": "tee-pvc-presion-1-1-4.jpg",
+    "url": "/uploads/seed/tee-pvc-presion-1-1-4.jpg"
+  },
+  {
+    "nombre": "Lija madera #120 x hoja",
+    "categoria": "Abrasivos",
+    "precio": 1800,
+    "stock": 207,
+    "descripcion": "Consumible para corte, desbaste o acabado. Uso en metal y/o madera según referencia.",
+    "image_stem": "lija-madera-120-x-hoja",
+    "file_suggested": "lija-madera-120-x-hoja.jpg",
+    "url": "/uploads/seed/lija-madera-120-x-hoja.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 1-1/4\" x600 und",
+    "categoria": "Tornillos",
+    "precio": 37900,
+    "stock": 84,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x600 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-1-1-4-x600-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-1-1-4-x600-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-1-1-4-x600-und.jpg"
+  },
+  {
+    "nombre": "Bombillo LED 9W luz blanca",
+    "categoria": "Iluminación",
+    "precio": 5900,
+    "stock": 102,
+    "descripcion": "Iluminación eficiente. Ideal hogar/obra.",
+    "image_stem": "bombillo-led-9w-luz-blanca",
+    "file_suggested": "bombillo-led-9w-luz-blanca.jpg",
+    "url": "/uploads/seed/bombillo-led-9w-luz-blanca.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 1\" x2500 und",
+    "categoria": "Tornillos",
+    "precio": 59900,
+    "stock": 30,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x2500 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-1-x2500-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-1-x2500-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-1-x2500-und.jpg"
+  },
+  {
+    "nombre": "Cable encauchetado 3x12 Centelsa rollo 100m",
+    "categoria": "Cables y electricidad",
+    "precio": 535000,
+    "stock": 20,
+    "descripcion": "Rollo 100m. Cable encauchetado 3x12.",
+    "image_stem": "cable-encauchetado-3x12-centelsa-rollo-100m",
+    "file_suggested": "cable-encauchetado-3x12-centelsa-rollo-100m.jpg",
+    "url": "/uploads/seed/cable-encauchetado-3x12-centelsa-rollo-100m.jpg"
+  },
+  {
+    "nombre": "Broca concreto 10mm",
+    "categoria": "Herramientas manuales",
+    "precio": 13500,
+    "stock": 89,
+    "descripcion": "Broca para concreto 10mm.",
+    "image_stem": "broca-concreto-10mm",
+    "file_suggested": "broca-concreto-10mm.jpg",
+    "url": "/uploads/seed/broca-concreto-10mm.jpg"
+  },
+  {
+    "nombre": "Caja rectangular 2x4\"",
+    "categoria": "Cables y electricidad",
+    "precio": 3900,
+    "stock": 125,
+    "descripcion": "Accesorio eléctrico de uso común.",
+    "image_stem": "caja-rectangular-2x4",
+    "file_suggested": "caja-rectangular-2x4.jpg",
+    "url": "/uploads/seed/caja-rectangular-2x4.jpg"
+  },
+  {
+    "nombre": "Tornillo Drywall punta aguda 1\" x600 und",
+    "categoria": "Tornillos",
+    "precio": 37900,
+    "stock": 169,
+    "descripcion": "Tornillo para placa de yeso y madera. Punta aguda, fosfatado negro. Presentación x600 und.",
+    "image_stem": "tornillo-drywall-punta-aguda-1-x600-und",
+    "file_suggested": "tornillo-drywall-punta-aguda-1-x600-und.jpg",
+    "url": "/uploads/seed/tornillo-drywall-punta-aguda-1-x600-und.jpg"
+  }
+]

@@ -32,6 +32,25 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
+/* === Helpers (IDs seguros + categorías reales) === */
+const slugify = (s) =>
+  (s ?? "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)+/g, "");
+
+const makeUniqueId = (base, used) => {
+  let id = base;
+  let i = 2;
+  while (used.has(id)) id = `${base}-${i++}`;
+  used.add(id);
+  return id;
+};
+
 /* =================== Página Catálogo Empresa =================== */
 export default function EmpresaCatalogo() {
   const [productos, setProductos] = useState([]);
@@ -42,7 +61,7 @@ export default function EmpresaCatalogo() {
   const [searchParams] = useSearchParams();
 
   // ✅ Responsive: “full-bleed” en mobile (NO TOCAR)
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
 
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
   const cardBg = useColorModeValue("white", "gray.800");
@@ -53,29 +72,39 @@ export default function EmpresaCatalogo() {
   const rawSearch = searchParams.get("search") || "";
   const searchTerm = rawSearch.trim().toLowerCase();
 
+  /* ================== 1) CARGA INICIAL: TRAER TODOS (paginado) ================== */
   useEffect(() => {
+    let alive = true;
+
     (async () => {
+      setLoading(true);
       try {
-        const res = await api.get("/productos?limit=60&page=1");
-        setProductos(res.data?.productos || []);
+        const all = [];
+        const limit = 200; // ajusta si quieres
+        const MAX_PAGES = 50; // tope de seguridad
+        let page = 1;
+
+        while (page <= MAX_PAGES) {
+          const res = await api.get("/productos", { params: { limit, page } });
+          const batch = res.data?.productos || [];
+          all.push(...batch);
+
+          if (batch.length < limit) break;
+          page++;
+        }
+
+        if (alive) setProductos(all);
       } catch (e) {
         console.error("Error productos:", e);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-  }, []);
 
-  // Filtro por categoría (tolerante a "categorias" array o "categoria" string)
-  const byCat = (needleArr, fallbackSlice = 10) => {
-    const norm = (s) => (s || "").toString().toLowerCase();
-    const hit = productos.filter((p) => {
-      const c1 = norm(p.categoria);
-      const cs = Array.isArray(p.categorias) ? p.categorias.map(norm) : [];
-      return needleArr.some((n) => c1.includes(n) || cs.some((x) => x.includes(n)));
-    });
-    return (hit.length ? hit : productos).slice(0, fallbackSlice);
-  };
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Recién llegado por fecha de creación si existe
   const recientes = useMemo(() => {
@@ -107,20 +136,64 @@ export default function EmpresaCatalogo() {
     });
   }, [productos, searchTerm]);
 
-  // Secciones por categoría
-  const tuberias = useMemo(() => byCat(["tuber", "pvc", "cpvc", "hidraul"], 10), [productos]);
-  const cables = useMemo(() => byCat(["cable", "conductor", "alambr"], 10), [productos]);
-  const electrico = useMemo(
-    () => byCat(["eléctr", "breaker", "tomacorr", "ilumin", "led"], 10),
-    [productos]
-  );
-  const adhesivos = useMemo(() => byCat(["adhes", "pegante", "silicon", "soldadura en frío"], 10), [productos]);
-  const pinturas = useMemo(() => byCat(["pintur", "esmalte", "látex", "rodillo"], 10), [productos]);
-  const seguridad = useMemo(() => byCat(["seguridad", "guante", "casc", "protección"], 10), [productos]);
-  const jardineria = useMemo(() => byCat(["jardín", "poda", "manguera"], 10), [productos]);
-  const plomeria = useMemo(() => byCat(["plomer", "válvula", "mezclador", "sifón"], 10), [productos]);
-  const tornilleria = useMemo(() => byCat(["tornillo", "tuerca", "arandela", "fijación"], 10), [productos]);
-  const soldadura = useMemo(() => byCat(["sold", "electrodo", "estaño", "soplete"], 10), [productos]);
+  /* ================== 2) CATEGORÍAS REALES (todas las que existen) ================== */
+  const groupedByCategoria = useMemo(() => {
+    const map = new Map(); // label -> Map(productKey -> product)
+
+    for (const p of productos) {
+      const labels = new Set();
+
+      // 1) categoria string
+      if (p?.categoria && String(p.categoria).trim()) {
+        labels.add(String(p.categoria).trim());
+      }
+
+      // 2) categorias[] array (si viene del backend)
+      if (Array.isArray(p?.categorias) && p.categorias.length) {
+        for (const c of p.categorias) {
+          const name = (c ?? "").toString().trim();
+          if (name) labels.add(name);
+        }
+      }
+
+      // 3) fallback
+      if (!labels.size) labels.add("Sin categoría");
+
+      // clave segura para deduplicar dentro de una categoría
+      const key = p?.id ?? `${p?.nombre ?? "producto"}-${Math.random().toString(16).slice(2)}`;
+
+      for (const label of labels) {
+        if (!map.has(label)) map.set(label, new Map());
+        map.get(label).set(key, p);
+      }
+    }
+
+    // a array + ordenar
+    const entries = Array.from(map.entries()).map(([label, m]) => [label, Array.from(m.values())]);
+
+    // ordenar productos dentro de cada categoría por nombre
+    for (const entry of entries) {
+      entry[1].sort((a, b) => String(a?.nombre || "").localeCompare(String(b?.nombre || ""), "es"));
+    }
+
+    // ordenar categorías (Sin categoría al final)
+    entries.sort((a, b) => {
+      if (a[0] === "Sin categoría") return 1;
+      if (b[0] === "Sin categoría") return -1;
+      return String(a[0]).localeCompare(String(b[0]), "es");
+    });
+
+    return entries;
+  }, [productos]);
+
+  const categorySections = useMemo(() => {
+    const used = new Set();
+    return groupedByCategoria.map(([catName, items]) => {
+      const base = `cat-${slugify(catName) || "sin-categoria"}`;
+      const id = makeUniqueId(base, used);
+      return { id, title: catName, data: items };
+    });
+  }, [groupedByCategoria]);
 
   /* ===== acciones ===== */
   // 👉 Rutas adaptadas al contexto empresa (NO TOCAR)
@@ -144,6 +217,8 @@ export default function EmpresaCatalogo() {
       // ✅ MOBILE full-bleed: sin padding externo (NO TOCAR)
       px={{ base: 0, md: 6, lg: 10 }}
       py={{ base: 3, md: 6 }}
+      // (opcional) para evitar warning por isMobile no usado en lint estricto
+      data-mobile={isMobile ? "1" : "0"}
     >
       {/* ===== Resultados de búsqueda (si hay ?search=...) ===== */}
       {searchTerm && (
@@ -198,176 +273,25 @@ export default function EmpresaCatalogo() {
         />
       </Section>
 
-      {/* ===== Secciones por categoría ===== */}
-      <Section title="Tuberías & PVC" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={tuberias}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `t-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Cables & Conductores" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={cables}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `c-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Eléctrico" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={electrico}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `e-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Adhesivos & Selladores" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={adhesivos}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `a-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Pinturas & Acabados" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={pinturas}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `p-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Seguridad Industrial" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={seguridad}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `s-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Jardinería" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={jardineria}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `j-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Plomería" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={plomeria}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `pl-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Tornillería & Fijación" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={tornilleria}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `to-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
-
-      <Section title="Soldadura" mt={3}>
-        <RowScroller
-          loading={loading}
-          items={soldadura}
-          renderItem={(p, i) => (
-            <ProductCard
-              key={p?.id ?? `so-${i}`}
-              producto={p}
-              loading={!p}
-              onView={() => onView(p)}
-              onAdd={() => onAdd(p)}
-              subtextColor={subtextColor}
-            />
-          )}
-        />
-      </Section>
+      {/* ===== Secciones por categoría (AHORA: todas las categorías reales) ===== */}
+      {categorySections.map((section) => (
+        <Section key={section.id} title={section.title} mt={3}>
+          <RowScroller
+            loading={loading}
+            items={section.data}
+            renderItem={(p, i) => (
+              <ProductCard
+                key={p?.id ?? `${section.id}-${i}`}
+                producto={p}
+                loading={!p}
+                onView={() => onView(p)}
+                onAdd={() => onAdd(p)}
+                subtextColor={subtextColor}
+              />
+            )}
+          />
+        </Section>
+      ))}
     </Box>
   );
 }
@@ -403,7 +327,7 @@ function Section({ title, children, mt = 0 }) {
 function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   const scrollerRef = useRef(null);
 
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
   const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
 
   const [showLeft, setShowLeft] = useState(false);
@@ -453,7 +377,7 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     if (!el || isMobile) return;
 
     const wheel = (e) => {
-      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5;       
+      const hasRealHorizontal = Math.abs(e.deltaX) > 0.5;
       const wantsHorizontalByShift = e.shiftKey && Math.abs(e.deltaY) > 0.5;
 
       if (!hasRealHorizontal && !wantsHorizontalByShift) return;
@@ -466,7 +390,6 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
-
 
   const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
@@ -711,7 +634,7 @@ function SkeletonCard() {
 
 function HintHint({ px }) {
   const color = useColorModeValue("gray.500", "gray.400");
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
 
   return (
     <HStack mt={2} spacing={2} color={color} fontSize="xs" px={px}>

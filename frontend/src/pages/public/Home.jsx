@@ -8,9 +8,7 @@ import {
   HStack,
   VStack,
   Image,
-  Badge,
   Skeleton,
-  SkeletonText,
   useBreakpointValue,
   useColorModeValue,
   IconButton,
@@ -18,16 +16,10 @@ import {
   Kbd,
   AspectRatio,
   SimpleGrid,
-  Spinner
+  Spinner,
 } from "@chakra-ui/react";
-import { useNavigate, useSearchParams } from "react-router-dom"; // ← agregamos useSearchParams
-import {
-  FiShoppingCart,
-  FiEye,
-  FiZap,
-  FiChevronLeft,
-  FiChevronRight,
-} from "react-icons/fi";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import api, { API_BASE_URL } from "../../utils/axiosInstance";
 
 /* ================= Utils ================= */
@@ -38,83 +30,94 @@ const fmtCop = (n) =>
     maximumFractionDigits: 0,
   });
 
-const norm = (s) => (s || "").toString().toLowerCase();
-
 /* ================= Home (catálogo público) ================= */
 export default function Home() {
   const [productos, setProductos] = useState([]);
-  const [searchResults, setSearchResults] = useState([]); // ← nuevos resultados de búsqueda
+  const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchParams] = useSearchParams(); // ← leer query string
+
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const searchQuery = searchParams.get("search")?.trim() || ""; // parámetro ?search=...
+  const searchQuery = searchParams.get("search")?.trim() || "";
+  const isSearching = !!searchQuery;
 
   const pageBg = useColorModeValue("#f6f7f9", "#0f1117");
-  const cardBg = useColorModeValue("white", "gray.800");
-  const borderCo = useColorModeValue("gray.200", "gray.700");
   const mutedHeader = useColorModeValue("gray.600", "gray.300");
 
-  // Carga inicial de productos (solo una vez)
+  // ✅ RUTAS/LOGICA INTACTAS
+  const onView = (p) => navigate(`/producto/${p.id}`);
+  const onAdd = () => navigate("/login");
+  const onBuy = () => navigate("/login");
+
+  /* ================== 1) CARGA INICIAL: TRAER TODOS (paginado) ================== */
   useEffect(() => {
+    let alive = true;
+
     (async () => {
+      setLoading(true);
       try {
-        const res = await api.get("/productos?limit=60&page=1");
-        setProductos(res.data.productos || []);
+        const all = [];
+        const limit = 200; // ajusta si quieres
+        const MAX_PAGES = 50; // tope de seguridad
+        let page = 1;
+
+        while (page <= MAX_PAGES) {
+          const res = await api.get("/productos", { params: { limit, page } });
+          const batch = res.data.productos || [];
+          all.push(...batch);
+
+          // si ya no hay más resultados, paramos
+          if (batch.length < limit) break;
+          page++;
+        }
+
+        if (alive) setProductos(all);
       } catch (e) {
         console.error("Error productos:", e);
       } finally {
-        setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // Carga de resultados cuando cambia el parámetro de búsqueda
+  /* ================== 2) BUSQUEDA (query string) ================== */
   useEffect(() => {
     if (!searchQuery) {
       setSearchResults([]);
       return;
     }
 
+    let alive = true;
+
     const fetchSearch = async () => {
       setSearchLoading(true);
       try {
         const res = await api.get("/productos", {
-          params: {
-            search: searchQuery,
-            limit: 48, // puedes aumentar si quieres más resultados
-            page: 1,
-          },
+          params: { search: searchQuery, limit: 48, page: 1 },
         });
-        setSearchResults(res.data.productos || []);
+        if (alive) setSearchResults(res.data.productos || []);
       } catch (err) {
         console.error("Error en búsqueda:", err);
-        setSearchResults([]);
+        if (alive) setSearchResults([]);
       } finally {
-        setSearchLoading(false);
+        if (alive) setSearchLoading(false);
       }
     };
 
     fetchSearch();
+
+    return () => {
+      alive = false;
+    };
   }, [searchQuery]);
 
-  const byCat = (needleArr, fallbackSlice = 12) => {
-    const hit = productos.filter((p) => {
-      const c1 = norm(p.categoria);
-      const cs = Array.isArray(p.categorias) ? p.categorias.map(norm) : [];
-      return needleArr.some((n) => c1.includes(n) || cs.some((x) => x.includes(n)));
-    });
-    return (hit.length ? hit : productos).slice(0, fallbackSlice);
-  };
-
-  const ofertas = useMemo(() => {
-    const withDeal = productos.filter(
-      (p) => p.precio_oferta || Number(p.descuento) > 0 || p.oferta
-    );
-    return (withDeal.length ? withDeal : productos).slice(0, 12);
-  }, [productos]);
-
+  /* ================== 3) RECIENTES ================== */
   const recientes = useMemo(() => {
     const arr = [...productos];
     arr.sort((a, b) => {
@@ -125,29 +128,47 @@ export default function Home() {
     return arr.slice(0, 12);
   }, [productos]);
 
-  const CATEGORY_MAP = [
-    { title: "Ferretería general", keys: ["ferreter", "general", "obra"] },
-    { title: "Herramientas manuales", keys: ["martillo", "destornill", "llave", "manual"] },
-    { title: "Herramientas eléctricas", keys: ["taladro", "esmeril", "eléctr", "dremel", "sierra", "rotomartillo"] },
-    { title: "Fijaciones y tornillería", keys: ["tornillo", "tuerca", "arandela", "fijación", "taco"] },
-    { title: "Adhesivos y sellantes", keys: ["adhes", "pegante", "silicon", "sell", "soldadura en frío"] },
-    { title: "Pinturas y acabados", keys: ["pintur", "esmalte", "látex", "rodillo", "brocha", "masilla"] },
-    { title: "Cables y electricidad", keys: ["cable", "conductor", "alambr", "breaker", "tomacorr"] },
-    { title: "Iluminación", keys: ["lumin", "bombillo", "led", "reflector", "panel"] },
-    { title: "Plomería", keys: ["plomer", "grifer", "mezclador", "válvula", "sifón"] },
-    { title: "Tubos y conexiones", keys: ["tuber", "pvc", "cpvc", "hidraul", "conexión"] },
-    { title: "Cementos y agregados", keys: ["cement", "mortero", "yeso", "arena", "grava"] },
-    { title: "Seguridad industrial", keys: ["seguridad", "guante", "casco", "protección", "botas"] },
-    { title: "Jardinería", keys: ["jardín", "manguera", "poda", "riego", "tierra"] },
-  ];
+  /* ================== 4) AGRUPAR POR CATEGORÍA REAL (SIN QUITAR RECIENTES) ================== */
+  const getCatLabel = (p) => {
+    // prioridad: campo "categoria" string
+    if (p?.categoria && String(p.categoria).trim()) return String(p.categoria).trim();
 
-  // ✅ RUTAS/LOGICA INTACTAS
-  const onView = (p) => navigate(`/producto/${p.id}`);
-  const onAdd = () => navigate("/login");
-  const onBuy = () => navigate("/login");
+    // alternativa: array "categorias"
+    if (Array.isArray(p?.categorias) && p.categorias.length) {
+      const first = p.categorias.find(Boolean);
+      if (first) return String(first).trim();
+    }
 
-  const isSearching = !!searchQuery;
+    return "Sin categoría";
+  };
 
+  const groupedByCategoria = useMemo(() => {
+    const map = new Map();
+
+    for (const p of productos) {
+      const label = getCatLabel(p);
+      if (!map.has(label)) map.set(label, []);
+      map.get(label).push(p);
+    }
+
+    // ordenar productos dentro de cada categoría (cambia si prefieres otro criterio)
+    for (const [label, arr] of map.entries()) {
+      arr.sort((a, b) =>
+        String(a?.nombre || "").localeCompare(String(b?.nombre || ""), "es")
+      );
+      map.set(label, arr);
+    }
+
+    // ordenar categorías alfabéticamente
+    const ordered = Array.from(map.entries()).sort((a, b) =>
+      String(a[0]).localeCompare(String(b[0]), "es")
+    );
+
+    // opcional: ocultar vacías
+    return ordered.filter(([, items]) => items.length > 0);
+  }, [productos]);
+
+  /* ================== UI ================== */
   return (
     <Box bg={pageBg} px={{ base: 3, md: 6, lg: 10 }} py={{ base: 4, md: 6 }}>
       {/* Mensaje de bienvenida siempre visible */}
@@ -172,12 +193,7 @@ export default function Home() {
       </Box>
 
       <PromoHeroFadeBanner
-        images={[
-          "/Banner1.png",
-          "/Banner2.png",
-          "/Banner3.jpg",
-          "/Banner4.png",
-        ]}
+        images={["/Banner1.png", "/Banner2.png", "/Banner3.jpg", "/Banner4.png"]}
         intervalMs={4500}
         ratio={{ base: 16 / 7, md: 16 / 7, lg: 4 / 1 }}
       />
@@ -195,9 +211,7 @@ export default function Home() {
               <Heading size="md" mb={4} color="gray.600">
                 No encontramos resultados
               </Heading>
-              <Text color="gray.500">
-                Prueba con otras palabras o revisa la ortografía
-              </Text>
+              <Text color="gray.500">Prueba con otras palabras o revisa la ortografía</Text>
             </Box>
           ) : (
             <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 5 }} spacing={6}>
@@ -215,6 +229,8 @@ export default function Home() {
           )}
         </Box>
       )}
+
+      {/* ==================== NO búsqueda: secciones ==================== */}
       {!isSearching && (
         <>
           <Section title="Recién llegado" mt={5}>
@@ -234,14 +250,15 @@ export default function Home() {
             />
           </Section>
 
-          {CATEGORY_MAP.map(({ title, keys }, idx) => (
-            <Section key={title} title={title} mt={5}>
+          {/* ✅ TODAS las categorías reales (incluye también los recientes) */}
+          {groupedByCategoria.map(([catName, items]) => (
+            <Section key={catName} title={catName} mt={5}>
               <RowScroller
                 loading={loading}
-                items={byCat(keys, 12)}
+                items={items}
                 renderItem={(p, i) => (
                   <ProductCard
-                    key={p?.id ?? `${idx}-${i}`}
+                    key={p?.id ?? `${catName}-${i}`}
                     producto={p}
                     loading={!p}
                     onView={() => onView(p)}
@@ -249,6 +266,7 @@ export default function Home() {
                     onBuy={onBuy}
                   />
                 )}
+                placeholderCount={8}
               />
             </Section>
           ))}
@@ -259,144 +277,6 @@ export default function Home() {
 }
 
 /* =================== Subcomponentes =================== */
-
-function PromoCarousel({ images = [] }) {
-  const cardBg = useColorModeValue("white", "gray.800");
-  const border = useColorModeValue("gray.200", "gray.700");
-  const trackRef = useRef(null);
-  const hoverRef = useRef(false);
-  const step = useBreakpointValue({ base: 1, sm: 1, md: 1 });
-
-  const promoRatio = useBreakpointValue({ base: 16 / 9, md: 21 / 9 }) ?? 16 / 9;
-
-  const loopImages = [...images, ...images];
-
-  useEffect(() => {
-    let id;
-    const el = trackRef.current;
-    if (!el) return;
-
-    const tick = () => {
-      if (hoverRef.current) return;
-      const card = el.querySelector("[data-card='promo']");
-      if (!card) return;
-      const cardWidth = card.getBoundingClientRect().width + 16;
-      el.scrollBy({ left: (step ?? 1) * cardWidth, behavior: "smooth" });
-
-      const maxScroll = el.scrollWidth / 2;
-      if (el.scrollLeft >= maxScroll) {
-        el.scrollLeft = el.scrollLeft - maxScroll;
-      }
-    };
-
-    id = setInterval(tick, 3000);
-    const onVisibility = () => {
-      if (document.hidden) clearInterval(id);
-      else id = setInterval(tick, 3000);
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, [images.length, step]);
-
-  const arrowSize = useBreakpointValue({ base: "sm", md: "md" });
-  const scrollBy = (px) => trackRef.current?.scrollBy({ left: px, behavior: "smooth" });
-
-  const cardW = useBreakpointValue({
-    base: "100%",
-    sm: "calc(50% - 12px)",
-    md: "calc(33.333% - 12px)",
-  });
-
-  return (
-    <Box
-      mb={5}
-      bg={cardBg}
-      border="1px solid"
-      borderColor={border}
-      borderRadius="xl"
-      px={{ base: 2, md: 3 }}
-      py={{ base: 2, md: 3 }}
-      position="relative"
-      overflow="hidden"
-      onMouseEnter={() => (hoverRef.current = true)}
-      onMouseLeave={() => (hoverRef.current = false)}
-    >
-      <Heading size="sm" mb={2} px={{ base: 1, md: 2 }}>
-        Promociones
-      </Heading>
-
-      <Tooltip label="Anterior">
-        <IconButton
-          aria-label="Anterior"
-          icon={<FiChevronLeft />}
-          size={arrowSize}
-          variant="ghost"
-          position="absolute"
-          left={1}
-          top="50%"
-          transform="translateY(-50%)"
-          zIndex={2}
-          onClick={() => scrollBy(-400)}
-        />
-      </Tooltip>
-
-      <Tooltip label="Siguiente">
-        <IconButton
-          aria-label="Siguiente"
-          icon={<FiChevronRight />}
-          size={arrowSize}
-          variant="ghost"
-          position="absolute"
-          right={1}
-          top="50%"
-          transform="translateY(-50%)"
-          zIndex={2}
-          onClick={() => scrollBy(400)}
-        />
-      </Tooltip>
-
-      <HStack
-        ref={trackRef}
-        spacing={4}
-        overflowX="auto"
-        py={1}
-        px={1}
-        css={{ scrollbarWidth: "thin" }}
-        scrollSnapType="x mandatory"
-      >
-        {loopImages.map((src, i) => (
-          <Box
-            key={`${src}-${i}`}
-            data-card="promo"
-            flex="0 0 auto"
-            w={cardW}
-            border="1px solid"
-            borderColor={border}
-            borderRadius="lg"
-            overflow="hidden"
-            _hover={{ boxShadow: "md" }}
-            scrollSnapAlign="start"
-          >
-            <AspectRatio ratio={promoRatio}>
-              <Image
-                src={src}
-                alt={`Promoción ${i + 1}`}
-                objectFit="cover"
-                loading="lazy"
-                fallbackSrc="https://via.placeholder.com/1920x1080?text=Publicidad"
-              />
-            </AspectRatio>
-          </Box>
-        ))}
-      </HStack>
-
-      <HintHint />
-    </Box>
-  );
-}
 
 function Section({ title, children, mt = 0 }) {
   const cardBg = useColorModeValue("white", "gray.800");
@@ -421,11 +301,11 @@ function Section({ title, children, mt = 0 }) {
   );
 }
 
-/* ===== RowScroller (IGUAL al Cliente.jsx base: mobile SIN flechas; desktop CON flechas + safe padding) ===== */
+/* ===== RowScroller ===== */
 function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   const scrollerRef = useRef(null);
 
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
   const arrowSize = useBreakpointValue({ base: "sm", md: "md" }) ?? "sm";
 
   const [showLeft, setShowLeft] = useState(false);
@@ -438,7 +318,9 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
 
   const content =
     loading || !items?.length
-      ? Array.from({ length: placeholderCount }).map((_, i) => <SkeletonCard key={`sk-${i}`} />)
+      ? Array.from({ length: placeholderCount }).map((_, i) => (
+          <SkeletonCard key={`sk-${i}`} />
+        ))
       : items.map((p, i) => renderItem(p, i));
 
   const handleScroll = useCallback(() => {
@@ -469,7 +351,7 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     };
   }, [handleScroll, loading, items]);
 
-  // wheel horizontal SOLO desktop (solo cuando el usuario lo indica)
+  // wheel horizontal SOLO desktop
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || isMobile) return;
@@ -478,13 +360,9 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
       const isTrackpadHorizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       const wantsHorizontal = e.shiftKey || isTrackpadHorizontal;
 
-      // Si NO es intención horizontal, deja que el scroll vertical suba/baje la página
       if (!wantsHorizontal) return;
-
-      // Si no hay overflow horizontal real, no bloquees nada
       if (el.scrollWidth <= el.clientWidth + 1) return;
 
-      // Shift+Wheel usa deltaY; trackpad horizontal usa deltaX
       const delta = e.shiftKey ? e.deltaY : e.deltaX;
       if (!delta) return;
 
@@ -496,8 +374,8 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
     return () => el.removeEventListener("wheel", wheel);
   }, [isMobile]);
 
-
-  const scrollBy = (px) => scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
+  const scrollBy = (px) =>
+    scrollerRef.current?.scrollBy({ left: px, behavior: "smooth" });
 
   return (
     <Box position="relative">
@@ -569,8 +447,8 @@ function RowScroller({ loading, items, renderItem, placeholderCount = 8 }) {
   );
 }
 
-/* ===== ProductCard (IGUAL al Cliente.jsx base: cuadrada, centrada, CTA outline rojo) ===== */
-function ProductCard({ producto, loading, onView, onAdd, onBuy, showDealBadge }) {
+/* ===== ProductCard ===== */
+function ProductCard({ producto, loading, onView, onAdd }) {
   const cardBg = useColorModeValue("white", "gray.800");
   const borderCo = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
   const titleColor = useColorModeValue("gray.900", "gray.100");
@@ -704,7 +582,7 @@ function ProductCard({ producto, loading, onView, onAdd, onBuy, showDealBadge })
   );
 }
 
-/* ===== Skeleton Card (igual al Cliente.jsx base) ===== */
+/* ===== Skeleton Card ===== */
 function SkeletonCard() {
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("blackAlpha.200", "whiteAlpha.200");
@@ -739,10 +617,10 @@ function SkeletonCard() {
   );
 }
 
-/* ===== Hint (igual al Cliente.jsx base: mobile simple, desktop con atajos) ===== */
+/* ===== Hint ===== */
 function HintHint() {
   const color = useColorModeValue("gray.500", "gray.400");
-  const isMobile = (useBreakpointValue({ base: true, md: false }) ?? true);
+  const isMobile = useBreakpointValue({ base: true, md: false }) ?? true;
 
   return (
     <HStack mt={2} spacing={2} color={color} fontSize="xs">

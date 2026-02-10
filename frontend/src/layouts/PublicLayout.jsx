@@ -25,6 +25,8 @@ import {
   DrawerBody,
   DrawerCloseButton,
   Stack,
+  Grid,
+  GridItem,
   useDisclosure,
   VisuallyHidden,
   Link as CLink,
@@ -42,6 +44,12 @@ import {
   FiMapPin,
   FiMenu,
 } from "react-icons/fi";
+import {
+  FaWhatsapp,
+  FaInstagram,
+  FaFacebook,
+  FaXTwitter, // o FaTwitter si usas la versión anterior
+} from "react-icons/fa6";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import api, { API_BASE_URL } from "../utils/axiosInstance";
@@ -56,6 +64,7 @@ export default function PublicLayout() {
 
   const bgPage = useColorModeValue("#f6f7f9", "#0f1117");
   const headerBg = "#f8bd22";
+  const footerBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("blackAlpha.200", "blackAlpha.400");
   const navInactive = useColorModeValue("gray.800", "gray.100");
   const navActiveBg = useColorModeValue("white", "whiteAlpha.200");
@@ -69,15 +78,11 @@ export default function PublicLayout() {
   const hideNavbarRoutes = ["/forgot-password", "/verify-reset", "/reset-password"];
   const hideNavbar = hideNavbarRoutes.includes(pathname);
 
-  // ================== BREAKPOINTS “GENERALES” ==================
-  // - base/sm/md: móvil + tablet
-  // - lg/xl: laptop
-  // - 2xl: desktop grande (PC de mesa)
-  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true }); // ≥1536px
-  const showDesktopNav = !!isDesktopLarge; // fila 3 solo en 2xl (evita header gigante en laptop)
+  // Breakpoints
+  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true });
+  const showDesktopNav = !!isDesktopLarge;
   const useDrawerNav = !showDesktopNav;
 
-  // ✅ Ocultar header SOLO en móvil+tablet (base–md), NO en laptop/pc
   const hideOnScroll = useBreakpointValue({ base: true, md: true, lg: false });
 
   const isActive = (to) => {
@@ -188,10 +193,9 @@ export default function PublicLayout() {
   const hasQuery = debouncedSearch.length >= 2;
   const hasResults = searchResults.length > 0;
 
-  // ================== HEADER HIDE “PRO” (transform, sin reflow) ==================
+  // ================== HEADER HIDE ==================
   const headerRef = useRef(null);
   const [headerH, setHeaderH] = useState(0);
-
   const [hideHeader, setHideHeader] = useState(false);
   const hideHeaderRef = useRef(false);
 
@@ -278,7 +282,6 @@ export default function PublicLayout() {
     { to: "/Login", label: "Iniciar sesión", icon: FiUser },
   ];
 
-  // tamaños “responsivos” clave (altura/logo/input)
   const logoH = useBreakpointValue({ base: "28px", sm: "30px", md: "34px", lg: "36px", "2xl": "40px" });
   const searchH = useBreakpointValue({ base: "40px", md: "44px", lg: "44px", "2xl": "46px" });
   const searchFont = useBreakpointValue({ base: "sm", md: "md" });
@@ -664,7 +667,7 @@ export default function PublicLayout() {
         </DrawerContent>
       </Drawer>
 
-      {/* Contenido principal */}
+      {/* Contenido principal + Footer */}
       <MotionBox
         style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
         animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
@@ -678,7 +681,120 @@ export default function PublicLayout() {
             <Outlet />
           </Container>
         </Box>
-        {/* footer aquí */}
+
+        {/* ===== FOOTER ===== */}
+        <Box
+          as="footer"
+          w="full"
+          bg={footerBg}
+          py={{ base: 6, md: 8 }}
+          borderTop="1px solid"
+          borderColor={borderColor}
+          mt="auto"
+          boxShadow="0 -4px 20px rgba(0,0,0,0.06)"
+        >
+          <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 6, lg: 8 }}>
+            <Grid
+              templateColumns={{ base: "1fr", md: "1fr auto 1fr" }}
+              alignItems="center"
+              gap={{ base: 6, md: 8 }}
+            >
+              {/* Logo */}
+              <HStack justify={{ base: "center", md: "flex-start" }}>
+                <Image
+                  src="/LOGOFERREEXPRESS.png"
+                  alt="FerreExpress S.A.S."
+                  h={{ base: "36px", sm: "42px", md: "48px" }}
+                  objectFit="contain"
+                  transition="transform 0.2s"
+                  _hover={{ transform: "scale(1.06)" }}
+                />
+              </HStack>
+
+              {/* Enlaces legales (ajustados para público) */}
+              <HStack
+                spacing={{ base: 6, md: 10 }}
+                justify="center"
+                fontSize={{ base: "sm", md: "md" }}
+                fontWeight="medium"
+              >
+                <CLink
+                  href="https://tu-sitio.com/condiciones-uso"
+                  isExternal
+                  color="blue.600"
+                  _hover={{ color: "blue.700", textDecoration: "underline" }}
+                >
+                  Condiciones de uso
+                </CLink>
+                <CLink
+                  href="https://tu-sitio.com/privacidad"
+                  isExternal
+                  color="blue.600"
+                  _hover={{ color: "blue.700", textDecoration: "underline" }}
+                >
+                  Política de privacidad
+                </CLink>
+              </HStack>
+
+              {/* Redes sociales */}
+              <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
+                {[
+                  {
+                    Icon: FaWhatsapp,
+                    label: "WhatsApp",
+                    color: "#25D366",
+                    url: "https://wa.me/message/YJTPSMKGHFBAH1",
+                  },
+                  {
+                    Icon: FaInstagram,
+                    label: "Instagram",
+                    color: "#E4405F",
+                    url: "https://www.instagram.com/ferreexpress.sas?igsh=MXVkMWNwbTVpZGRrZg==",
+                  },
+                  {
+                    Icon: FaFacebook,
+                    label: "Facebook",
+                    color: "#1877F2",
+                    url: "https://www.facebook.com/profile.php?id=61569576237043",
+                  },
+                  {
+                    Icon: FaXTwitter,
+                    label: "X",
+                    color: "#000000",
+                    url: "https://x.com/tu_usuario", // ← cámbialo si tienes cuenta en X
+                  },
+                ].map((social) => (
+                  <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
+                    <IconButton
+                      as="a"
+                      href={social.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={social.label}
+                      icon={<social.Icon size={24} />}
+                      variant="ghost"
+                      color={muted}
+                      _hover={{ color: social.color, bg: "blackAlpha.100" }}
+                      rounded="full"
+                    />
+                  </MotionBox>
+                ))}
+              </HStack>
+
+              {/* Copyright */}
+              <GridItem colSpan={{ base: 1, md: 3 }} mt={{ base: 6, md: 8 }}>
+                <Text
+                  fontSize={{ base: "xs", md: "sm" }}
+                  color={muted}
+                  textAlign="center"
+                  fontWeight="medium"
+                >
+                  © {new Date().getFullYear()} FerreExpress® • Todos los derechos reservados
+                </Text>
+              </GridItem>
+            </Grid>
+          </Container>
+        </Box>
       </MotionBox>
     </Box>
   );

@@ -1110,9 +1110,9 @@ export default function EmpresaLayout() {
 
               <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
                 {[
-                  { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366" },
-                  { Icon: FaInstagram, label: "Instagram", color: "#E4405F" },
-                  { Icon: FaFacebook, label: "Facebook", color: "#1877F2" },
+                  { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366", url: "https://wa.me/message/YJTPSMKGHFBAH1" },
+                  { Icon: FaInstagram, label: "Instagram", color: "#E4405F", url: "https://www.instagram.com/ferreexpress.sas?igsh=MXVkMWNwbTVpZGRrZg==" },
+                  { Icon: FaFacebook, label: "Facebook", color: "#1877F2", url: "https://www.facebook.com/profile.php?id=61569576237043&sk=about" },
                   { Icon: FaXTwitter, label: "X", color: "#000000" },
                 ].map((social) => (
                   <MotionBox key={social.label} whileHover={{ scale: 1.22 }} whileTap={{ scale: 0.92 }}>
