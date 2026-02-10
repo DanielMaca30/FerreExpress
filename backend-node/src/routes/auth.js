@@ -22,6 +22,16 @@ const { requireAuth } = require("../middlewares/authMiddleware");
 const { requireRole } = require("../middlewares/roleMiddleware");
 
 /* ============================================================
+   ✅ Config Frontend URL (para redirects Google)
+   - En local: http://localhost:5173
+   - En prod:  FRONTEND_URL=https://tu-front.vercel.app
+   ============================================================ */
+const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
+  /\/$/,
+  ""
+);
+
+/* ============================================================
    🔐 Autenticación con Google (OAuth 2.0)
    ============================================================ */
 router.get(
@@ -32,12 +42,20 @@ router.get(
 router.get(
   "/auth/google/callback",
   passport.authenticate("google", {
-    failureRedirect: "http://localhost:5173/login",
+    failureRedirect: `${FRONTEND_URL}/login`,
   }),
   (req, res) => {
-    const token = req.user.token;
-    // Redirigir al frontend con el JWT
-    res.redirect(`http://localhost:5173/login?token=${token}`);
+    const token = req.user?.token;
+
+    if (!token) {
+      // fallback defensivo
+      return res.redirect(`${FRONTEND_URL}/login?error=google_token_missing`);
+    }
+
+    // ✅ Redirigir al frontend con el JWT
+    return res.redirect(
+      `${FRONTEND_URL}/login?token=${encodeURIComponent(token)}`
+    );
   }
 );
 
@@ -128,12 +146,7 @@ router.post("/auth/convertir-empresa", requireAuth, convertirAEmpresa);
  * @desc    Listar usuarios del sistema
  * @access  Privado (ADMIN)
  */
-router.get(
-  "/admin/usuarios",
-  requireAuth,
-  requireRole("ADMIN"),
-  listarUsuarios
-);
+router.get("/admin/usuarios", requireAuth, requireRole("ADMIN"), listarUsuarios);
 
 /**
  * @route   PUT /admin/usuarios/:id/estado
