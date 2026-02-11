@@ -92,20 +92,21 @@ const detalleCaso = async (req, res) => {
   }
 };
 
-// Cambiar estado
+// Cambiar estado (FIX: no romper el flujo si falla el correo)
 const actualizarEstadoCaso = async (req, res) => {
   try {
     const { id } = req.params;
     const { nuevoEstado } = req.body;
-    const rol = req.user.role;
-    const usuarioId = req.user.sub;
 
-    const estadosValidos = ['EN_PROGRESO', 'RESUELTO', 'CERRADO', 'CANCELADO'];
+    const rol = req.user.role;
+    const usuarioId = req.user.sub || req.user.id; // ✅ compat
+
+    const estadosValidos = ["EN_PROGRESO", "RESUELTO", "CERRADO", "CANCELADO"];
     if (!estadosValidos.includes(nuevoEstado)) {
       return res.status(400).json({ error: "Estado inválido" });
     }
 
-    // Buscar el caso
+    // 1) Buscar caso
     const [rows] = await pool.query(
       "SELECT usuario_id, estado FROM casos WHERE id = ?",
       [id]
@@ -115,55 +116,78 @@ const actualizarEstadoCaso = async (req, res) => {
     }
     const caso = rows[0];
 
-    // Permisos: admin o dueño
-    if (rol !== 'ADMIN' && caso.usuario_id !== usuarioId) {
+    // 2) Permisos (admin o dueño)
+    if (rol !== "ADMIN" && Number(caso.usuario_id) !== Number(usuarioId)) {
       return res.status(403).json({ error: "No tienes permiso para actualizar este caso" });
     }
 
-    // Actualizar estado
-    await pool.query("UPDATE casos SET estado = ? WHERE id = ?", [nuevoEstado, id]);
-
-    // Guardar notificación
-    await pool.query(
-      "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'CASO')",
-      [
-        caso.usuario_id,
-        `Caso #${id} actualizado`,
-        `El estado de tu caso cambió a: ${nuevoEstado}`
-      ]
+    // 3) Actualizar estado
+    const [upd] = await pool.query(
+      "UPDATE casos SET estado = ? WHERE id = ?",
+      [nuevoEstado, id]
     );
 
-    // 🔔 Obtener correo del dueño real
-    let destinatario = req.user.email;
-    if (rol === 'ADMIN') {
-      const [usuarioRows] = await pool.query(
-        "SELECT email FROM usuarios WHERE id = ?",
-        [caso.usuario_id]
+    if (!upd.affectedRows) {
+      return res.status(404).json({ error: "Caso no encontrado" });
+    }
+
+    // 4) Guardar notificación (si falla, NO romper flujo)
+    try {
+      await pool.query(
+        "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'CASO')",
+        [
+          caso.usuario_id,
+          `Caso #${id} actualizado`,
+          `El estado de tu caso cambió a: ${nuevoEstado}`,
+        ]
       );
-      if (usuarioRows.length > 0) {
-        destinatario = usuarioRows[0].email;
+    } catch (e) {
+      console.warn("Aviso: no se pudo insertar notificación de caso:", e?.message);
+    }
+
+    // 5) Email (si falla, NO romper flujo)
+    let emailEnviado = false;
+    try {
+      // obtener correo del dueño real si admin
+      let destinatario = req.user.email;
+      if (rol === "ADMIN") {
+        const [usuarioRows] = await pool.query(
+          "SELECT email FROM usuarios WHERE id = ?",
+          [caso.usuario_id]
+        );
+        if (usuarioRows.length > 0) destinatario = usuarioRows[0].email;
       }
+
+      // construir mensaje
+      let subject = `Tu caso #${id} cambió de estado`;
+      let text = `Tu caso ahora está en estado: ${nuevoEstado}`;
+      let html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> ahora está en estado: <b>${nuevoEstado}</b>.</p>`;
+
+      if (nuevoEstado === "RESUELTO") {
+        subject = `Caso #${id} resuelto 🎉`;
+        text = `Tu caso #${id} fue marcado como RESUELTO.`;
+        html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> fue resuelto con éxito 🎉.</p>`;
+      }
+
+      await sendMail({ to: destinatario, subject, text, html });
+      emailEnviado = true;
+    } catch (e) {
+      console.warn("Aviso: no se pudo enviar correo de cambio de estado:", e?.message);
     }
 
-    // 📩 Mensaje según estado
-    let subject = `Tu caso #${id} cambió de estado`;
-    let text = `Tu caso ahora está en estado: ${nuevoEstado}`;
-    let html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> ahora está en estado: <b>${nuevoEstado}</b>.</p>`;
-
-    if (nuevoEstado === 'RESUELTO') {
-      subject = `Caso #${id} resuelto 🎉`;
-      text = `Tu caso #${id} fue marcado como RESUELTO.`;
-      html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> fue resuelto con éxito 🎉.</p>`;
-    }
-
-    await sendMail({ to: destinatario, subject, text, html });
-
-    res.json({ message: `Estado del caso actualizado a ${nuevoEstado}` });
+    // ✅ Responder OK aunque el correo falle
+    return res.json({
+      message: `Estado del caso actualizado a ${nuevoEstado}`,
+      id: Number(id),
+      estado: nuevoEstado,
+      email_enviado: emailEnviado,
+    });
   } catch (error) {
     console.error("Error en actualizarEstadoCaso:", error);
-    res.status(500).json({ error: "Error al actualizar estado del caso" });
+    return res.status(500).json({ error: "Error al actualizar estado del caso" });
   }
 };
+
 
 // GET /casos/:id/comentarios
 const listarComentariosCaso = async (req, res) => {
