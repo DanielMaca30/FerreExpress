@@ -1,30 +1,47 @@
+// backend-node/src/utils/mailer.js
 const nodemailer = require("nodemailer");
 
-// Verificación básica de variables de entorno
-if (!process.env.MAIL_HOST || !process.env.MAIL_USER || !process.env.MAIL_PASS) {
-  console.warn("⚠️ Configuración SMTP incompleta. Revisa tu archivo .env");
+const SMTP_READY = Boolean(process.env.MAIL_HOST && process.env.MAIL_USER && process.env.MAIL_PASS);
+
+let transporter = null;
+
+if (!SMTP_READY) {
+  console.warn("⚠️ SMTP deshabilitado: falta MAIL_HOST/MAIL_USER/MAIL_PASS (se omiten correos).");
+} else {
+  transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST,
+    port: process.env.MAIL_PORT ? parseInt(process.env.MAIL_PORT, 10) : 587,
+    secure: process.env.MAIL_SECURE === "true", // true para 465
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+    tls: { rejectUnauthorized: false },
+
+    // ✅ CLAVE: timeouts cortos para no colgar peticiones
+    connectionTimeout: 6000,
+    greetingTimeout: 6000,
+    socketTimeout: 8000,
+  });
+
+  // opcional: verificar en arranque (no tumba el server)
+  transporter.verify().then(
+    () => console.log("✅ SMTP listo"),
+    (err) => console.warn("⚠️ SMTP verify falló:", err?.message)
+  );
 }
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || "smtp.gmail.com",
-  port: process.env.MAIL_PORT ? parseInt(process.env.MAIL_PORT) : 587,
-  secure: process.env.MAIL_SECURE === "true" || false, // true para 465 (SSL), false para 587 (TLS)
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false, // Evita problemas en entornos locales
-  },
-});
-
-// Función reutilizable para enviar correo
 const sendMail = async ({ to, subject, text, html }) => {
-  try {
-    if (!to || !subject || (!text && !html)) {
-      throw new Error("Parámetros incompletos para enviar el correo.");
-    }
+  // ✅ Nunca romper flujo por correo
+  if (!SMTP_READY || !transporter) {
+    return { skipped: true, reason: "smtp_not_configured" };
+  }
 
+  if (!to || !subject || (!text && !html)) {
+    return { skipped: true, reason: "missing_params" };
+  }
+
+  try {
     const info = await transporter.sendMail({
       from: `"FerreExpress S.A.S" <${process.env.MAIL_USER}>`,
       to,
@@ -33,13 +50,12 @@ const sendMail = async ({ to, subject, text, html }) => {
       html,
     });
 
-    console.log(`📧 Correo enviado correctamente a ${to}`);
-    console.log(`   Message ID: ${info.messageId}`);
-    return info;
-  } catch (error) {
-    console.error("❌ Error al enviar correo:", error.message);
-    throw error;
+    console.log(`📧 Correo enviado a ${to} (${info.messageId})`);
+    return { ok: true, messageId: info.messageId };
+  } catch (err) {
+    console.warn("⚠️ sendMail falló:", err?.message);
+    return { ok: false, error: err?.message };
   }
 };
 
-module.exports = { sendMail };
+module.exports = { sendMail, SMTP_READY };

@@ -145,11 +145,12 @@ const actualizarEstadoCaso = async (req, res) => {
       console.warn("Aviso: no se pudo insertar notificación de caso:", e?.message);
     }
 
-    // 5) Email (si falla, NO romper flujo)
-    let emailEnviado = false;
+    // 5) Email (NO bloquear la respuesta HTTP)
+    let email_programado = false;
+
     try {
-      // obtener correo del dueño real si admin
       let destinatario = req.user.email;
+
       if (rol === "ADMIN") {
         const [usuarioRows] = await pool.query(
           "SELECT email FROM usuarios WHERE id = ?",
@@ -158,7 +159,6 @@ const actualizarEstadoCaso = async (req, res) => {
         if (usuarioRows.length > 0) destinatario = usuarioRows[0].email;
       }
 
-      // construir mensaje
       let subject = `Tu caso #${id} cambió de estado`;
       let text = `Tu caso ahora está en estado: ${nuevoEstado}`;
       let html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> ahora está en estado: <b>${nuevoEstado}</b>.</p>`;
@@ -169,18 +169,23 @@ const actualizarEstadoCaso = async (req, res) => {
         html = `<p>Hola,</p><p>Tu caso <b>#${id}</b> fue resuelto con éxito 🎉.</p>`;
       }
 
-      await sendMail({ to: destinatario, subject, text, html });
-      emailEnviado = true;
+      // ✅ respondemos primero y enviamos después
+      email_programado = true;
+      setImmediate(async () => {
+        const r = await sendMail({ to: destinatario, subject, text, html });
+        if (!r?.ok && !r?.skipped) {
+          console.warn("Aviso: correo no enviado:", r?.error);
+        }
+      });
     } catch (e) {
-      console.warn("Aviso: no se pudo enviar correo de cambio de estado:", e?.message);
+      console.warn("Aviso: no se pudo preparar envío de correo:", e?.message);
     }
 
-    // ✅ Responder OK aunque el correo falle
     return res.json({
       message: `Estado del caso actualizado a ${nuevoEstado}`,
       id: Number(id),
       estado: nuevoEstado,
-      email_enviado: emailEnviado,
+      email_programado,
     });
   } catch (error) {
     console.error("Error en actualizarEstadoCaso:", error);
@@ -291,4 +296,4 @@ const agregarComentarioCaso = async (req, res) => {
   }
 };
 
-module.exports = {crearCaso, listarCasos, detalleCaso, actualizarEstadoCaso, listarComentariosCaso, agregarComentarioCaso};
+module.exports = { crearCaso, listarCasos, detalleCaso, actualizarEstadoCaso, listarComentariosCaso, agregarComentarioCaso };
