@@ -1,4 +1,4 @@
-// src/controllers/pedidoController.js
+// backend-node/src/controllers/pedidoController.js
 const pool = require("../db");
 const { sendMail } = require("../utils/mailer");
 const { logAuditoria } = require("../utils/auditoria");
@@ -14,6 +14,33 @@ const ESTADOS_VALIDOS = [
   "ENTREGADO",
   "CANCELADO",
 ];
+
+/* ========================= helpers ========================= */
+
+const isPositiveInt = (n) =>
+  Number.isFinite(Number(n)) && Number(n) > 0 && Number.isInteger(Number(n));
+
+async function validarDireccionDeUsuario(connection, direccion_id, usuarioId) {
+  if (!direccion_id) return; // puede ser null si retiro en tienda
+  const [rows] = await connection.query(
+    "SELECT id FROM direcciones_usuario WHERE id = ? AND usuario_id = ?",
+    [direccion_id, usuarioId]
+  );
+  if (rows.length === 0) {
+    throw new Error("La dirección no existe o no pertenece al usuario");
+  }
+}
+
+// Ejecuta tareas en background sin bloquear el response
+const runInBackground = (label, fn) => {
+  setImmediate(async () => {
+    try {
+      await fn();
+    } catch (e) {
+      console.warn(`[BG:${label}]`, e?.message || e);
+    }
+  });
+};
 
 /* =========================================================================
  * ADMIN: LISTAR PEDIDOS  GET /api/v1/pedidos?estado=&usuario=&desde=&hasta=
@@ -115,21 +142,6 @@ const detallePedido = async (req, res) => {
   }
 };
 
-/* Helpers */
-const isPositiveInt = (n) =>
-  Number.isFinite(Number(n)) && Number(n) > 0 && Number.isInteger(Number(n));
-
-async function validarDireccionDeUsuario(connection, direccion_id, usuarioId) {
-  if (!direccion_id) return; // puede ser null si retiro en tienda
-  const [rows] = await connection.query(
-    "SELECT id FROM direcciones_usuario WHERE id = ? AND usuario_id = ?",
-    [direccion_id, usuarioId]
-  );
-  if (rows.length === 0) {
-    throw new Error("La dirección no existe o no pertenece al usuario");
-  }
-}
-
 /* =========================================================================
  * CLIENTE: CREAR PEDIDO DIRECTO  POST /api/v1/pedidos/directo
  * ========================================================================= */
@@ -137,12 +149,19 @@ const crearPedidoDirecto = async (req, res) => {
   const connection = await pool.getConnection();
   console.log(
     "[crearPedidoDirecto] nueva solicitud",
-    "user:", req.user?.sub,
-    "hora:", new Date().toISOString()
+    "user:",
+    req.user?.sub,
+    "hora:",
+    new Date().toISOString()
   );
+
+  let pedidoId = null;
+  let totalFinal = 0;
+  let costoEnvio = 0;
+
   try {
     const usuarioId = req.user.sub;
-    const { productos, direccion_id, metodo_pago, entrega } = req.body;
+    const { productos, direccion_id, metodo_pago, entrega, nota } = req.body;
 
     if (!Array.isArray(productos) || productos.length === 0) {
       return res
@@ -163,6 +182,8 @@ const crearPedidoDirecto = async (req, res) => {
     if (!["CONTRAENTREGA", "PAGO_LINEA"].includes(metodo_pago)) {
       return res.status(400).json({ error: "Método de pago inválido" });
     }
+
+    // Si paga en línea, entrega debe ser DOMICILIO o TIENDA (según tu diseño)
     if (metodo_pago === "PAGO_LINEA") {
       if (!["DOMICILIO", "TIENDA"].includes(entrega)) {
         return res
@@ -184,13 +205,12 @@ const crearPedidoDirecto = async (req, res) => {
         "SELECT id, nombre, precio, stock FROM productos WHERE id = ? FOR UPDATE",
         [item.producto_id]
       );
-      if (!producto)
+      if (!producto) {
         throw new Error(`Producto con id ${item.producto_id} no existe`);
+      }
 
       if (Number(producto.stock) < Number(item.cantidad)) {
-        throw new Error(
-          `Stock insuficiente para el producto ${producto.nombre}`
-        );
+        throw new Error(`Stock insuficiente para el producto ${producto.nombre}`);
       }
 
       const subtotal = Number(producto.precio) * Number(item.cantidad);
@@ -206,17 +226,17 @@ const crearPedidoDirecto = async (req, res) => {
       );
     }
 
-    // Costo envío (solo reglas de CLIENTE convencional)
-    let costoEnvio = 0;
+    // Costo envío (tu regla actual)
+    // - Contraentrega: +envío fijo
+    // - Pago en línea: +envío fijo solo si DOMICILIO
     if (metodo_pago === "CONTRAENTREGA") {
       costoEnvio = COSTO_ENVIO_FIJO;
     } else if (metodo_pago === "PAGO_LINEA") {
       costoEnvio = entrega === "DOMICILIO" ? COSTO_ENVIO_FIJO : 0;
     }
 
-    const totalFinal = total + costoEnvio;
+    totalFinal = total + costoEnvio;
 
-    // Crear pedido con estado explícito
     const [pedidoResult] = await connection.query(
       `INSERT INTO pedidos 
         (usuario_id, direccion_id, metodo_pago, entrega, costo_envio, total, estado) 
@@ -231,7 +251,7 @@ const crearPedidoDirecto = async (req, res) => {
       ]
     );
 
-    const pedidoId = pedidoResult.insertId;
+    pedidoId = pedidoResult.insertId;
 
     // Insertar detalles
     for (const item of productos) {
@@ -250,35 +270,7 @@ const crearPedidoDirecto = async (req, res) => {
 
     await connection.commit();
 
-    // Notificación en DB
-    try {
-      await pool.query(
-        "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
-        [
-          usuarioId,
-          `Pedido creado #${pedidoId}`,
-          `Tu pedido fue creado con éxito. Total: $${totalFinal}`,
-        ]
-      );
-    } catch (nErr) {
-      console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
-    }
-
-    // Email (best-effort)
-    try {
-      if (req.user.email) {
-        await sendMail({
-          to: req.user.email,
-          subject: `Confirmación de tu pedido #${pedidoId}`,
-          text: `Tu pedido fue creado con éxito. Total: $${totalFinal}`,
-          html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> fue creado con éxito.</p>
-                 <p>Total: <b>$${totalFinal}</b></p>`,
-        });
-      }
-    } catch (mailErr) {
-      console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
-    }
-
+    // ✅ RESPONDER YA (evita timeout por SMTP/notificaciones)
     res.status(201).json({
       message: "Pedido creado con éxito",
       pedido_id: pedidoId,
@@ -286,14 +278,64 @@ const crearPedidoDirecto = async (req, res) => {
       costo_envio: costoEnvio,
       productos,
     });
+
+    // 🔥 Background (no bloquea el response)
+    runInBackground("pedidoDirecto:post", async () => {
+      // Notificación DB (best-effort)
+      try {
+        await pool.query(
+          "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
+          [
+            usuarioId,
+            `Pedido creado #${pedidoId}`,
+            `Tu pedido fue creado con éxito. Total: $${totalFinal}`,
+          ]
+        );
+      } catch (nErr) {
+        console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
+      }
+
+      // Email (best-effort)
+      try {
+        if (req.user?.email) {
+          await sendMail({
+            to: req.user.email,
+            subject: `Confirmación de tu pedido #${pedidoId}`,
+            text: `Tu pedido fue creado con éxito. Total: $${totalFinal}`,
+            html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> fue creado con éxito.</p>
+                   <p>Total: <b>$${totalFinal}</b></p>`,
+          });
+        }
+      } catch (mailErr) {
+        console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
+      }
+
+      // Auditoría opcional si la quieres
+      try {
+        await logAuditoria({
+          usuario_id: usuarioId,
+          accion: "PEDIDO_CREADO_DIRECTO",
+          entidad: "pedido",
+          entidad_id: Number(pedidoId),
+          cambios: { total: totalFinal, metodo_pago, entrega, nota: nota || null },
+        });
+      } catch (e) {
+        console.warn("Aviso auditoría:", e?.message);
+      }
+    });
+
+    return; // 👈 importantísimo
   } catch (error) {
     try {
       await connection.rollback();
     } catch (_) {}
     console.error("Error en crearPedidoDirecto:", error);
-    res
-      .status(500)
-      .json({ error: error.message || "Error al crear pedido directo" });
+
+    if (!res.headersSent) {
+      res
+        .status(500)
+        .json({ error: error.message || "Error al crear pedido directo" });
+    }
   } finally {
     connection.release();
   }
@@ -306,12 +348,19 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
   const connection = await pool.getConnection();
   console.log(
     "[crearPedidoDesdeCotizacion] nueva solicitud",
-    "user:", req.user?.sub,
-    "hora:", new Date().toISOString()
+    "user:",
+    req.user?.sub,
+    "hora:",
+    new Date().toISOString()
   );
+
+  let pedidoId = null;
+  let totalFinal = 0;
+  let costoEnvio = 0;
+
   try {
     const usuarioId = req.user.sub;
-    const { cotizacion_id, direccion_id, metodo_pago, entrega } = req.body;
+    const { cotizacion_id, direccion_id, metodo_pago, entrega, nota } = req.body;
 
     if (!isPositiveInt(cotizacion_id)) {
       return res.status(400).json({ error: "cotizacion_id inválido" });
@@ -332,26 +381,35 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
     // Dirección debe pertenecer al usuario (si viene)
     await validarDireccionDeUsuario(connection, direccion_id, usuarioId);
 
-    // 🔒 Solo cotizaciones ACEPTADAS + VIGENTES pueden generar pedido
+    // 🔒 Cotización aceptada/aprobada + vigente
     const [cotRows] = await connection.query(
       `SELECT * FROM cotizaciones 
        WHERE id = ? AND usuario_id = ? 
-       AND estado_gestion = 'ACEPTADA' 
-       AND estado_vigencia = 'VIGENTE' FOR UPDATE`,
+       AND estado_vigencia = 'VIGENTE'
+       AND estado_gestion IN ('ACEPTADA','APROBADA')
+       FOR UPDATE`,
       [cotizacion_id, usuarioId]
     );
+
     if (cotRows.length === 0) {
+      await connection.rollback();
       return res
         .status(400)
         .json({ error: "Cotización no válida para pedido" });
     }
 
     const cotizacion = cotRows[0];
+    const estadoGestionAnterior = cotizacion.estado_gestion;
 
     const [detalleRows] = await connection.query(
       `SELECT * FROM cotizacion_detalles WHERE cotizacion_id = ?`,
       [cotizacion_id]
     );
+
+    if (!detalleRows || detalleRows.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({ error: "La cotización no tiene detalles" });
+    }
 
     // Validar stock y descontar
     for (const d of detalleRows) {
@@ -359,8 +417,7 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
         "SELECT stock FROM productos WHERE id = ? FOR UPDATE",
         [d.producto_id]
       );
-      if (!prd)
-        throw new Error(`Producto con id ${d.producto_id} no existe`);
+      if (!prd) throw new Error(`Producto con id ${d.producto_id} no existe`);
       if (Number(prd.stock) < Number(d.cantidad)) {
         throw new Error(`Stock insuficiente para producto ${d.producto_id}`);
       }
@@ -370,14 +427,13 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
       );
     }
 
-    // Costo de envío
-    let costoEnvio = 0;
+    // Costo de envío (tu regla actual)
     if (metodo_pago === "CONTRAENTREGA") costoEnvio = COSTO_ENVIO_FIJO;
     else if (metodo_pago === "PAGO_LINEA") {
       costoEnvio = entrega === "DOMICILIO" ? COSTO_ENVIO_FIJO : 0;
     }
 
-    const totalFinal = Number(cotizacion.total) + costoEnvio;
+    totalFinal = Number(cotizacion.total) + costoEnvio;
 
     const [pedidoResult] = await connection.query(
       `INSERT INTO pedidos 
@@ -394,7 +450,7 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
       ]
     );
 
-    const pedidoId = pedidoResult.insertId;
+    pedidoId = pedidoResult.insertId;
 
     for (const d of detalleRows) {
       await connection.query(
@@ -404,7 +460,7 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
       );
     }
 
-    // 🔁 Marcar la cotización como CONVERTIDA (ya generó pedido)
+    // 🔁 Marcar la cotización como CONVERTIDA
     await connection.query(
       "UPDATE cotizaciones SET estado_gestion = 'CONVERTIDA' WHERE id = ?",
       [cotizacion_id]
@@ -412,62 +468,79 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
 
     await connection.commit();
 
-    // 🔍 Auditoría: cotización → pedido
-    await logAuditoria({
-      usuario_id: usuarioId,
-      accion: "COTIZACION_CONVERTIDA_PEDIDO",
-      entidad: "cotizacion",
-      entidad_id: Number(cotizacion_id),
-      cambios: {
-        estado_gestion_anterior: "ACEPTADA",
-        estado_gestion_nuevo: "CONVERTIDA",
-        pedido_id: pedidoId,
-      },
-    });
-
-    // Notificación (best-effort)
-    try {
-      await pool.query(
-        "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
-        [
-          usuarioId,
-          `Pedido creado desde cotización #${pedidoId}`,
-          `Tu pedido fue generado desde una cotización aceptada.`,
-        ]
-      );
-    } catch (nErr) {
-      console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
-    }
-
-    // Email (best-effort)
-    try {
-      if (req.user.email) {
-        await sendMail({
-          to: req.user.email,
-          subject: `Confirmación de tu pedido #${pedidoId}`,
-          text: `Tu pedido desde cotización fue creado con éxito. Total: $${totalFinal}`,
-          html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> fue creado desde cotización con éxito.</p>
-                 <p>Total: <b>$${totalFinal}</b></p>`,
-        });
-      }
-    } catch (mailErr) {
-      console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
-    }
-
+    // ✅ RESPONDER YA (evita timeout por SMTP/notificaciones)
     res.status(201).json({
       message: "Pedido creado con éxito desde cotización",
       pedido_id: pedidoId,
       total: totalFinal,
       costo_envio: costoEnvio,
     });
+
+    // 🔥 Background (no bloquea el response)
+    runInBackground("pedidoDesdeCotizacion:post", async () => {
+      // Auditoría
+      try {
+        await logAuditoria({
+          usuario_id: usuarioId,
+          accion: "COTIZACION_CONVERTIDA_PEDIDO",
+          entidad: "cotizacion",
+          entidad_id: Number(cotizacion_id),
+          cambios: {
+            estado_gestion_anterior: estadoGestionAnterior,
+            estado_gestion_nuevo: "CONVERTIDA",
+            pedido_id: pedidoId,
+            total: totalFinal,
+            metodo_pago,
+            entrega,
+            nota: nota || null,
+          },
+        });
+      } catch (e) {
+        console.warn("Aviso auditoría:", e?.message);
+      }
+
+      // Notificación DB
+      try {
+        await pool.query(
+          "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
+          [
+            usuarioId,
+            `Pedido creado desde cotización #${pedidoId}`,
+            `Tu pedido fue generado desde una cotización aceptada/aprobada.`,
+          ]
+        );
+      } catch (nErr) {
+        console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
+      }
+
+      // Email
+      try {
+        if (req.user?.email) {
+          await sendMail({
+            to: req.user.email,
+            subject: `Confirmación de tu pedido #${pedidoId}`,
+            text: `Tu pedido desde cotización fue creado con éxito. Total: $${totalFinal}`,
+            html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> fue creado desde cotización con éxito.</p>
+                   <p>Total: <b>$${totalFinal}</b></p>`,
+          });
+        }
+      } catch (mailErr) {
+        console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
+      }
+    });
+
+    return; // 👈 importantísimo
   } catch (error) {
     try {
       await connection.rollback();
     } catch (_) {}
     console.error("Error en crearPedidoDesdeCotizacion:", error);
-    res.status(500).json({
-      error: error.message || "Error al crear pedido desde cotización",
-    });
+
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: error.message || "Error al crear pedido desde cotización",
+      });
+    }
   } finally {
     connection.release();
   }
@@ -481,18 +554,19 @@ const actualizarEstado = async (req, res) => {
 
   // helper para no dejar transacciones abiertas en returns
   const bail = async (status, payload) => {
-    try { await connection.rollback(); } catch (_) {}
+    try {
+      await connection.rollback();
+    } catch (_) {}
     return res.status(status).json(payload);
   };
 
   try {
     const pedidoId = Number(req.params.id);
     const { estado } = req.body;
-    const usuarioId = req.user.sub; // viene del JWT
+    const usuarioId = req.user.sub;
     const rol = req.user.role;
 
     if (!ESTADOS_VALIDOS.includes(estado)) {
-      connection.release();
       return res.status(400).json({ error: "Estado no válido" });
     }
 
@@ -507,7 +581,9 @@ const actualizarEstado = async (req, res) => {
     const estadoActual = pedido.estado;
 
     if (["CANCELADO", "ENTREGADO"].includes(estadoActual)) {
-      return bail(400, { error: `No se puede cambiar un pedido en estado ${estadoActual}` });
+      return bail(400, {
+        error: `No se puede cambiar un pedido en estado ${estadoActual}`,
+      });
     }
 
     let permitido = false;
@@ -515,26 +591,32 @@ const actualizarEstado = async (req, res) => {
     let setFechaEnvio = false;
     let setFechaEntrega = false;
 
+    const dueño = Number(pedido.usuario_id) === Number(usuarioId);
+
     switch (estadoActual) {
       case "PENDIENTE":
         if (estado === "CONFIRMADO" && rol === "ADMIN") permitido = true;
-        if (estado === "CANCELADO" && (rol === "ADMIN" || pedido.usuario_id === usuarioId)) {
-          permitido = true; devolverStock = true;
+        if (estado === "CANCELADO" && (rol === "ADMIN" || dueño)) {
+          permitido = true;
+          devolverStock = true;
         }
         break;
 
       case "CONFIRMADO":
         if (estado === "ENVIADO" && rol === "ADMIN") {
-          permitido = true; setFechaEnvio = true;
+          permitido = true;
+          setFechaEnvio = true;
         }
-        if (estado === "CANCELADO" && (rol === "ADMIN" || pedido.usuario_id === usuarioId)) {
-          permitido = true; devolverStock = true;
+        if (estado === "CANCELADO" && (rol === "ADMIN" || dueño)) {
+          permitido = true;
+          devolverStock = true;
         }
         break;
 
       case "ENVIADO":
         if (estado === "ENTREGADO" && rol === "ADMIN") {
-          permitido = true; setFechaEntrega = true;
+          permitido = true;
+          setFechaEntrega = true;
         }
         break;
 
@@ -573,25 +655,29 @@ const actualizarEstado = async (req, res) => {
     await connection.query(updateSql, params);
     await connection.commit();
 
-    // ✅ RESPONDE YA (para que el front no timeoutee)
+    // ✅ RESPONDE YA
     res.json({
       message: `Estado del pedido actualizado a ${estado}`,
       pedidoId,
       estado,
     });
 
-    // 🔥 “Fire-and-forget” (no bloquea el response)
-    setImmediate(async () => {
-      // Auditoría (ya es best-effort por dentro)
-      await logAuditoria({
-        usuario_id: usuarioId,
-        accion: "PEDIDO_ESTADO",
-        entidad: "pedido",
-        entidad_id: Number(pedidoId),
-        cambios: { estado_anterior: estadoActual, estado_nuevo: estado },
-      });
+    // 🔥 Background
+    runInBackground("pedidoEstado:post", async () => {
+      // Auditoría
+      try {
+        await logAuditoria({
+          usuario_id: usuarioId,
+          accion: "PEDIDO_ESTADO",
+          entidad: "pedido",
+          entidad_id: Number(pedidoId),
+          cambios: { estado_anterior: estadoActual, estado_nuevo: estado },
+        });
+      } catch (e) {
+        console.warn("Aviso auditoría:", e?.message);
+      }
 
-      // Notificación DB (best-effort)
+      // Notificación DB
       try {
         await pool.query(
           "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
@@ -605,14 +691,15 @@ const actualizarEstado = async (req, res) => {
         console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
       }
 
-      // Email (best-effort) — ahora NO rompe UX
+      // Email
       try {
-        let destinatario = req.user.email;
+        let destinatario = req.user?.email;
 
         if (rol === "ADMIN") {
-          const [[u]] = await pool.query("SELECT email FROM usuarios WHERE id = ?", [
-            pedido.usuario_id,
-          ]);
+          const [[u]] = await pool.query(
+            "SELECT email FROM usuarios WHERE id = ?",
+            [pedido.usuario_id]
+          );
           if (u?.email) destinatario = u.email;
         }
 
@@ -628,10 +715,13 @@ const actualizarEstado = async (req, res) => {
         console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
       }
     });
+
+    return;
   } catch (error) {
-    try { await connection.rollback(); } catch (_) {}
+    try {
+      await connection.rollback();
+    } catch (_) {}
     console.error("Error en actualizarEstado:", error);
-    // Ojo: si ya respondimos, no intentamos responder otra vez
     if (!res.headersSent) {
       res.status(500).json({ error: "Error al actualizar estado" });
     }
@@ -640,7 +730,9 @@ const actualizarEstado = async (req, res) => {
   }
 };
 
-// GET /api/v1/pedidos/mios
+/* =========================================================================
+ * GET /api/v1/pedidos/mios
+ * ========================================================================= */
 const listarMisPedidos = async (req, res) => {
   try {
     const usuarioId = req.user.sub;
@@ -665,7 +757,6 @@ const detallePedidoPropio = async (req, res) => {
     const usuarioId = req.user.sub;
     const { id } = req.params;
 
-    // Cabecera con verificación de pertenencia
     const [cab] = await pool.query(
       `
       SELECT p.id, p.usuario_id, p.metodo_pago, p.entrega, p.costo_envio, p.total,
@@ -708,8 +799,13 @@ const detallePedidoPropio = async (req, res) => {
 
 module.exports = {
   // ADMIN
-  listarPedidos, detallePedido,
+  listarPedidos,
+  detallePedido,
   // FLUJOS
-  crearPedidoDirecto, crearPedidoDesdeCotizacion, actualizarEstado,
-  // CLIENTE
-  listarMisPedidos, detallePedidoPropio};
+  crearPedidoDirecto,
+  crearPedidoDesdeCotizacion,
+  actualizarEstado,
+  // CLIENTE/CONTRATISTA
+  listarMisPedidos,
+  detallePedidoPropio,
+};

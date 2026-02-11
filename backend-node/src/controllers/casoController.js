@@ -193,7 +193,6 @@ const actualizarEstadoCaso = async (req, res) => {
   }
 };
 
-
 // GET /casos/:id/comentarios
 const listarComentariosCaso = async (req, res) => {
   try {
