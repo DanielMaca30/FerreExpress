@@ -478,13 +478,21 @@ const crearPedidoDesdeCotizacion = async (req, res) => {
  * ========================================================================= */
 const actualizarEstado = async (req, res) => {
   const connection = await pool.getConnection();
+
+  // helper para no dejar transacciones abiertas en returns
+  const bail = async (status, payload) => {
+    try { await connection.rollback(); } catch (_) {}
+    return res.status(status).json(payload);
+  };
+
   try {
-    const pedidoId = req.params.id;
+    const pedidoId = Number(req.params.id);
     const { estado } = req.body;
-    const usuarioId = req.user.sub;
+    const usuarioId = req.user.sub; // viene del JWT
     const rol = req.user.role;
 
     if (!ESTADOS_VALIDOS.includes(estado)) {
+      connection.release();
       return res.status(400).json({ error: "Estado no válido" });
     }
 
@@ -494,17 +502,12 @@ const actualizarEstado = async (req, res) => {
       "SELECT usuario_id, estado FROM pedidos WHERE id = ? FOR UPDATE",
       [pedidoId]
     );
-    if (!pedido) {
-      return res.status(404).json({ error: "Pedido no encontrado" });
-    }
+    if (!pedido) return bail(404, { error: "Pedido no encontrado" });
 
     const estadoActual = pedido.estado;
 
-    // Pedidos CANCELADO o ENTREGADO no se pueden modificar
     if (["CANCELADO", "ENTREGADO"].includes(estadoActual)) {
-      return res.status(400).json({
-        error: `No se puede cambiar un pedido en estado ${estadoActual}`,
-      });
+      return bail(400, { error: `No se puede cambiar un pedido en estado ${estadoActual}` });
     }
 
     let permitido = false;
@@ -514,41 +517,24 @@ const actualizarEstado = async (req, res) => {
 
     switch (estadoActual) {
       case "PENDIENTE":
-        // ADMIN confirma
-        if (estado === "CONFIRMADO" && rol === "ADMIN") {
-          permitido = true;
-        }
-        // Cliente/Contratista (dueño) o ADMIN cancelan
-        if (
-          estado === "CANCELADO" &&
-          (rol === "ADMIN" || pedido.usuario_id === usuarioId)
-        ) {
-          permitido = true;
-          devolverStock = true;
+        if (estado === "CONFIRMADO" && rol === "ADMIN") permitido = true;
+        if (estado === "CANCELADO" && (rol === "ADMIN" || pedido.usuario_id === usuarioId)) {
+          permitido = true; devolverStock = true;
         }
         break;
 
       case "CONFIRMADO":
-        // ADMIN pasa a ENVIADO
         if (estado === "ENVIADO" && rol === "ADMIN") {
-          permitido = true;
-          setFechaEnvio = true; // requiere columna fecha_envio
+          permitido = true; setFechaEnvio = true;
         }
-        // Cancelación desde CONFIRMADO
-        if (
-          estado === "CANCELADO" &&
-          (rol === "ADMIN" || pedido.usuario_id === usuarioId)
-        ) {
-          permitido = true;
-          devolverStock = true;
+        if (estado === "CANCELADO" && (rol === "ADMIN" || pedido.usuario_id === usuarioId)) {
+          permitido = true; devolverStock = true;
         }
         break;
 
       case "ENVIADO":
-        // Solo ADMIN marca como ENTREGADO
         if (estado === "ENTREGADO" && rol === "ADMIN") {
-          permitido = true;
-          setFechaEntrega = true; // requiere columna fecha_entrega
+          permitido = true; setFechaEntrega = true;
         }
         break;
 
@@ -557,12 +543,11 @@ const actualizarEstado = async (req, res) => {
     }
 
     if (!permitido) {
-      return res.status(403).json({
+      return bail(403, {
         error: `Transición no permitida de ${estadoActual} → ${estado}`,
       });
     }
 
-    // Devolver stock si se cancela
     if (devolverStock) {
       const [detalles] = await connection.query(
         "SELECT producto_id, cantidad FROM pedido_detalles WHERE pedido_id = ?",
@@ -576,74 +561,80 @@ const actualizarEstado = async (req, res) => {
       }
     }
 
-    // Actualizar estado (y fechas especiales)
     let updateSql = "UPDATE pedidos SET estado = ?";
     const params = [estado];
 
-    if (setFechaEnvio) {
-      updateSql += ", fecha_envio = NOW()";
-    }
-    if (setFechaEntrega) {
-      updateSql += ", fecha_entrega = NOW()";
-    }
+    if (setFechaEnvio) updateSql += ", fecha_envio = NOW()";
+    if (setFechaEntrega) updateSql += ", fecha_entrega = NOW()";
+
     updateSql += " WHERE id = ?";
     params.push(pedidoId);
 
     await connection.query(updateSql, params);
     await connection.commit();
 
-    // 🔍 Auditoría de cambio de estado
-    await logAuditoria({
-      usuario_id: usuarioId,
-      accion: "PEDIDO_ESTADO",
-      entidad: "pedido",
-      entidad_id: Number(pedidoId),
-      cambios: { estado_anterior: estadoActual, estado_nuevo: estado },
+    // ✅ RESPONDE YA (para que el front no timeoutee)
+    res.json({
+      message: `Estado del pedido actualizado a ${estado}`,
+      pedidoId,
+      estado,
     });
 
-    // Notificación (best-effort)
-    try {
-      await pool.query(
-        "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
-        [
-          pedido.usuario_id,
-          `Pedido #${pedidoId} actualizado`,
-          `El estado de tu pedido ahora es: ${estado}`,
-        ]
-      );
-    } catch (nErr) {
-      console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
-    }
+    // 🔥 “Fire-and-forget” (no bloquea el response)
+    setImmediate(async () => {
+      // Auditoría (ya es best-effort por dentro)
+      await logAuditoria({
+        usuario_id: usuarioId,
+        accion: "PEDIDO_ESTADO",
+        entidad: "pedido",
+        entidad_id: Number(pedidoId),
+        cambios: { estado_anterior: estadoActual, estado_nuevo: estado },
+      });
 
-    // Email (best-effort)
-    try {
-      let destinatario = req.user.email;
-      if (rol === "ADMIN") {
-        const [[u]] = await pool.query(
-          "SELECT email FROM usuarios WHERE id = ?",
-          [pedido.usuario_id]
+      // Notificación DB (best-effort)
+      try {
+        await pool.query(
+          "INSERT INTO notificaciones (usuario_id, titulo, mensaje, tipo) VALUES (?, ?, ?, 'PEDIDO')",
+          [
+            pedido.usuario_id,
+            `Pedido #${pedidoId} actualizado`,
+            `El estado de tu pedido ahora es: ${estado}`,
+          ]
         );
-        if (u?.email) destinatario = u.email;
+      } catch (nErr) {
+        console.warn("Aviso: no se pudo registrar notificación:", nErr.message);
       }
-      if (destinatario) {
-        await sendMail({
-          to: destinatario,
-          subject: `Tu pedido #${pedidoId} cambió de estado`,
-          text: `Tu pedido ahora está en estado: ${estado}`,
-          html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> ahora está en estado: <b>${estado}</b>.</p>`,
-        });
-      }
-    } catch (mailErr) {
-      console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
-    }
 
-    res.json({ message: `Estado del pedido actualizado a ${estado}` });
+      // Email (best-effort) — ahora NO rompe UX
+      try {
+        let destinatario = req.user.email;
+
+        if (rol === "ADMIN") {
+          const [[u]] = await pool.query("SELECT email FROM usuarios WHERE id = ?", [
+            pedido.usuario_id,
+          ]);
+          if (u?.email) destinatario = u.email;
+        }
+
+        if (destinatario) {
+          await sendMail({
+            to: destinatario,
+            subject: `Tu pedido #${pedidoId} cambió de estado`,
+            text: `Tu pedido ahora está en estado: ${estado}`,
+            html: `<p>Hola,</p><p>Tu pedido <b>#${pedidoId}</b> ahora está en estado: <b>${estado}</b>.</p>`,
+          });
+        }
+      } catch (mailErr) {
+        console.warn("Aviso: no se pudo enviar el correo:", mailErr.message);
+      }
+    });
   } catch (error) {
-    try {
-      await connection.rollback();
-    } catch (_) {}
+    try { await connection.rollback(); } catch (_) {}
     console.error("Error en actualizarEstado:", error);
-    res.status(500).json({ error: "Error al actualizar estado" });
+    // Ojo: si ya respondimos, no intentamos responder otra vez
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Error al actualizar estado" });
+    }
   } finally {
     connection.release();
   }

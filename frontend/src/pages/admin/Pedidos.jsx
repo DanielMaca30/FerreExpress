@@ -1,5 +1,5 @@
 // src/pages/admin/Pedidos.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Box,
   Heading,
@@ -138,6 +138,77 @@ export default function Pedidos() {
     "0 6px 18px rgba(0,0,0,0.35)"
   );
 
+  const rowHoverBg = useColorModeValue("blackAlpha.50", "whiteAlpha.50");
+  const scrollThumb = useColorModeValue(
+    "rgba(0,0,0,0.25)",
+    "rgba(255,255,255,0.18)"
+  );
+
+  // ===== Scroll X (barra superior sincronizada) =====
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const syncingRef = useRef(false);
+  const [scrollW, setScrollW] = useState(0);
+  const [hasXOverflow, setHasXOverflow] = useState(false);
+
+  // Para evitar abrir el detalle cuando el usuario está arrastrando para scrollear
+  const rowPointerRef = useRef({ x: 0, y: 0, moved: false });
+
+  const measureScroll = useCallback(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    const sw = el.scrollWidth || 0;
+    const cw = el.clientWidth || 0;
+
+    setScrollW(sw);
+    setHasXOverflow(sw > cw + 2);
+  }, []);
+
+  const syncScrollLeft = useCallback((fromEl, toEl) => {
+    if (!fromEl || !toEl) return;
+    if (syncingRef.current) return;
+
+    syncingRef.current = true;
+    toEl.scrollLeft = fromEl.scrollLeft;
+
+    // libera el lock al siguiente frame
+    requestAnimationFrame(() => {
+      syncingRef.current = false;
+    });
+  }, []);
+
+  const onTopScroll = useCallback(() => {
+    syncScrollLeft(topScrollRef.current, tableScrollRef.current);
+  }, [syncScrollLeft]);
+
+  const onTableScroll = useCallback(() => {
+    syncScrollLeft(tableScrollRef.current, topScrollRef.current);
+  }, [syncScrollLeft]);
+
+  useEffect(() => {
+    // medir al montar + al resize + cuando cambia el contenido
+    measureScroll();
+
+    const onResize = () => measureScroll();
+    window.addEventListener("resize", onResize);
+
+    // ResizeObserver para cambios de layout (columnas/hide, etc.)
+    let ro;
+    const el = tableScrollRef.current;
+    if (el && "ResizeObserver" in window) {
+      ro = new ResizeObserver(() => measureScroll());
+      ro.observe(el);
+      const t = el.querySelector("table");
+      if (t) ro.observe(t);
+    }
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      if (ro) ro.disconnect();
+    };
+  }, [measureScroll, pedidos.length, loading, searchTerm, fEstado, fUsuarioId, fDesde, fHasta]);
+
   const fetchPedidos = async () => {
     try {
       setLoading(true);
@@ -159,6 +230,8 @@ export default function Pedidos() {
       });
     } finally {
       setLoading(false);
+      // deja que el render ocurra y luego mide el overflow
+      requestAnimationFrame(() => measureScroll());
     }
   };
 
@@ -228,7 +301,7 @@ export default function Pedidos() {
               : prev
           );
         } catch {
-          // silencioso, el error general ya se gestionó
+          // silencioso
         }
       }
     } catch (err) {
@@ -336,20 +409,19 @@ export default function Pedidos() {
   };
 
   const subtotalProductos =
-    detalle?.detalles?.reduce(
-      (acc, d) => acc + Number(d.subtotal || 0),
-      0
-    ) ?? 0;
+    detalle?.detalles?.reduce((acc, d) => acc + Number(d.subtotal || 0), 0) ?? 0;
 
   // Búsqueda local (no recarga backend)
-  const pedidosFiltrados = pedidos.filter((p) => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return true;
-    const byId = String(p.id || "").includes(q);
-    const byUser = (p.username || "").toLowerCase().includes(q);
-    const byEmail = (p.email || "").toLowerCase().includes(q);
-    return byId || byUser || byEmail;
-  });
+  const pedidosFiltrados = useMemo(() => {
+    return pedidos.filter((p) => {
+      const q = searchTerm.trim().toLowerCase();
+      if (!q) return true;
+      const byId = String(p.id || "").includes(q);
+      const byUser = (p.username || "").toLowerCase().includes(q);
+      const byEmail = (p.email || "").toLowerCase().includes(q);
+      return byId || byUser || byEmail;
+    });
+  }, [pedidos, searchTerm]);
 
   return (
     <Box bg={pageBg} px={{ base: 3, md: 6, lg: 8 }} py={{ base: 4, md: 6 }}>
@@ -538,87 +610,167 @@ export default function Pedidos() {
             </Button>
           </VStack>
         ) : (
-          <Box overflowX="auto">
-            <Table size="sm">
-              <Thead>
-                <Tr>
-                  <Th>ID</Th>
-                  <Th>Cliente</Th>
-                  <Th display={{ base: "none", md: "table-cell" }}>Email</Th>
-                  <Th isNumeric>Total</Th>
-                  <Th isNumeric display={{ base: "none", md: "table-cell" }}>
-                    Envío
-                  </Th>
-                  <Th display={{ base: "none", md: "table-cell" }}>Método</Th>
-                  <Th>Estado</Th>
-                  <Th display={{ base: "none", md: "table-cell" }}>
-                    <HStack spacing={1}>
-                      <FiCalendar />
-                      <Text as="span" fontSize="xs">
-                        Creación
-                      </Text>
-                    </HStack>
-                  </Th>
-                  <Th textAlign="right">Acciones</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {pedidosFiltrados.map((p) => (
-                  <Tr key={p.id}>
-                    <Td>{p.id}</Td>
-                    <Td>
-                      <Text fontWeight="semibold" noOfLines={1}>
-                        {p.username || `Usuario #${p.usuario_id}`}
-                      </Text>
-                    </Td>
-                    <Td display={{ base: "none", md: "table-cell" }}>
-                      <Text fontSize="xs" color={muted} noOfLines={1}>
-                        {p.email || "—"}
-                      </Text>
-                    </Td>
-                    <Td isNumeric>{fmtCop(p.total)}</Td>
-                    <Td
-                      isNumeric
-                      display={{ base: "none", md: "table-cell" }}
-                    >
-                      {fmtCop(p.costo_envio)}
-                    </Td>
-                    <Td display={{ base: "none", md: "table-cell" }}>
-                      <Badge variant="subtle" colorScheme="gray">
-                        {p.metodo_pago || "—"}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge
-                        colorScheme={estadoColor(p.estado)}
-                        variant="solid"
-                      >
-                        {estadoLabel(p.estado)}
-                      </Badge>
-                    </Td>
-                    <Td display={{ base: "none", md: "table-cell" }}>
-                      <Text fontSize="xs" color={muted}>
-                        {fmtDateTime(p.fecha_creacion)}
-                      </Text>
-                    </Td>
-                    <Td>
-                      <HStack justify="flex-end">
-                        <Tooltip label="Ver detalle" hasArrow>
-                          <IconButton
-                            size="xs"
-                            aria-label="Ver detalle"
-                            icon={<FiEye />}
-                            variant="ghost"
-                            onClick={() => abrirDetalle(p)}
-                          />
-                        </Tooltip>
+          <>
+            {/* Barra superior de scroll X (sincronizada) */}
+            {hasXOverflow && (
+              <Box mb={2} display={{ base: "block", xl: "none" }}>
+                <HStack justify="space-between" mb={1} flexWrap="wrap">
+                  <Text fontSize="xs" color={muted}>
+                    Desliza para ver más columnas →
+                  </Text>
+                  <Text fontSize="xs" color={muted}>
+                    Tip: toca cualquier fila para ver el detalle
+                  </Text>
+                </HStack>
+
+                <Box
+                  ref={topScrollRef}
+                  overflowX="auto"
+                  overflowY="hidden"
+                  h="16px"
+                  onScroll={onTopScroll}
+                  sx={{
+                    WebkitOverflowScrolling: "touch",
+                    "&::-webkit-scrollbar": { height: "10px" },
+                    "&::-webkit-scrollbar-thumb": {
+                      background: scrollThumb,
+                      borderRadius: "999px",
+                    },
+                  }}
+                >
+                  {/* “Espaciador” para crear el ancho scrolleable */}
+                  <Box w={`${scrollW}px`} h="1px" />
+                </Box>
+              </Box>
+            )}
+
+            <Box
+              ref={tableScrollRef}
+              overflowX="auto"
+              onScroll={onTableScroll}
+              sx={{
+                WebkitOverflowScrolling: "touch",
+                "&::-webkit-scrollbar": { height: "10px" },
+                "&::-webkit-scrollbar-thumb": {
+                  background: scrollThumb,
+                  borderRadius: "999px",
+                },
+              }}
+            >
+              <Table size="sm" minW="980px">
+                <Thead>
+                  <Tr>
+                    <Th>ID</Th>
+                    <Th>Cliente</Th>
+                    <Th display={{ base: "none", md: "table-cell" }}>Email</Th>
+                    <Th isNumeric>Total</Th>
+                    <Th isNumeric display={{ base: "none", md: "table-cell" }}>
+                      Envío
+                    </Th>
+                    <Th display={{ base: "none", md: "table-cell" }}>Método</Th>
+                    <Th>Estado</Th>
+                    <Th display={{ base: "none", md: "table-cell" }}>
+                      <HStack spacing={1}>
+                        <FiCalendar />
+                        <Text as="span" fontSize="xs">
+                          Creación
+                        </Text>
                       </HStack>
-                    </Td>
+                    </Th>
+                    <Th textAlign="right">Acciones</Th>
                   </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </Box>
+                </Thead>
+
+                <Tbody>
+                  {pedidosFiltrados.map((p) => (
+                    <Tr
+                      key={p.id}
+                      cursor="pointer"
+                      _hover={{ bg: rowHoverBg }}
+                      transition="background 0.15s ease"
+                      role="button"
+                      tabIndex={0}
+                      onPointerDown={(e) => {
+                        rowPointerRef.current = {
+                          x: e.clientX,
+                          y: e.clientY,
+                          moved: false,
+                        };
+                      }}
+                      onPointerMove={(e) => {
+                        const dx = Math.abs(e.clientX - rowPointerRef.current.x);
+                        const dy = Math.abs(e.clientY - rowPointerRef.current.y);
+                        if (dx > 8 || dy > 8) rowPointerRef.current.moved = true;
+                      }}
+                      onClick={() => {
+                        if (rowPointerRef.current.moved) return;
+                        abrirDetalle(p);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          abrirDetalle(p);
+                        }
+                      }}
+                    >
+                      <Td>{p.id}</Td>
+                      <Td>
+                        <Text fontWeight="semibold" noOfLines={1}>
+                          {p.username || `Usuario #${p.usuario_id}`}
+                        </Text>
+                      </Td>
+                      <Td display={{ base: "none", md: "table-cell" }}>
+                        <Text fontSize="xs" color={muted} noOfLines={1}>
+                          {p.email || "—"}
+                        </Text>
+                      </Td>
+                      <Td isNumeric>{fmtCop(p.total)}</Td>
+                      <Td
+                        isNumeric
+                        display={{ base: "none", md: "table-cell" }}
+                      >
+                        {fmtCop(p.costo_envio)}
+                      </Td>
+                      <Td display={{ base: "none", md: "table-cell" }}>
+                        <Badge variant="subtle" colorScheme="gray">
+                          {p.metodo_pago || "—"}
+                        </Badge>
+                      </Td>
+                      <Td>
+                        <Badge colorScheme={estadoColor(p.estado)} variant="solid">
+                          {estadoLabel(p.estado)}
+                        </Badge>
+                      </Td>
+                      <Td display={{ base: "none", md: "table-cell" }}>
+                        <Text fontSize="xs" color={muted}>
+                          {fmtDateTime(p.fecha_creacion)}
+                        </Text>
+                      </Td>
+
+                      {/* Acciones: mantiene el ojito, pero ya no es obligatorio */}
+                      <Td
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onPointerMove={(e) => e.stopPropagation()}
+                      >
+                        <HStack justify="flex-end">
+                          <Tooltip label="Ver detalle" hasArrow>
+                            <IconButton
+                              size="xs"
+                              aria-label="Ver detalle"
+                              icon={<FiEye />}
+                              variant="ghost"
+                              onClick={() => abrirDetalle(p)}
+                            />
+                          </Tooltip>
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          </>
         )}
       </Box>
 
@@ -626,15 +778,18 @@ export default function Pedidos() {
       <Modal
         isOpen={detailOpen}
         onClose={cerrarDetalle}
-        size={{ base: "full", md: "2xl" }}
+        // móvil full; desde md ya es "pestañita"
+        size={{ base: "full", md: "3xl" }}
         scrollBehavior="inside"
       >
         <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(8px)" />
         <ModalContent
           borderRadius={{ base: 0, md: "2xl" }}
           overflow="hidden"
-          maxW={{ base: "100%", md: "720px" }}
-          mx={{ base: 0, md: "auto" }}
+          // clave para que en laptop NO se vea full
+          maxH={{ base: "100vh", md: "88vh" }}
+          my={{ base: 0, md: 6 }}
+          mx={{ base: 0, md: 4 }}
         >
           <ModalHeader borderBottomWidth="1px">
             {detalle ? (
@@ -684,9 +839,7 @@ export default function Pedidos() {
                     <InfoField label="Cliente">
                       {detalle.username || `Usuario #${detalle.usuario_id}`}
                     </InfoField>
-                    <InfoField label="Email">
-                      {detalle.email || "—"}
-                    </InfoField>
+                    <InfoField label="Email">{detalle.email || "—"}</InfoField>
                     <InfoField label="Método de pago">
                       {detalle.metodo_pago || "—"}
                     </InfoField>
@@ -758,17 +911,14 @@ export default function Pedidos() {
                               </Text>
                               <HStack justify="space-between" fontSize="sm">
                                 <Text color={muted}>
-                                  Cantidad:{" "}
-                                  <b>{Number(item.cantidad || 0)}</b>
+                                  Cantidad: <b>{Number(item.cantidad || 0)}</b>
                                 </Text>
                                 <Text color={muted}>
-                                  P. unitario:{" "}
-                                  <b>{fmtCop(item.precio_unitario)}</b>
+                                  P. unitario: <b>{fmtCop(item.precio_unitario)}</b>
                                 </Text>
                               </HStack>
                               <Text fontSize="sm">
-                                Subtotal:{" "}
-                                <b>{fmtCop(item.subtotal || 0)}</b>
+                                Subtotal: <b>{fmtCop(item.subtotal || 0)}</b>
                               </Text>
                             </VStack>
                           </HStack>
@@ -801,9 +951,7 @@ export default function Pedidos() {
                     <Divider />
                     <HStack justify="space-between">
                       <Text fontWeight="bold">Total pedido</Text>
-                      <Text fontWeight="bold">
-                        {fmtCop(detalle.total)}
-                      </Text>
+                      <Text fontWeight="bold">{fmtCop(detalle.total)}</Text>
                     </HStack>
                   </VStack>
                 </Box>
@@ -820,6 +968,7 @@ export default function Pedidos() {
               </VStack>
             )}
           </ModalBody>
+
           <ModalFooter>
             <Button variant="ghost" onClick={cerrarDetalle}>
               Cerrar
