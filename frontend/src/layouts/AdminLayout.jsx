@@ -73,13 +73,8 @@ import {
   FiArrowRight,
   FiHash,
 } from "react-icons/fi";
-import {
-  FaWhatsapp,
-  FaInstagram,
-  FaFacebook,
-  FaXTwitter,
-} from "react-icons/fa6";
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { FaWhatsapp, FaInstagram, FaFacebook, FaXTwitter } from "react-icons/fa6";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/axiosInstance";
 
@@ -220,7 +215,6 @@ export default function AdminLayout() {
     const term = qTrim;
     const onlyDigits = /^\d+$/.test(term);
 
-    // ✅ Si es número, NO hacemos búsqueda de productos (evita ruido)
     if (!term || term.length < 2 || onlyDigits) {
       setProdResults([]);
       setSearching(false);
@@ -231,7 +225,6 @@ export default function AdminLayout() {
     const t = setTimeout(async () => {
       try {
         setSearching(true);
-        // Admin: incluir inactivos para gestionar catálogo
         const { data } = await api.get("/productos", {
           params: { search: term, page: 1, limit: 6, incluirInactivos: "1" },
         });
@@ -253,7 +246,6 @@ export default function AdminLayout() {
 
   const openSearchDesktop = () => {
     searchPopover.onOpen();
-    // foco micro-delay para UX
     setTimeout(() => searchInputRef.current?.focus?.(), 0);
   };
 
@@ -268,12 +260,9 @@ export default function AdminLayout() {
 
     const onlyDigits = /^\d+$/.test(term);
     if (onlyDigits) {
-      // Heurística: número = acciones por ID
       searchPopover.onOpen();
       return;
     }
-
-    // Texto: ya hay resultados, y además damos CTA a ir a Productos filtrado
     searchPopover.onOpen();
   };
 
@@ -281,8 +270,7 @@ export default function AdminLayout() {
   useEffect(() => {
     const onKey = (e) => {
       const tag = (e.target.tagName || "").toLowerCase();
-      const typing =
-        tag === "input" || tag === "textarea" || e.target.isContentEditable;
+      const typing = tag === "input" || tag === "textarea" || e.target.isContentEditable;
 
       if (e.key === "/" && !typing) {
         e.preventDefault();
@@ -300,7 +288,29 @@ export default function AdminLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailDisc.isOpen, searchPopover.isOpen, searchMobile.isOpen]);
 
-  // Sidebar colapsable (persistente)
+  // ==========================================================
+  // Sidebar: MINI por defecto (84px) + EXPAND al hover (270px)
+  // ==========================================================
+  const [canHover, setCanHover] = useState(() => {
+    try {
+      return window.matchMedia?.("(hover: hover) and (pointer: fine)")?.matches ?? true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+      const onChange = () => setCanHover(mq.matches);
+      mq.addEventListener?.("change", onChange);
+      return () => mq.removeEventListener?.("change", onChange);
+    } catch {
+      return undefined;
+    }
+  }, []);
+
+  // Fallback (touch/no-hover): mantiene tu lógica anterior con toggle persistente
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("fe_sidebar_collapsed") || "false");
@@ -312,12 +322,36 @@ export default function AdminLayout() {
     localStorage.setItem("fe_sidebar_collapsed", JSON.stringify(collapsed));
   }, [collapsed]);
 
+  const useHoverSidebar = canHover;
+
+  const [hoverExpanded, setHoverExpanded] = useState(false);
+  const closeTimerRef = useRef(null);
+
+  const openHover = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    setHoverExpanded(true);
+  }, []);
+
+  const closeHover = useCallback(() => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    // mini-delay para evitar parpadeos al mover el mouse
+    closeTimerRef.current = setTimeout(() => setHoverExpanded(false), 120);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  const sidebarWidth = useHoverSidebar
+    ? (hoverExpanded ? "270px" : "84px")
+    : (collapsed ? "84px" : "270px");
+
+  const sidebarCollapsed = useHoverSidebar ? !hoverExpanded : collapsed;
+
   const QuickActions = ({ compact = false }) => (
-    <HStack
-      spacing={2}
-      wrap="wrap"
-      justify={compact ? "flex-start" : "space-between"}
-    >
+    <HStack spacing={2} wrap="wrap" justify={compact ? "flex-start" : "space-between"}>
       <Tag
         cursor="pointer"
         onClick={() => {
@@ -409,7 +443,6 @@ export default function AdminLayout() {
     const term = qTrim;
     const onlyDigits = /^\d+$/.test(term);
 
-    // ✅ HOOKS fuera del map (evita errores)
     const resultBg = useColorModeValue("white", "gray.900");
     const resultBorder = useColorModeValue("gray.200", "gray.700");
     const resultHoverBg = useColorModeValue("gray.50", "gray.800");
@@ -435,7 +468,6 @@ export default function AdminLayout() {
               </Text>
             </HStack>
 
-            {/* ✅ Si es número: acciones por ID (más útil y claro) */}
             {onlyDigits && (
               <Stack spacing={2}>
                 <Button
@@ -484,7 +516,6 @@ export default function AdminLayout() {
               </Stack>
             )}
 
-            {/* ✅ Texto: productos */}
             {!onlyDigits && (
               <Box>
                 {searching ? (
@@ -495,13 +526,7 @@ export default function AdminLayout() {
                     </Text>
                   </HStack>
                 ) : prodResults.length === 0 ? (
-                  <Box
-                    border="1px solid"
-                    borderColor={glassBorder}
-                    bg={glassBg}
-                    rounded="2xl"
-                    p={4}
-                  >
+                  <Box border="1px solid" borderColor={glassBorder} bg={glassBg} rounded="2xl" p={4}>
                     <Text fontSize="sm" color="gray.600">
                       Sin resultados para “{term}”.
                     </Text>
@@ -539,22 +564,9 @@ export default function AdminLayout() {
                         onClick={() => openProductoById(p.id)}
                       >
                         <HStack spacing={3} minW={0} overflow="hidden">
-                          <Box
-                            w="42px"
-                            h="42px"
-                            rounded="xl"
-                            overflow="hidden"
-                            bg={thumbBg}
-                            flex="0 0 auto"
-                          >
+                          <Box w="42px" h="42px" rounded="xl" overflow="hidden" bg={thumbBg} flex="0 0 auto">
                             {p.imagen_principal ? (
-                              <Image
-                                src={p.imagen_principal}
-                                alt={p.nombre}
-                                w="100%"
-                                h="100%"
-                                objectFit="cover"
-                              />
+                              <Image src={p.imagen_principal} alt={p.nombre} w="100%" h="100%" objectFit="cover" />
                             ) : (
                               <Flex w="100%" h="100%" align="center" justify="center">
                                 <Icon as={FiBox} color="gray.500" />
@@ -567,9 +579,7 @@ export default function AdminLayout() {
                               {p.nombre}
                             </Text>
                             <HStack spacing={2} mt={0.5}>
-                              <Badge colorScheme={p.activo ? "green" : "red"}>
-                                {p.activo ? "Activo" : "Inactivo"}
-                              </Badge>
+                              <Badge colorScheme={p.activo ? "green" : "red"}>{p.activo ? "Activo" : "Inactivo"}</Badge>
                               <Text fontSize="xs" color="gray.500" noOfLines={1}>
                                 Stock: {p.stock ?? 0}
                               </Text>
@@ -601,13 +611,7 @@ export default function AdminLayout() {
             )}
           </Box>
         ) : (
-          <Box
-            border="1px solid"
-            borderColor={glassBorder}
-            bg={glassBg}
-            rounded="2xl"
-            p={4}
-          >
+          <Box border="1px solid" borderColor={glassBorder} bg={glassBg} rounded="2xl" p={4}>
             <Text fontSize="sm" color="gray.600">
               Busca productos por nombre o escribe un número para abrir Pedido/Cotización/Producto.
             </Text>
@@ -626,7 +630,7 @@ export default function AdminLayout() {
       <Box
         as="aside"
         display={{ base: "none", md: "block" }}
-        w={collapsed ? "84px" : "270px"}
+        w={sidebarWidth}
         bg={useColorModeValue("white", "gray.900")}
         borderRight="1px solid"
         borderColor={useColorModeValue("gray.200", "gray.700")}
@@ -634,11 +638,24 @@ export default function AdminLayout() {
         top="0"
         h="100vh"
         transition="width .18s ease"
+        willChange="width"
+        onMouseEnter={useHoverSidebar ? openHover : undefined}
+        onMouseLeave={useHoverSidebar ? closeHover : undefined}
+        onFocusCapture={useHoverSidebar ? openHover : undefined}
+        onBlurCapture={useHoverSidebar ? closeHover : undefined}
       >
         <SidebarContent
           brandBg={brandBg}
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((s) => !s)}
+          collapsed={sidebarCollapsed}
+          hoverMode={useHoverSidebar} // ✅ en hover-mode ocultamos el toggle
+          onToggle={() => {
+            // ✅ solo aplica en no-hover devices
+            if (!useHoverSidebar) setCollapsed((s) => !s);
+          }}
+          onItemClick={() => {
+            // en hover-mode si haces click y sales con el mouse, se minimiza solo
+            // (no forzamos nada aquí)
+          }}
         />
       </Box>
 
@@ -646,16 +663,14 @@ export default function AdminLayout() {
       <Drawer isOpen={isOpen} placement="left" onClose={onClose} size="xs">
         <DrawerOverlay />
         <DrawerContent bg={useColorModeValue("white", "gray.900")}>
-          <DrawerHeader
-            borderBottom="1px solid"
-            borderColor={useColorModeValue("gray.200", "gray.700")}
-          >
+          <DrawerHeader borderBottom="1px solid" borderColor={useColorModeValue("gray.200", "gray.700")}>
             Menú
           </DrawerHeader>
           <DrawerBody p="0">
             <SidebarContent
               brandBg={brandBg}
               collapsed={false}
+              hoverMode={false}
               onToggle={() => {}}
               onItemClick={onClose}
             />
@@ -665,7 +680,7 @@ export default function AdminLayout() {
 
       {/* ===== Columna derecha ===== */}
       <Flex direction="column" flex="1" minW={0}>
-        {/* Header (amarillo) */}
+        {/* Header (amarillo) — ✅ SE DEJA IGUAL */}
         <Box
           as="header"
           position="sticky"
@@ -717,8 +732,8 @@ export default function AdminLayout() {
                   placement="bottom"
                   closeOnBlur
                   gutter={10}
-                  autoFocus={false}           // ✅ FIX: NO robar foco al abrir
-                  returnFocusOnClose={false}  // ✅ UX mejor: no “rebota” raro
+                  autoFocus={false}
+                  returnFocusOnClose={false}
                   isLazy
                 >
                   <PopoverAnchor>
@@ -727,7 +742,6 @@ export default function AdminLayout() {
                       maxW="680px"
                       mx="auto"
                       onMouseDown={() => {
-                        // ✅ asegura foco siempre (iOS-like)
                         setTimeout(() => searchInputRef.current?.focus?.(), 0);
                         if (!searchPopover.isOpen) searchPopover.onOpen();
                       }}
@@ -806,7 +820,6 @@ export default function AdminLayout() {
 
               {/* Derecha: search mobile + cuenta + salir */}
               <HStack spacing={2} justifySelf="end">
-                {/* Search (mobile) */}
                 <Tooltip label="Buscar">
                   <IconButton
                     aria-label="Buscar"
@@ -848,12 +861,7 @@ export default function AdminLayout() {
         </Box>
 
         {/* Drawer Search (mobile - top) */}
-        <Drawer
-          isOpen={searchMobile.isOpen}
-          placement="top"
-          onClose={searchMobile.onClose}
-          size="full"
-        >
+        <Drawer isOpen={searchMobile.isOpen} placement="top" onClose={searchMobile.onClose} size="full">
           <DrawerOverlay />
           <DrawerContent bg={useColorModeValue("white", "gray.900")}>
             <DrawerHeader borderBottom="1px solid" borderColor={useColorModeValue("gray.200", "gray.700")}>
@@ -1047,7 +1055,6 @@ export default function AdminLayout() {
                     rightIcon={<FiArrowRight />}
                     rounded="xl"
                     onClick={() => {
-                      // ✅ FIX: cerrar modal antes de navegar
                       closeDetail();
                       navigate("/admin/productos", {
                         state: { openProductId: detail.data?.id },
@@ -1074,17 +1081,14 @@ export default function AdminLayout() {
         </Box>
 
         {/* Footer */}
-        <Footer
-          footerBg={useColorModeValue("white", "gray.900")}
-          borderColor={useColorModeValue("gray.200", "gray.700")}
-        />
+        <Footer footerBg={useColorModeValue("white", "gray.900")} borderColor={useColorModeValue("gray.200", "gray.700")} />
       </Flex>
     </Flex>
   );
 }
 
 /* ===== Sidebar ===== */
-function SidebarContent({ brandBg, collapsed, onToggle, onItemClick }) {
+function SidebarContent({ brandBg, collapsed, onToggle, onItemClick, hoverMode = false }) {
   const location = useLocation();
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const textCo = useColorModeValue("gray.800", "gray.100");
@@ -1111,15 +1115,18 @@ function SidebarContent({ brandBg, collapsed, onToggle, onItemClick }) {
           )}
         </HStack>
 
-        <Tooltip label={collapsed ? "Expandir menú" : "Colapsar menú"}>
-          <IconButton
-            aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
-            icon={collapsed ? <FiChevronsRight /> : <FiChevronsLeft />}
-            variant="ghost"
-            onClick={onToggle}
-            size="sm"
-          />
-        </Tooltip>
+        {/* ✅ En hoverMode no mostramos el toggle (porque se controla por hover) */}
+        {!hoverMode && (
+          <Tooltip label={collapsed ? "Expandir menú" : "Colapsar menú"}>
+            <IconButton
+              aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
+              icon={collapsed ? <FiChevronsRight /> : <FiChevronsLeft />}
+              variant="ghost"
+              onClick={onToggle}
+              size="sm"
+            />
+          </Tooltip>
+        )}
       </HStack>
 
       {/* Navegación */}
@@ -1198,12 +1205,7 @@ function Footer({ footerBg, borderColor }) {
       <Container maxW={{ base: "100%", md: "95%", lg: "8xl" }} px={{ base: 4, md: 5, lg: 8 }} py={{ base: 2, md: 3 }}>
         <Grid templateColumns={{ base: "1fr", md: "1fr auto 1fr" }} alignItems="center" gap={{ base: 3, md: 4 }}>
           <HStack justify={{ base: "center", md: "flex-start" }}>
-            <Image
-              src="/LOGOFERREEXPRESS.png"
-              alt="FerreExpress S.A.S."
-              h={{ base: "32px", sm: "38px", md: "42px" }}
-              objectFit="contain"
-            />
+            <Image src="/LOGOFERREEXPRESS.png" alt="FerreExpress S.A.S." h={{ base: "32px", sm: "38px", md: "42px" }} objectFit="contain" />
           </HStack>
 
           <HStack spacing={{ base: 3, md: 5 }} justify="center" fontSize={{ base: "xs", md: "sm" }}>

@@ -2,8 +2,9 @@
 // ✅ Estilo iOS / Glass + Motion (alineado a BeneficiosEmpresa.jsx)
 // ✅ Responsive real: Cards en móvil, Tabla en desktop
 // ✅ Heurísticas Nielsen: visibilidad de estado, control del usuario, prevención de errores, consistencia
+// ✅ FIX responsive: top horizontal scroller + tabla scrollable + row/cell click para abrir detalle + drawer size correcto en laptop
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   Badge,
   Box,
@@ -106,7 +107,9 @@ const stagger = (reduce) => ({
 const pressable = (reduce) => ({
   whileHover: reduce ? {} : { y: -2, scale: 1.01 },
   whileTap: reduce ? {} : { scale: 0.985 },
-  transition: reduce ? { duration: 0 } : { type: "spring", stiffness: 520, damping: 30, mass: 0.6 },
+  transition: reduce
+    ? { duration: 0 }
+    : { type: "spring", stiffness: 520, damping: 30, mass: 0.6 },
 });
 
 /* =========================================================================
@@ -228,7 +231,12 @@ function KpiCard({ label, value, icon, isLoading }) {
                 {isLoading ? (
                   <Skeleton mt={2} h="28px" w="130px" rounded="md" />
                 ) : (
-                  <Text mt={1} fontSize={{ base: "2xl", md: "2xl" }} fontWeight="black" lineHeight="1">
+                  <Text
+                    mt={1}
+                    fontSize={{ base: "2xl", md: "2xl" }}
+                    fontWeight="black"
+                    lineHeight="1"
+                  >
                     {value}
                   </Text>
                 )}
@@ -265,6 +273,7 @@ export default function AdminCotizaciones() {
   const softBg = useColorModeValue("gray.50", "blackAlpha.500");
   const headBg = useColorModeValue("rgba(249,250,251,0.85)", "blackAlpha.300");
   const rowStripe = useColorModeValue("gray.50", "whiteAlpha.50");
+  const rowHover = useColorModeValue("yellow.50", "whiteAlpha.100");
 
   // Remote state
   const [cotizaciones, setCotizaciones] = useState([]);
@@ -286,6 +295,44 @@ export default function AdminCotizaciones() {
   const [detalle, setDetalle] = useState(null);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
 
+  // ===== Scroll X superior sincronizado con tabla (desktop/laptop) =====
+  const topScrollRef = useRef(null);
+  const tableScrollRef = useRef(null);
+  const syncingRef = useRef(false);
+  const [scrollMeta, setScrollMeta] = useState({ w: 0, show: false });
+
+  const syncScroll = (sourceEl, targetEl) => {
+    if (!sourceEl || !targetEl) return;
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    targetEl.scrollLeft = sourceEl.scrollLeft;
+    requestAnimationFrame(() => {
+      syncingRef.current = false;
+    });
+  };
+
+  const onTopScroll = () => syncScroll(topScrollRef.current, tableScrollRef.current);
+  const onTableScroll = () => syncScroll(tableScrollRef.current, topScrollRef.current);
+
+  const measureScroll = useCallback(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const w = el.scrollWidth || 0;
+    const show = w > (el.clientWidth || 0) + 2;
+    setScrollMeta({ w, show });
+  }, []);
+
+  useEffect(() => {
+    // medir después de render
+    const id = requestAnimationFrame(measureScroll);
+    const onResize = () => measureScroll();
+    window.addEventListener("resize", onResize);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [measureScroll, cotizaciones.length, loading, searchTerm, estadoGestion, estadoVigencia, fechaDesde, fechaHasta]);
+
   const descargarPDF = useCallback(
     async (id) => {
       if (!id) return;
@@ -301,7 +348,8 @@ export default function AdminCotizaciones() {
         console.error("Error al descargar PDF de cotización:", err);
         toast({
           title: "No se pudo abrir el PDF",
-          description: err?.response?.data?.error || "Revisa tu conexión o el backend e inténtalo de nuevo.",
+          description:
+            err?.response?.data?.error || "Revisa tu conexión o el backend e inténtalo de nuevo.",
           status: "error",
           duration: 3200,
           isClosable: true,
@@ -385,9 +433,10 @@ export default function AdminCotizaciones() {
         });
       } finally {
         setLoading(false);
+        requestAnimationFrame(() => measureScroll());
       }
     },
-    [estadoGestion, estadoVigencia, fechaDesde, fechaHasta, toast]
+    [estadoGestion, estadoVigencia, fechaDesde, fechaHasta, toast, measureScroll]
   );
 
   const resetFiltros = useCallback(() => {
@@ -413,7 +462,8 @@ export default function AdminCotizaciones() {
         console.error(err);
         toast({
           title: "Error al cargar detalle",
-          description: err?.response?.data?.error || "No fue posible obtener la información de la cotización.",
+          description:
+            err?.response?.data?.error || "No fue posible obtener la información de la cotización.",
           status: "error",
           duration: 3500,
           isClosable: true,
@@ -450,7 +500,8 @@ export default function AdminCotizaciones() {
         console.error(err);
         toast({
           title: "Error al cambiar estado",
-          description: err?.response?.data?.error || "Revisa el backend o tus permisos para gestionar cotizaciones.",
+          description:
+            err?.response?.data?.error || "Revisa el backend o tus permisos para gestionar cotizaciones.",
           status: "error",
           duration: 3500,
           isClosable: true,
@@ -521,7 +572,11 @@ export default function AdminCotizaciones() {
                   </Text>
                 </VStack>
 
-                <HStack spacing={3} w={{ base: "full", md: "auto" }} justify={{ base: "flex-end", md: "flex-end" }}>
+                <HStack
+                  spacing={3}
+                  w={{ base: "full", md: "auto" }}
+                  justify={{ base: "flex-end", md: "flex-end" }}
+                >
                   <Tooltip label="Actualizar datos" hasArrow>
                     <motion.div {...pressable(reduceMotion)} style={{ display: "inline-block" }}>
                       <IconButton
@@ -553,7 +608,13 @@ export default function AdminCotizaciones() {
               <GlassCard rounded="3xl" overflow="hidden" border="1px solid" borderColor={borderColor}>
                 <Card bg="transparent" border="none">
                   <CardBody p={{ base: 4, md: 6 }}>
-                    <Flex justify="space-between" align={{ base: "start", md: "center" }} gap={4} mb={4} direction={{ base: "column", md: "row" }}>
+                    <Flex
+                      justify="space-between"
+                      align={{ base: "start", md: "center" }}
+                      gap={4}
+                      mb={4}
+                      direction={{ base: "column", md: "row" }}
+                    >
                       <HStack spacing={3}>
                         <Box bg={ferreYellow} p={2} rounded="xl" color="black">
                           <FiFilter size={18} />
@@ -566,7 +627,11 @@ export default function AdminCotizaciones() {
                         </Box>
                       </HStack>
 
-                      <HStack spacing={2} w={{ base: "full", md: "auto" }} justify={{ base: "flex-end", md: "flex-end" }}>
+                      <HStack
+                        spacing={2}
+                        w={{ base: "full", md: "auto" }}
+                        justify={{ base: "flex-end", md: "flex-end" }}
+                      >
                         <motion.div {...pressable(reduceMotion)} style={{ width: "100%" }}>
                           <Button
                             leftIcon={<FiFilter />}
@@ -601,7 +666,13 @@ export default function AdminCotizaciones() {
 
                         <Tooltip label="Limpiar filtros" hasArrow>
                           <motion.div {...pressable(reduceMotion)} style={{ display: "inline-block" }}>
-                            <IconButton aria-label="Limpiar" icon={<FiXCircle />} variant="ghost" rounded="full" onClick={resetFiltros} />
+                            <IconButton
+                              aria-label="Limpiar"
+                              icon={<FiXCircle />}
+                              variant="ghost"
+                              rounded="full"
+                              onClick={resetFiltros}
+                            />
                           </motion.div>
                         </Tooltip>
                       </HStack>
@@ -611,13 +682,25 @@ export default function AdminCotizaciones() {
 
                     <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={4}>
                       <Box>
-                        <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase" mb={1}>
+                        <Text
+                          fontSize="xs"
+                          color={muted}
+                          fontWeight="bold"
+                          letterSpacing="wide"
+                          textTransform="uppercase"
+                          mb={1}
+                        >
                           Estado de gestión
                         </Text>
                         <Text fontSize="xs" color={muted} mb={2}>
                           Tu decisión interna.
                         </Text>
-                        <Select size="sm" rounded="xl" value={estadoGestion} onChange={(e) => setEstadoGestion(e.target.value)}>
+                        <Select
+                          size="sm"
+                          rounded="xl"
+                          value={estadoGestion}
+                          onChange={(e) => setEstadoGestion(e.target.value)}
+                        >
                           <option value="TODOS">Todos</option>
                           <option value="PENDIENTE">Pendiente</option>
                           <option value="ACEPTADA">Aceptada</option>
@@ -627,13 +710,25 @@ export default function AdminCotizaciones() {
                       </Box>
 
                       <Box>
-                        <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase" mb={1}>
+                        <Text
+                          fontSize="xs"
+                          color={muted}
+                          fontWeight="bold"
+                          letterSpacing="wide"
+                          textTransform="uppercase"
+                          mb={1}
+                        >
                           Estado de vigencia
                         </Text>
                         <Text fontSize="xs" color={muted} mb={2}>
                           Fecha límite activa o vencida.
                         </Text>
-                        <Select size="sm" rounded="xl" value={estadoVigencia} onChange={(e) => setEstadoVigencia(e.target.value)}>
+                        <Select
+                          size="sm"
+                          rounded="xl"
+                          value={estadoVigencia}
+                          onChange={(e) => setEstadoVigencia(e.target.value)}
+                        >
                           <option value="TODAS">Todas</option>
                           <option value="VIGENTE">Vigente</option>
                           <option value="VENCIDA">Vencida</option>
@@ -641,28 +736,61 @@ export default function AdminCotizaciones() {
                       </Box>
 
                       <Box>
-                        <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase" mb={1}>
+                        <Text
+                          fontSize="xs"
+                          color={muted}
+                          fontWeight="bold"
+                          letterSpacing="wide"
+                          textTransform="uppercase"
+                          mb={1}
+                        >
                           Vigencia desde
                         </Text>
                         <Text fontSize="xs" color={muted} mb={2}>
                           Fecha mínima de vencimiento.
                         </Text>
-                        <Input size="sm" type="date" rounded="xl" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
+                        <Input
+                          size="sm"
+                          type="date"
+                          rounded="xl"
+                          value={fechaDesde}
+                          onChange={(e) => setFechaDesde(e.target.value)}
+                        />
                       </Box>
 
                       <Box>
-                        <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase" mb={1}>
+                        <Text
+                          fontSize="xs"
+                          color={muted}
+                          fontWeight="bold"
+                          letterSpacing="wide"
+                          textTransform="uppercase"
+                          mb={1}
+                        >
                           Vigencia hasta
                         </Text>
                         <Text fontSize="xs" color={muted} mb={2}>
                           Fecha máxima de vencimiento.
                         </Text>
-                        <Input size="sm" type="date" rounded="xl" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
+                        <Input
+                          size="sm"
+                          type="date"
+                          rounded="xl"
+                          value={fechaHasta}
+                          onChange={(e) => setFechaHasta(e.target.value)}
+                        />
                       </Box>
                     </SimpleGrid>
 
                     <Box mt={5}>
-                      <Text fontSize="xs" color={muted} fontWeight="bold" letterSpacing="wide" textTransform="uppercase" mb={2}>
+                      <Text
+                        fontSize="xs"
+                        color={muted}
+                        fontWeight="bold"
+                        letterSpacing="wide"
+                        textTransform="uppercase"
+                        mb={2}
+                      >
                         Buscar en la tabla
                       </Text>
 
@@ -680,7 +808,10 @@ export default function AdminCotizaciones() {
                           border="1px solid"
                           borderColor={borderColor}
                           focusBorderColor={ferreYellow}
-                          _placeholder={{ color: useColorModeValue("gray.400", "gray.500"), fontSize: "sm" }}
+                          _placeholder={{
+                            color: useColorModeValue("gray.400", "gray.500"),
+                            fontSize: "sm",
+                          }}
                         />
 
                         {searchTerm && (
@@ -788,7 +919,7 @@ export default function AdminCotizaciones() {
                       </Box>
                     ) : (
                       <>
-                        {/* MOBILE: Cards */}
+                        {/* MOBILE: Cards (click en toda la card abre detalle) */}
                         <Stack spacing={3} display={{ base: "flex", md: "none" }}>
                           <AnimatePresence>
                             {cotizacionesFiltradas.map((c) => (
@@ -800,7 +931,19 @@ export default function AdminCotizaciones() {
                                 transition={makeSpring(reduceMotion)}
                               >
                                 <motion.div {...pressable(reduceMotion)}>
-                                  <GlassCard rounded="2xl" p={4} border="1px solid" borderColor={borderColor}>
+                                  <GlassCard
+                                    rounded="2xl"
+                                    p={4}
+                                    border="1px solid"
+                                    borderColor={borderColor}
+                                    cursor="pointer"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => abrirDetalle(c.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") abrirDetalle(c.id);
+                                    }}
+                                  >
                                     <Flex justify="space-between" align="start" gap={3}>
                                       <Box minW={0}>
                                         <HStack spacing={2} mb={1}>
@@ -820,16 +963,28 @@ export default function AdminCotizaciones() {
 
                                         <HStack mt={3} spacing={4}>
                                           <Box>
-                                            <Text fontSize="10px" color={muted} fontWeight="bold" letterSpacing="wide">
+                                            <Text
+                                              fontSize="10px"
+                                              color={muted}
+                                              fontWeight="bold"
+                                              letterSpacing="wide"
+                                            >
                                               TOTAL
                                             </Text>
                                             <Text fontWeight="black">{fmtCop(c.total)}</Text>
                                           </Box>
                                           <Box>
-                                            <Text fontSize="10px" color={muted} fontWeight="bold" letterSpacing="wide">
+                                            <Text
+                                              fontSize="10px"
+                                              color={muted}
+                                              fontWeight="bold"
+                                              letterSpacing="wide"
+                                            >
                                               DESCUENTO
                                             </Text>
-                                            <Text fontWeight="black">{c.descuento ? fmtCop(c.descuento) : "—"}</Text>
+                                            <Text fontWeight="black">
+                                              {c.descuento ? fmtCop(c.descuento) : "—"}
+                                            </Text>
                                           </Box>
                                         </HStack>
 
@@ -845,7 +1000,7 @@ export default function AdminCotizaciones() {
                                         </HStack>
                                       </Box>
 
-                                      <VStack spacing={2} align="end">
+                                      <VStack spacing={2} align="end" onClick={(e) => e.stopPropagation()}>
                                         <Tooltip label="Ver detalle" hasArrow>
                                           <motion.div {...pressable(reduceMotion)}>
                                             <IconButton
@@ -854,7 +1009,10 @@ export default function AdminCotizaciones() {
                                               size="sm"
                                               variant="outline"
                                               rounded="full"
-                                              onClick={() => abrirDetalle(c.id)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                abrirDetalle(c.id);
+                                              }}
                                             />
                                           </motion.div>
                                         </Tooltip>
@@ -867,7 +1025,10 @@ export default function AdminCotizaciones() {
                                               size="sm"
                                               variant="outline"
                                               rounded="full"
-                                              onClick={() => descargarPDF(c.id)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                descargarPDF(c.id);
+                                              }}
                                             />
                                           </motion.div>
                                         </Tooltip>
@@ -880,17 +1041,59 @@ export default function AdminCotizaciones() {
                           </AnimatePresence>
                         </Stack>
 
-                        {/* DESKTOP: Table */}
+                        {/* DESKTOP: Table + Top scroller (igual idea que en Pedidos) */}
                         <Box display={{ base: "none", md: "block" }}>
+                          {/* Barra superior de scroll X (solo si hay overflow) */}
+                          {scrollMeta.show && (
+                            <Box mb={3}>
+                              <Box
+                                ref={topScrollRef}
+                                onScroll={onTopScroll}
+                                overflowX="auto"
+                                overflowY="hidden"
+                                h="14px"
+                                borderRadius="999px"
+                                border="1px solid"
+                                borderColor={borderColor}
+                                bg={useColorModeValue("whiteAlpha.700", "blackAlpha.300")}
+                                backdropFilter="blur(12px)"
+                                sx={{
+                                  "&::-webkit-scrollbar": { height: "10px" },
+                                  "&::-webkit-scrollbar-thumb": {
+                                    background: useColorModeValue("rgba(0,0,0,0.25)", "rgba(255,255,255,0.25)"),
+                                    borderRadius: "999px",
+                                  },
+                                }}
+                              >
+                                {/* “Filler” para que el scroll tenga el mismo ancho que la tabla */}
+                                <Box w={`${scrollMeta.w}px`} h="1px" />
+                              </Box>
+
+                              <Text mt={1} fontSize="xs" color={muted}>
+                                Desliza para ver más columnas →
+                              </Text>
+                            </Box>
+                          )}
+
                           <TableContainer
+                            ref={tableScrollRef}
+                            onScroll={onTableScroll}
                             rounded="2xl"
                             border="1px solid"
                             borderColor={borderColor}
-                            overflow="hidden"
+                            overflowX="auto"
+                            overflowY="hidden"
                             bg={useColorModeValue("whiteAlpha.800", "blackAlpha.300")}
                             backdropFilter="blur(14px)"
+                            sx={{
+                              "&::-webkit-scrollbar": { height: "10px" },
+                              "&::-webkit-scrollbar-thumb": {
+                                background: useColorModeValue("rgba(0,0,0,0.25)", "rgba(255,255,255,0.25)"),
+                                borderRadius: "999px",
+                              },
+                            }}
                           >
-                            <Table variant="simple" size="sm">
+                            <Table variant="simple" size="sm" minW="980px">
                               <Thead bg={headBg} backdropFilter="blur(8px)">
                                 <Tr>
                                   <Th>ID</Th>
@@ -911,7 +1114,17 @@ export default function AdminCotizaciones() {
                                 }}
                               >
                                 {cotizacionesFiltradas.map((c) => (
-                                  <Tr key={c.id}>
+                                  <Tr
+                                    key={c.id}
+                                    cursor="pointer"
+                                    role="button"
+                                    tabIndex={0}
+                                    _hover={{ bg: rowHover }}
+                                    onClick={() => abrirDetalle(c.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === " ") abrirDetalle(c.id);
+                                    }}
+                                  >
                                     <Td>
                                       <Badge borderRadius="full" variant="subtle" colorScheme="gray">
                                         #{c.id}
@@ -946,7 +1159,7 @@ export default function AdminCotizaciones() {
                                     <Td>{fmtDate(c.fecha_creacion)}</Td>
                                     <Td>{fmtDate(c.fecha_vigencia)}</Td>
 
-                                    <Td>
+                                    <Td onClick={(e) => e.stopPropagation()}>
                                       <HStack justify="flex-end" spacing={1}>
                                         <Tooltip label="Ver detalle" hasArrow>
                                           <motion.div {...pressable(reduceMotion)}>
@@ -956,7 +1169,10 @@ export default function AdminCotizaciones() {
                                               size="sm"
                                               variant="ghost"
                                               rounded="full"
-                                              onClick={() => abrirDetalle(c.id)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                abrirDetalle(c.id);
+                                              }}
                                             />
                                           </motion.div>
                                         </Tooltip>
@@ -969,7 +1185,10 @@ export default function AdminCotizaciones() {
                                               size="sm"
                                               variant="ghost"
                                               rounded="full"
-                                              onClick={() => descargarPDF(c.id)}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                descargarPDF(c.id);
+                                              }}
                                             />
                                           </motion.div>
                                         </Tooltip>
@@ -990,17 +1209,24 @@ export default function AdminCotizaciones() {
           </MotionBox>
         </Container>
 
-        {/* DRAWER DETALLE */}
+        {/* DRAWER DETALLE (más pequeño en laptop, grande solo en pantallas muy grandes) */}
         <Drawer
           isOpen={detalleOpen}
           onClose={() => {
             setDetalleOpen(false);
             setDetalle(null);
           }}
-          size="lg"
+          // base: full (móvil)
+          // md-lg-xl (incluye 1366): md (más “pestañita”)
+          // 2xl (pc grande): lg
+          size={{ base: "full", md: "md", "2xl": "lg" }}
         >
-          <DrawerOverlay />
-          <DrawerContent>
+          <DrawerOverlay bg="blackAlpha.600" backdropFilter="blur(10px)" />
+          <DrawerContent
+            maxW={{ base: "100vw", md: "560px", "2xl": "720px" }}
+            borderLeftRadius={{ base: 0, md: "2xl" }}
+            overflow="hidden"
+          >
             <DrawerCloseButton />
             <DrawerHeader borderBottomWidth="1px">
               {detalle ? (
@@ -1039,7 +1265,8 @@ export default function AdminCotizaciones() {
                           Información general
                         </Heading>
                         <Text fontSize="sm" color={muted}>
-                          Creada: {fmtDate(detalle.fecha_creacion)} · Vigente hasta: {fmtDate(detalle.fecha_vigencia)}
+                          Creada: {fmtDate(detalle.fecha_creacion)} · Vigente hasta:{" "}
+                          {fmtDate(detalle.fecha_vigencia)}
                         </Text>
                       </GlassCard>
                     </MotionBox>
@@ -1052,8 +1279,14 @@ export default function AdminCotizaciones() {
                         </Heading>
 
                         {detalle.productos && detalle.productos.length > 0 ? (
-                          <TableContainer rounded="xl" border="1px solid" borderColor={borderColor} overflow="hidden">
-                            <Table size="sm" variant="simple">
+                          <TableContainer
+                            rounded="xl"
+                            border="1px solid"
+                            borderColor={borderColor}
+                            overflowX="auto"
+                            overflowY="hidden"
+                          >
+                            <Table size="sm" variant="simple" minW="640px">
                               <Thead bg={useColorModeValue("gray.50", "blackAlpha.500")}>
                                 <Tr>
                                   <Th>Producto</Th>
