@@ -2,8 +2,12 @@
 const pool = require("../db");
 const { sendMail } = require("../utils/mailer");
 
+const COMPANY_INFO = {
+  email: "expressraquel@gmail.com",
+};
+
 /**
- * ✅ Pasarela DEMO para checkout:
+ *  Pasarela DEMO para checkout:
  * - No toca la base de datos.
  * - Aplica la lógica: último dígito PAR => aprobado, IMPAR => rechazado.
  * - Si rechaza, devolvemos 200 con {aprobado:false} para que el front lo maneje sin caer en catch.
@@ -49,7 +53,7 @@ const simularPago = async (req, res) => {
 };
 
 /**
- * 🔵 Pasarela simulada de pagos REAL:
+ *  Pasarela simulada de pagos REAL:
  * - Se usa cuando ya existe el pedido (p.ej. pagar luego desde “Mis pedidos”).
  * - NO recalcula total, solo verifica y marca el pedido como CONFIRMADO.
  */
@@ -107,22 +111,44 @@ const procesarPago = async (req, res) => {
 
     await connection.commit();
 
-    // Correo best-effort
+    // Correo con factura PDF adjunta — best-effort
     try {
       if (req.user.email) {
+        const { buildFacturaPdf } = require("../utils/facturaBuilder");
+
+        const pdfBuffer = await buildFacturaPdf(pedido_id);
+
         await sendMail({
           to: req.user.email,
-          subject: `Pago aprobado de tu pedido #${pedido_id}`,
-          text: `Tu pago fue procesado con éxito. Total: $${pedido.total}`,
-          html: `<p>Hola,</p><p>Tu pedido <b>#${pedido_id}</b> fue <b>pagado</b> con éxito.</p>
-                 <p>Total: <b>$${pedido.total}</b></p>`,
+          subject: `Recibo de pago — Pedido #${pedido_id} confirmado`,
+          text: `Hola ${req.user.username || ""},\n\nTu pedido #${pedido_id} fue pagado con éxito.\nTotal: ${Number(pedido.total).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}\n\nEncontrará el recibo de pago adjunto en este correo.\n\nGracias por comprar en FerreExpress S.A.S.`,
+          html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;color:#2c2c2a;">
+          <div style="background:#F9BF20;padding:16px 24px;border-radius:6px 6px 0 0;">
+            <strong style="font-size:18px;">FerreExpress S.A.S.</strong>
+          </div>
+          <div style="padding:24px;border:1px solid #e8e4d9;border-top:none;border-radius:0 0 6px 6px;">
+            <p>Hola <strong>${req.user.username || "cliente"}</strong>,</p>
+            <p>Tu pedido <strong>#${pedido_id}</strong> fue pagado con éxito y está ahora en estado <strong>CONFIRMADO</strong>.</p>
+            <p style="font-size:20px;font-weight:700;color:#F9BF20;">
+              Total: ${Number(pedido.total).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })}
+            </p>
+            <p style="color:#666;font-size:13px;">Encontrará el recibo de pago detallado en el archivo adjunto.</p>
+            <hr style="border:none;border-top:1px solid #e8e4d9;margin:16px 0;">
+            <p style="font-size:12px;color:#888;">Gracias por comprar en FerreExpress S.A.S. · ${COMPANY_INFO.email}</p>
+          </div>
+        </div>`,
+          attachments: [
+            {
+              filename: `recibo_pedido_${pedido_id}.pdf`,
+              content: pdfBuffer,
+              contentType: "application/pdf",
+            },
+          ],
         });
       }
     } catch (mailError) {
-      console.warn(
-        "⚠️ No se pudo enviar el correo de pago:",
-        mailError.message
-      );
+      console.warn("⚠️ No se pudo enviar el recibo de pago:", mailError.message);
     }
 
     res.json({
@@ -136,7 +162,7 @@ const procesarPago = async (req, res) => {
   } catch (error) {
     try {
       await connection.rollback();
-    } catch (_) {}
+    } catch (_) { }
     console.error("Error en procesarPago:", error);
     res.status(500).json({ error: "Error en pasarela simulada" });
   } finally {

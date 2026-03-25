@@ -45,4 +45,19 @@ const eliminarRegla = async (req,res)=>{
   res.json({ message:'Regla eliminada' });
 };
 
-module.exports = { listarReglas, crearRegla, actualizarRegla, eliminarRegla };
+const listarReglasActivas = async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT tipo, umbral_cantidad, umbral_items, porcentaje
+       FROM reglas_descuento
+       WHERE activo = 1 AND vigente = 1
+       ORDER BY version DESC, updated_at DESC`
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Error al listar reglas activas:", error);
+    res.status(500).json({ error: "Error al obtener reglas de descuento" });
+  }
+};
+
+module.exports = { listarReglas, crearRegla, actualizarRegla, eliminarRegla, listarReglasActivas };

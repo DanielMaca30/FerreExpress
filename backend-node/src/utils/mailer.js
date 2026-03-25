@@ -31,8 +31,7 @@ if (!SMTP_READY) {
   );
 }
 
-const sendMail = async ({ to, subject, text, html }) => {
-  // ✅ Nunca romper flujo por correo
+const sendMail = async ({ to, subject, text, html, attachments }) => {  
   if (!SMTP_READY || !transporter) {
     return { skipped: true, reason: "smtp_not_configured" };
   }
@@ -48,6 +47,7 @@ const sendMail = async ({ to, subject, text, html }) => {
       subject,
       text,
       html,
+      attachments: attachments ?? [],
     });
 
     console.log(`📧 Correo enviado a ${to} (${info.messageId})`);
