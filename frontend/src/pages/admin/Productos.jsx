@@ -416,7 +416,8 @@ export default function AdminProductos() {
           ? customQuery.trim()
           : debouncedProdQuery.trim();
 
-      if (q) params.search = q;
+      const esId = q !== "" && /^\d+$/.test(q);
+      if (q && !esId) params.search = q;
       if (precioMin !== "") params.precioMin = precioMin;
       if (precioMax !== "") params.precioMax = precioMax;
 
@@ -430,10 +431,21 @@ export default function AdminProductos() {
       try {
         const { data } = await api.get("/productos", { params });
         const arr = data?.productos || [];
-        const final = onlyLowStock ? arr.filter((x) => Number(x.stock) <= 5) : arr;
+
+        const q =
+          typeof customQuery === "string"
+            ? customQuery.trim()
+            : debouncedProdQuery.trim();
+        const esId = q !== "" && /^\d+$/.test(q);
+
+        let final = esId
+          ? arr.filter((x) => String(x.id).includes(q))
+          : arr;
+
+        if (onlyLowStock) final = final.filter((x) => Number(x.stock) <= 5);
 
         setProductos(final);
-        setProdTotal(Number(data?.total || arr.length));
+        setProdTotal(esId ? final.length : Number(data?.total || arr.length));
         stampUpdated();
       } catch (e) {
         console.error(e);
@@ -685,9 +697,8 @@ export default function AdminProductos() {
     if (precioMin !== "" || precioMax !== "") {
       list.push({
         key: "p",
-        label: `Precio: ${precioMin !== "" ? precioMin : "—"} a ${
-          precioMax !== "" ? precioMax : "—"
-        }`,
+        label: `Precio: ${precioMin !== "" ? precioMin : "—"} a ${precioMax !== "" ? precioMax : "—"
+          }`,
         onClear: () => {
           setPrecioMin("");
           setPrecioMax("");
@@ -823,7 +834,7 @@ export default function AdminProductos() {
                       <FiSearch />
                     </InputLeftElement>
                     <Input
-                      placeholder="Ej: taladro, tornillo, pintura blanca"
+                      placeholder="Ej: taladro, tornillo, pintura blanca, o escribe un ID (42)"
                       value={prodQuery}
                       onChange={(e) => {
                         setProdQuery(e.target.value);
@@ -995,23 +1006,23 @@ export default function AdminProductos() {
                   <AnimatePresence initial={false}>
                     {loading
                       ? Array.from({ length: prodLimit }).map((_, i) => (
-                          <Tr key={`sk-${i}`}>
-                            <Td colSpan={5}>
-                              <Skeleton height="44px" />
-                            </Td>
-                          </Tr>
-                        ))
+                        <Tr key={`sk-${i}`}>
+                          <Td colSpan={5}>
+                            <Skeleton height="44px" />
+                          </Td>
+                        </Tr>
+                      ))
                       : productos.map((p) => (
-                          <ProductRow
-                            key={p.id}
-                            product={p}
-                            onSave={updateProducto}
-                            onUpload={uploadImagen}
-                            onOpenGallery={openGallery}
-                            onOpenEdit={handleOpenEdit}
-                            isSaving={savingRowId === p.id}
-                          />
-                        ))}
+                        <ProductRow
+                          key={p.id}
+                          product={p}
+                          onSave={updateProducto}
+                          onUpload={uploadImagen}
+                          onOpenGallery={openGallery}
+                          onOpenEdit={handleOpenEdit}
+                          isSaving={savingRowId === p.id}
+                        />
+                      ))}
                   </AnimatePresence>
                 </Tbody>
               </Table>
@@ -1101,28 +1112,50 @@ export default function AdminProductos() {
                     borderRadius="xl"
                   />
 
-                  <HStack spacing={3}>
-                    <NumberInput
-                      min={0}
-                      value={newProd.precio}
-                      onChange={(_, v) =>
-                        setNewProd((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
-                      }
-                      flex="1"
-                    >
-                      <NumberInputField placeholder="Precio" aria-label="Precio" borderRadius="xl" />
-                    </NumberInput>
+                  <HStack spacing={3} align="flex-end">
+                    <Box flex="1">
+                      <Text fontSize="xs" mb={1} color={subtle}>
+                        Precio con IVA (COP)
+                      </Text>
+                      <NumberInput
+                        min={0}
+                        value={newProd.precio}
+                        onChange={(_, v) =>
+                          setNewProd((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
+                        }
+                      >
+                        <NumberInputField
+                          placeholder="Ej: 25900"
+                          aria-label="Precio con IVA"
+                          borderRadius="xl"
+                        />
+                      </NumberInput>
+                      <Text fontSize="xs" mt={1} color={subtle}>
+                        El sistema calcula base gravable e IVA automáticamente.
+                      </Text>
+                    </Box>
 
-                    <NumberInput
-                      min={0}
-                      value={newProd.stock}
-                      onChange={(_, v) =>
-                        setNewProd((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
-                      }
-                      flex="1"
-                    >
-                      <NumberInputField placeholder="Stock" aria-label="Stock" borderRadius="xl" />
-                    </NumberInput>
+                    <Box flex="1">
+                      <Text fontSize="xs" mb={1} color={subtle}>
+                        Stock inicial (unidades)
+                      </Text>
+                      <NumberInput
+                        min={0}
+                        value={newProd.stock}
+                        onChange={(_, v) =>
+                          setNewProd((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
+                        }
+                      >
+                        <NumberInputField
+                          placeholder="Ej: 100"
+                          aria-label="Stock inicial"
+                          borderRadius="xl"
+                        />
+                      </NumberInput>
+                      <Text fontSize="xs" mt={1} color={subtle}>
+                        Unidades disponibles para venta.
+                      </Text>
+                    </Box>
                   </HStack>
 
                   <Select
@@ -1215,27 +1248,50 @@ export default function AdminProductos() {
                     borderRadius="xl"
                   />
 
-                  <HStack spacing={3}>
-                    <NumberInput
-                      min={0}
-                      value={editForm.precio}
-                      onChange={(_, v) =>
-                        setEditForm((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
-                      }
-                      flex="1"
-                    >
-                      <NumberInputField placeholder="Precio" aria-label="Precio" borderRadius="xl" />
-                    </NumberInput>
-                    <NumberInput
-                      min={0}
-                      value={editForm.stock}
-                      onChange={(_, v) =>
-                        setEditForm((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
-                      }
-                      flex="1"
-                    >
-                      <NumberInputField placeholder="Stock" aria-label="Stock" borderRadius="xl" />
-                    </NumberInput>
+                  <HStack spacing={3} align="flex-end">
+                    <Box flex="1">
+                      <Text fontSize="xs" mb={1} color={subtle}>
+                        Precio con IVA (COP)
+                      </Text>
+                      <NumberInput
+                        min={0}
+                        value={editForm.precio}
+                        onChange={(_, v) =>
+                          setEditForm((s) => ({ ...s, precio: Number.isFinite(v) ? v : 0 }))
+                        }
+                      >
+                        <NumberInputField
+                          placeholder="Ej: 25900"
+                          aria-label="Precio con IVA"
+                          borderRadius="xl"
+                        />
+                      </NumberInput>
+                      <Text fontSize="xs" mt={1} color={subtle}>
+                        El sistema calcula base gravable e IVA automáticamente.
+                      </Text>
+                    </Box>
+
+                    <Box flex="1">
+                      <Text fontSize="xs" mb={1} color={subtle}>
+                        Stock disponible (unidades)
+                      </Text>
+                      <NumberInput
+                        min={0}
+                        value={editForm.stock}
+                        onChange={(_, v) =>
+                          setEditForm((s) => ({ ...s, stock: Number.isFinite(v) ? v : 0 }))
+                        }
+                      >
+                        <NumberInputField
+                          placeholder="Ej: 100"
+                          aria-label="Stock disponible"
+                          borderRadius="xl"
+                        />
+                      </NumberInput>
+                      <Text fontSize="xs" mt={1} color={subtle}>
+                        Unidades disponibles para venta.
+                      </Text>
+                    </Box>
                   </HStack>
 
                   <Select
@@ -1407,10 +1463,10 @@ function SectionCard({ title, subtitle, right, children }) {
   const animatedProps = prefersReducedMotion
     ? {}
     : {
-        transition: { duration: 0.18 },
-        initial: { opacity: 0, y: 8 },
-        animate: { opacity: 1, y: 0 },
-      };
+      transition: { duration: 0.18 },
+      initial: { opacity: 0, y: 8 },
+      animate: { opacity: 1, y: 0 },
+    };
 
   return (
     <MotionBox

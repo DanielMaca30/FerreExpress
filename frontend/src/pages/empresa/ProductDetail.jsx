@@ -40,6 +40,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiRefreshCw,
+  FiX,
   FiShield,
   FiShare2,
   FiStar,
@@ -247,10 +248,10 @@ function SectionCard({
   const animatedProps = prefersReducedMotion
     ? {}
     : {
-        transition: { duration: 0.3, ease: "easeOut" },
-        initial: { opacity: 0, y: 15 },
-        animate: { opacity: 1, y: 0 },
-      };
+      transition: { duration: 0.3, ease: "easeOut" },
+      initial: { opacity: 0, y: 15 },
+      animate: { opacity: 1, y: 0 },
+    };
 
   return (
     <MotionBox
@@ -335,8 +336,8 @@ export default function ProductDetail() {
     return list.length
       ? list
       : producto?.imagen_principal
-      ? [`${API_BASE_URL}${producto.imagen_principal}`]
-      : ["https://via.placeholder.com/800x600?text=Sin+Imagen"];
+        ? [`${API_BASE_URL}${producto.imagen_principal}`]
+        : ["https://via.placeholder.com/800x600?text=Sin+Imagen"];
   }, [imagenes, producto]);
 
   useEffect(() => {
@@ -1122,20 +1123,15 @@ export default function ProductDetail() {
           p={4}
         >
           <IconButton
-            icon={
-              <Icon
-                as={FiRefreshCw}
-                style={{ transform: "rotate(45deg)" }}
-              />
-            }
-            aria-label="Cerrar"
+            icon={<FiX size={22} />}
+            aria-label="Cerrar imagen"
             position="absolute"
             top={4}
             right={4}
             onClick={lightbox.onClose}
-            bg="whiteAlpha.200"
+            bg="whiteAlpha.300"
             color="white"
-            _hover={{ bg: "whiteAlpha.400" }}
+            _hover={{ bg: "whiteAlpha.500" }}
             rounded="full"
             size="lg"
             zIndex={10}

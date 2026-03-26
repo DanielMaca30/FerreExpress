@@ -1,6 +1,7 @@
-// src/pages/CondicionesUso.jsx
+// src/pages/CondicionesUsoEmpresa.jsx
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Container,
@@ -43,6 +44,7 @@ import {
   FiEdit3,
   FiMail,
   FiSmartphone,
+  FiArrowLeft,
   FiMessageSquare,
   FiCheckCircle,
   FiBookOpen,    // ← Reemplazamos FiGavel por este (libro de leyes)
@@ -71,8 +73,11 @@ const sections = [
 ];
 
 export default function CondicionesUso() {
-  useEffect(() => window.scrollTo(0, 0), []);
+  const navigate = useNavigate();
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
   const [formData, setFormData] = useState({ nombre: "", email: "", telefono: "", mensaje: "" });
@@ -102,8 +107,38 @@ export default function CondicionesUso() {
         <Container maxW="4xl">
           {/* Header */}
           <MotionVStack spacing={8} textAlign="center" mb={16} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-            <Heading as="h1" size={{ base: "2xl", md: "3xl" }} fontWeight="bold" color="gray.800" _dark={{ color: "white" }}>
-              Términos y Condiciones de Uso
+            {/* Breadcrumb + botón retorno */}
+            <HStack
+              spacing={2}
+              alignSelf="flex-start"
+              mb={2}
+              color={muted}
+              fontSize="sm"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<FiArrowLeft />}
+                onClick={() => navigate(-1)}
+                color={muted}
+                px={2}
+                _hover={{ color: "#f8bd22", bg: "transparent" }}
+              >
+                Volver
+              </Button>
+              <Text>/</Text>
+              <Text fontWeight="medium" color="gray.500" _dark={{ color: "gray.400" }}>
+                Legal
+              </Text>
+            </HStack>
+
+            <Heading
+              as="h1"
+              size={{ base: "2xl", md: "3xl" }}
+              fontWeight="bold"
+              color="gray.800"
+              _dark={{ color: "white" }}
+            >              Términos y Condiciones de Uso
             </Heading>
             <Text fontSize={{ base: "lg", md: "xl" }} color="gray.600" maxW="2xl">
               Condiciones generales del Sitio web y servicios

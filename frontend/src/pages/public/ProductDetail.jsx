@@ -41,6 +41,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiRefreshCw,
+  FiX,
   FiShield,
   FiShare2,
   FiStar,
@@ -55,14 +56,14 @@ import api, { API_BASE_URL } from "../../utils/axiosInstance";
 const useSurfaceTokens = () => {
   const pageBg = useColorModeValue("gray.50", "gray.900");
   const cardBg = useColorModeValue("white", "gray.800");
-  
+
   // Bordes sutiles
   const borderCo = useColorModeValue("transparent", "gray.700");
   const borderLight = useColorModeValue("gray.100", "gray.700");
-  
+
   const subtle = useColorModeValue("gray.500", "gray.400");
   const titleCol = useColorModeValue("gray.800", "white");
-  
+
   // Color de acento
   const brandColor = "#F9BF20";
   const brandHover = "#E0AC1C";
@@ -188,14 +189,14 @@ const MotionBox = motion(Box);
 function SectionCard({ title, subtitle, right, children, id, noPadding = false }) {
   const { cardBg, shadowLg, titleCol } = useSurfaceTokens();
   const prefersReducedMotion = usePrefersReducedMotion();
-  
+
   const animatedProps = prefersReducedMotion
     ? {}
     : {
-        transition: { duration: 0.3, ease: "easeOut" },
-        initial: { opacity: 0, y: 15 },
-        animate: { opacity: 1, y: 0 },
-      };
+      transition: { duration: 0.3, ease: "easeOut" },
+      initial: { opacity: 0, y: 15 },
+      animate: { opacity: 1, y: 0 },
+    };
 
   return (
     <MotionBox
@@ -250,7 +251,7 @@ export default function ProductDetailPublic() {
     shadowLg,
     shadowTopBar,
   } = useSurfaceTokens();
-  
+
   const prefersReducedMotion = usePrefersReducedMotion();
 
   const [producto, setProducto] = useState(null);
@@ -271,8 +272,8 @@ export default function ProductDetailPublic() {
     return list.length
       ? list
       : producto?.imagen_principal
-      ? [`${API_BASE_URL}${producto.imagen_principal}`]
-      : ["https://via.placeholder.com/800x600?text=Sin+Imagen"];
+        ? [`${API_BASE_URL}${producto.imagen_principal}`]
+        : ["https://via.placeholder.com/800x600?text=Sin+Imagen"];
   }, [imagenes, producto]);
 
   useEffect(() => {
@@ -420,7 +421,7 @@ export default function ProductDetailPublic() {
   return (
     <Box bg={pageBg} minH="100vh" py={{ base: 4, md: 8 }} transition="background 0.2s">
       <Box maxW="1280px" mx="auto" px={{ base: 4, md: 6, xl: 8 }}>
-        
+
         {/* Breadcrumb Sutil */}
         <HStack mb={6} color={subtle} fontSize="sm" spacing={1} overflowX="hidden" whiteSpace="nowrap">
           <Text as="button" _hover={{ color: brandColor, textDecoration: "underline" }} onClick={() => navigate("/")}>
@@ -469,15 +470,15 @@ export default function ProductDetailPublic() {
               >
                 {/* Badges Flotantes */}
                 <VStack position="absolute" top={4} left={4} align="start" zIndex={2} spacing={2}>
-                   {producto.exclusivo && (
+                  {producto.exclusivo && (
                     <Badge colorScheme="purple" px={3} py={1} borderRadius="full" fontSize="xs" boxShadow="md">
                       Exclusivo
                     </Badge>
                   )}
                   {Number(producto.stock) <= 0 && (
-                     <Badge colorScheme="red" px={3} py={1} borderRadius="full" fontSize="xs" boxShadow="md">
+                    <Badge colorScheme="red" px={3} py={1} borderRadius="full" fontSize="xs" boxShadow="md">
                       Agotado
-                     </Badge>
+                    </Badge>
                   )}
                 </VStack>
 
@@ -505,7 +506,7 @@ export default function ProductDetailPublic() {
                     transition="transform 0.3s ease"
                     _groupHover={{ transform: "scale(1.02)" }}
                   />
-                  
+
                   {/* Navegación Desktop */}
                   {images.length > 1 && (
                     <>
@@ -548,34 +549,34 @@ export default function ProductDetailPublic() {
 
               {/* Thumbnails */}
               {images.length > 1 && (
-                 <HStack 
-                    mt={4} 
-                    spacing={3} 
-                    overflowX="auto" 
-                    py={2} 
-                    justify={{ base: "start", md: "center" }}
-                    css={{ '&::-webkit-scrollbar': { display: 'none' } }}
-                  >
-                    {images.map((src, i) => (
-                      <Thumb
-                        key={i}
-                        src={src}
-                        active={i === current}
-                        onClick={() => setCurrent(i)}
-                        brandColor={brandColor}
-                      />
-                    ))}
-                 </HStack>
+                <HStack
+                  mt={4}
+                  spacing={3}
+                  overflowX="auto"
+                  py={2}
+                  justify={{ base: "start", md: "center" }}
+                  css={{ '&::-webkit-scrollbar': { display: 'none' } }}
+                >
+                  {images.map((src, i) => (
+                    <Thumb
+                      key={i}
+                      src={src}
+                      active={i === current}
+                      onClick={() => setCurrent(i)}
+                      brandColor={brandColor}
+                    />
+                  ))}
+                </HStack>
               )}
-              
+
               <HStack justify="center" mt={2} color={subtle} fontSize="xs">
-                 <Icon as={FiShare2} /> <Text>Haz clic en la imagen para ampliar</Text>
+                <Icon as={FiShare2} /> <Text>Haz clic en la imagen para ampliar</Text>
               </HStack>
             </MotionBox>
-            
+
             {/* Descripción en Desktop */}
             <Box display={{ base: "none", lg: "block" }} mt={10}>
-               <SectionCard title="Descripción del Producto" id="descripcion">
+              <SectionCard title="Descripción del Producto" id="descripcion">
                 <Box
                   fontSize="md"
                   color="gray.600"
@@ -590,13 +591,13 @@ export default function ProductDetailPublic() {
                   }}
                 />
               </SectionCard>
-              
+
               <SectionCard title="Especificaciones Técnicas" id="ficha-tecnica">
                 <SimpleGrid columns={2} spacingY={4} spacingX={8}>
-                   {producto.tipo && <Spec label="Tipo" value={producto.tipo} />}
-                   {producto.modelo && <Spec label="Modelo" value={producto.modelo} />}
-                   {producto.marca && <Spec label="Marca" value={producto.marca} />}
-                   {producto.peso && <Spec label="Peso" value={producto.peso} />}
+                  {producto.tipo && <Spec label="Tipo" value={producto.tipo} />}
+                  {producto.modelo && <Spec label="Modelo" value={producto.modelo} />}
+                  {producto.marca && <Spec label="Marca" value={producto.marca} />}
+                  {producto.peso && <Spec label="Peso" value={producto.peso} />}
                 </SimpleGrid>
               </SectionCard>
             </Box>
@@ -605,15 +606,15 @@ export default function ProductDetailPublic() {
           {/* === Columna Derecha: Panel de Compra (Sticky) === */}
           <GridItem position={{ lg: "sticky" }} top={{ lg: "100px" }} zIndex={10}>
             <MotionBox
-               initial={{ opacity: 0, x: 20 }}
-               animate={{ opacity: 1, x: 0 }}
-               transition={{ duration: 0.4, delay: 0.1 }}
-               bg={cardBg}
-               borderRadius="2xl"
-               p={{ base: 5, md: 8 }}
-               boxShadow={shadowLg}
-               border="1px solid"
-               borderColor={borderLight}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.4, delay: 0.1 }}
+              bg={cardBg}
+              borderRadius="2xl"
+              p={{ base: 5, md: 8 }}
+              boxShadow={shadowLg}
+              border="1px solid"
+              borderColor={borderLight}
             >
               {/* Encabezado */}
               <HStack justify="space-between" align="start">
@@ -626,64 +627,64 @@ export default function ProductDetailPublic() {
                   </Heading>
                 </VStack>
                 <Tooltip label="Compartir">
-                   <IconButton 
-                      icon={<FiShare2 />} 
-                      variant="ghost" 
-                      rounded="full" 
-                      onClick={share} 
-                      aria-label="Compartir"
-                      color="gray.400"
-                      _hover={{ color: brandColor, bg: "yellow.50" }}
-                   />
+                  <IconButton
+                    icon={<FiShare2 />}
+                    variant="ghost"
+                    rounded="full"
+                    onClick={share}
+                    aria-label="Compartir"
+                    color="gray.400"
+                    _hover={{ color: brandColor, bg: "yellow.50" }}
+                  />
                 </Tooltip>
               </HStack>
 
               <Divider my={5} borderColor={borderLight} />
-              
+
               {/* Precio y Disponibilidad */}
               <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
-                 <Box>
-                   <Text fontSize="3xl" fontWeight="bold" color={titleCol} letterSpacing="-0.02em">
-                     {fmtCop(totalPrice)}
-                   </Text>
-                   {qty > 1 && (
-                     <Text fontSize="sm" color="gray.500">
-                       {fmtCop(unitPrice)} c/u
-                     </Text>
-                   )}
-                 </Box>
-                 {Number(producto.stock) > 0 ? (
-                    <Badge colorScheme="green" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs">
-                       <HStack spacing={1}><Icon as={FiCheck} /><Text>Disponible</Text></HStack>
-                    </Badge>
-                 ) : (
-                    <Badge colorScheme="red" variant="subtle">Agotado</Badge>
-                 )}
+                <Box>
+                  <Text fontSize="3xl" fontWeight="bold" color={titleCol} letterSpacing="-0.02em">
+                    {fmtCop(totalPrice)}
+                  </Text>
+                  {qty > 1 && (
+                    <Text fontSize="sm" color="gray.500">
+                      {fmtCop(unitPrice)} c/u
+                    </Text>
+                  )}
+                </Box>
+                {Number(producto.stock) > 0 ? (
+                  <Badge colorScheme="green" variant="subtle" px={2} py={1} borderRadius="md" fontSize="xs">
+                    <HStack spacing={1}><Icon as={FiCheck} /><Text>Disponible</Text></HStack>
+                  </Badge>
+                ) : (
+                  <Badge colorScheme="red" variant="subtle">Agotado</Badge>
+                )}
               </Flex>
 
               {/* Selector de Cantidad */}
               <Box mt={6}>
-                 <HStack justify="space-between" mb={2}>
-                    <Text fontSize="sm" fontWeight="medium" color={titleCol}>Cantidad</Text>
-                    <Text fontSize="xs" color="gray.400">{producto.stock} uds. disponibles</Text>
-                 </HStack>
-                 <Select 
-                    size="lg" 
-                    borderRadius="xl" 
-                    focusBorderColor={brandColor}
-                    value={String(clampedQty)}
-                    onChange={(e) => setQty(Number(e.target.value) || 1)}
-                    isDisabled={Number(producto.stock) <= 0}
-                    cursor="pointer"
-                    bg={useColorModeValue("gray.50", "gray.700")}
-                    border="none"
-                 >
-                    {Array.from({ length: maxQty }).map((_, i) => (
-                      <option key={i} value={i + 1}>
-                        {i + 1} {i === 0 ? "unidad" : "unidades"}
-                      </option>
-                    ))}
-                 </Select>
+                <HStack justify="space-between" mb={2}>
+                  <Text fontSize="sm" fontWeight="medium" color={titleCol}>Cantidad</Text>
+                  <Text fontSize="xs" color="gray.400">{producto.stock} uds. disponibles</Text>
+                </HStack>
+                <Select
+                  size="lg"
+                  borderRadius="xl"
+                  focusBorderColor={brandColor}
+                  value={String(clampedQty)}
+                  onChange={(e) => setQty(Number(e.target.value) || 1)}
+                  isDisabled={Number(producto.stock) <= 0}
+                  cursor="pointer"
+                  bg={useColorModeValue("gray.50", "gray.700")}
+                  border="none"
+                >
+                  {Array.from({ length: maxQty }).map((_, i) => (
+                    <option key={i} value={i + 1}>
+                      {i + 1} {i === 0 ? "unidad" : "unidades"}
+                    </option>
+                  ))}
+                </Select>
               </Box>
 
               {/* Botones de Acción (Login Redirect) */}
@@ -716,7 +717,7 @@ export default function ProductDetailPublic() {
                 >
                   Añadir al carrito
                 </Button>
-                
+
                 <Text fontSize="xs" color="gray.500" textAlign="center" mt={2}>
                   * Serás redirigido al inicio de sesión para completar tu compra.
                 </Text>
@@ -724,23 +725,23 @@ export default function ProductDetailPublic() {
 
               {/* Beneficios */}
               <VStack align="start" spacing={3} mt={8} pt={6} borderTop="1px dashed" borderColor={borderLight}>
-                 <BenefitItem icon={FiTruck} text="Envíos a todo el país" />
-                 <BenefitItem icon={FiShield} text="Transacciones 100% Seguras" />
-                 <BenefitItem icon={FiRefreshCw} text="Garantía de satisfacción" />
+                <BenefitItem icon={FiTruck} text="Envíos a todo el país" />
+                <BenefitItem icon={FiShield} text="Transacciones 100% Seguras" />
+                <BenefitItem icon={FiRefreshCw} text="Garantía de satisfacción" />
               </VStack>
 
               {/* Pagos */}
               <Box mt={6}>
-                 <Text fontSize="xs" fontWeight="bold" color="gray.400" mb={3} textTransform="uppercase">Aceptamos</Text>
-                 <PaymentMethods
-                    logos={[
-                      "/Visa.png",
-                      "/Mastercard.png",
-                      "/PSE.png",
-                      "/Nequi.png",
-                      "/DaviPlata.png",
-                    ]}
-                  />
+                <Text fontSize="xs" fontWeight="bold" color="gray.400" mb={3} textTransform="uppercase">Aceptamos</Text>
+                <PaymentMethods
+                  logos={[
+                    "/Visa.png",
+                    "/Mastercard.png",
+                    "/PSE.png",
+                    "/Nequi.png",
+                    "/DaviPlata.png",
+                  ]}
+                />
               </Box>
             </MotionBox>
           </GridItem>
@@ -748,48 +749,48 @@ export default function ProductDetailPublic() {
 
         {/* Descripción Móvil */}
         <Box display={{ base: "block", lg: "none" }} mt={8}>
-            <SectionCard title="Descripción" id="descripcion-mobile">
-               <Box 
-                  fontSize="sm" 
-                  color="gray.600" 
-                  dangerouslySetInnerHTML={{
-                    __html: producto.descripcion?.trim() || "<p>Sin descripción.</p>",
-                  }} 
-               />
-            </SectionCard>
-             <SectionCard title="Ficha técnica">
-                <SimpleGrid columns={1} spacing={3}>
-                   {producto.tipo && <Spec label="Tipo" value={producto.tipo} />}
-                   {producto.marca && <Spec label="Marca" value={producto.marca} />}
-                   {producto.peso && <Spec label="Peso" value={producto.peso} />}
-                </SimpleGrid>
-            </SectionCard>
+          <SectionCard title="Descripción" id="descripcion-mobile">
+            <Box
+              fontSize="sm"
+              color="gray.600"
+              dangerouslySetInnerHTML={{
+                __html: producto.descripcion?.trim() || "<p>Sin descripción.</p>",
+              }}
+            />
+          </SectionCard>
+          <SectionCard title="Ficha técnica">
+            <SimpleGrid columns={1} spacing={3}>
+              {producto.tipo && <Spec label="Tipo" value={producto.tipo} />}
+              {producto.marca && <Spec label="Marca" value={producto.marca} />}
+              {producto.peso && <Spec label="Peso" value={producto.peso} />}
+            </SimpleGrid>
+          </SectionCard>
         </Box>
 
         {/* Relacionados */}
         <Box mt={12}>
-           <Heading size="lg" mb={6} color={titleCol} letterSpacing="-0.01em">
-              Te podría interesar
-           </Heading>
-           <Box bg={cardBg} borderRadius="2xl" p={6} boxShadow={shadowLg}>
-              <RowScroller
-                loading={relLoading}
-                items={relacionados}
-                renderItem={(p, i) => (
-                  <RelatedCard
-                    key={p?.id ?? `r-${i}`}
-                    producto={p}
-                    onClick={() => navigate(`/producto/${p.id}`)}
-                    brandColor={brandColor}
-                  />
-                )}
-              />
-              {!relLoading && (!relacionados || relacionados.length === 0) && (
-                <Text color={subtle} textAlign="center" py={4}>
-                  No hay productos relacionados por el momento.
-                </Text>
+          <Heading size="lg" mb={6} color={titleCol} letterSpacing="-0.01em">
+            Te podría interesar
+          </Heading>
+          <Box bg={cardBg} borderRadius="2xl" p={6} boxShadow={shadowLg}>
+            <RowScroller
+              loading={relLoading}
+              items={relacionados}
+              renderItem={(p, i) => (
+                <RelatedCard
+                  key={p?.id ?? `r-${i}`}
+                  producto={p}
+                  onClick={() => navigate(`/producto/${p.id}`)}
+                  brandColor={brandColor}
+                />
               )}
-           </Box>
+            />
+            {!relLoading && (!relacionados || relacionados.length === 0) && (
+              <Text color={subtle} textAlign="center" py={4}>
+                No hay productos relacionados por el momento.
+              </Text>
+            )}
+          </Box>
         </Box>
 
       </Box>
@@ -798,19 +799,19 @@ export default function ProductDetailPublic() {
       <Modal isOpen={lightbox.isOpen} onClose={lightbox.onClose} size="full" isCentered motionPreset="slideInBottom">
         <ModalOverlay bg="blackAlpha.900" backdropFilter="blur(10px)" />
         <ModalContent bg="transparent" boxShadow="none" display="grid" placeItems="center" p={4}>
-          <IconButton 
-             icon={<Icon as={FiRefreshCw} style={{ transform: "rotate(45deg)" }} />} 
-             aria-label="Cerrar"
-             position="absolute"
-             top={4}
-             right={4}
-             onClick={lightbox.onClose}
-             bg="whiteAlpha.200"
-             color="white"
-             _hover={{ bg: "whiteAlpha.400" }}
-             rounded="full"
-             size="lg"
-             zIndex={10}
+          <IconButton
+            icon={<FiX size={22} />}
+            aria-label="Cerrar imagen"
+            position="absolute"
+            top={4}
+            right={4}
+            onClick={lightbox.onClose}
+            bg="whiteAlpha.300"
+            color="white"
+            _hover={{ bg: "whiteAlpha.500" }}
+            rounded="full"
+            size="lg"
+            zIndex={10}
           />
           <Image
             src={images[current]}
@@ -905,7 +906,7 @@ function PaymentMethods({ logos = [] }) {
 
 function MobileBuyBar({ total, onBuy, onAdd, shadowTopBar, brandColor }) {
   const bg = useColorModeValue("rgba(255,255,255,0.9)", "rgba(26,32,44,0.9)");
-  
+
   return (
     <Box
       display={{ base: "block", lg: "none" }}
@@ -933,7 +934,7 @@ function MobileBuyBar({ total, onBuy, onAdd, shadowTopBar, brandColor }) {
             h="48px"
             borderRadius="xl"
           >
-             Añadir
+            Añadir
           </Button>
           <Button
             bg={brandColor}
@@ -971,7 +972,7 @@ function RelatedCard({ producto, onClick, brandColor }) {
     : "https://via.placeholder.com/600x400?text=Sin+Imagen";
 
   if (!producto) return <SkeletonRelated />;
-  
+
   return (
     <Box
       minW="200px"
@@ -990,7 +991,7 @@ function RelatedCard({ producto, onClick, brandColor }) {
       position="relative"
     >
       <Box h="180px" bg="gray.50" display="flex" alignItems="center" justifyContent="center" p={4} position="relative">
-         <Image
+        <Image
           src={img}
           alt={producto.nombre}
           maxW="100%"
@@ -1000,7 +1001,7 @@ function RelatedCard({ producto, onClick, brandColor }) {
           _groupHover={{ transform: "scale(1.05)" }}
         />
       </Box>
-      
+
       <Box p={4}>
         <Text noOfLines={2} fontSize="sm" fontWeight="medium" color="gray.700" h="40px" mb={2}>
           {producto.nombre}
@@ -1030,43 +1031,43 @@ function RowScroller({ loading, items, renderItem }) {
   const scrollBy = (px) => ref.current?.scrollBy({ left: px, behavior: "smooth" });
 
   if (loading && !items?.length) {
-     return (
-        <HStack spacing={4} overflow="hidden">
-           {Array.from({ length: 4 }).map((_, i) => <SkeletonRelated key={i} />)}
-        </HStack>
-     );
+    return (
+      <HStack spacing={4} overflow="hidden">
+        {Array.from({ length: 4 }).map((_, i) => <SkeletonRelated key={i} />)}
+      </HStack>
+    );
   }
 
   return (
     <Box position="relative" mx={-2}>
       {/* Botones Flotantes */}
       <IconButton
-          icon={<FiChevronLeft />}
-          isRound
-          position="absolute"
-          left={-4}
-          top="50%"
-          transform="translateY(-50%)"
-          zIndex={5}
-          onClick={() => scrollBy(-300)}
-          bg="white"
-          shadow="lg"
-          display={{ base: "none", md: "flex" }}
-          aria-label="Scroll izquierda"
+        icon={<FiChevronLeft />}
+        isRound
+        position="absolute"
+        left={-4}
+        top="50%"
+        transform="translateY(-50%)"
+        zIndex={5}
+        onClick={() => scrollBy(-300)}
+        bg="white"
+        shadow="lg"
+        display={{ base: "none", md: "flex" }}
+        aria-label="Scroll izquierda"
       />
       <IconButton
-          icon={<FiChevronRight />}
-          isRound
-          position="absolute"
-          right={-4}
-          top="50%"
-          transform="translateY(-50%)"
-          zIndex={5}
-          onClick={() => scrollBy(300)}
-          bg="white"
-          shadow="lg"
-          display={{ base: "none", md: "flex" }}
-          aria-label="Scroll derecha"
+        icon={<FiChevronRight />}
+        isRound
+        position="absolute"
+        right={-4}
+        top="50%"
+        transform="translateY(-50%)"
+        zIndex={5}
+        onClick={() => scrollBy(300)}
+        bg="white"
+        shadow="lg"
+        display={{ base: "none", md: "flex" }}
+        aria-label="Scroll derecha"
       />
 
       <HStack
@@ -1075,9 +1076,9 @@ function RowScroller({ loading, items, renderItem }) {
         overflowX="auto"
         py={4}
         px={2}
-        css={{ 
-           scrollbarWidth: "none",
-           '&::-webkit-scrollbar': { display: 'none' } 
+        css={{
+          scrollbarWidth: "none",
+          '&::-webkit-scrollbar': { display: 'none' }
         }}
         scrollSnapType="x mandatory"
       >

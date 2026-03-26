@@ -1,6 +1,7 @@
-// src/pages/AvisosPrivacidad.jsx
+// src/pages/AvisosPrivacidadCliente.jsx
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Container,
@@ -42,6 +43,7 @@ import {
   FiRefreshCw,
   FiMail,
   FiSmartphone,
+  FiArrowLeft,
   FiMessageSquare,
   FiCheckCircle,
   FiUserCheck,
@@ -151,7 +153,8 @@ const sections = [
 ];
 
 export default function AvisosPrivacidad() {
-  // Siempre inicia arriba
+  const navigate = useNavigate();
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -210,6 +213,31 @@ export default function AvisosPrivacidad() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
           >
+            {/* Breadcrumb + botón retorno */}
+            <HStack
+              spacing={2}
+              alignSelf="flex-start"
+              mb={2}
+              color={muted}
+              fontSize="sm"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                leftIcon={<FiArrowLeft />}
+                onClick={() => navigate(-1)}
+                color={muted}
+                px={2}
+                _hover={{ color: "#f8bd22", bg: "transparent" }}
+              >
+                Volver
+              </Button>
+              <Text>/</Text>
+              <Text fontWeight="medium" color="gray.500" _dark={{ color: "gray.400" }}>
+                Legal
+              </Text>
+            </HStack>
+
             <Heading
               as="h1"
               size={{ base: "2xl", md: "3xl" }}
