@@ -719,16 +719,16 @@ export default function PublicLayout() {
                 fontWeight="medium"
               >
                 <CLink
-                  href="https://tu-sitio.com/condiciones-uso"
-                  isExternal
+                  as={RouterLink}
+                  to="/condiciones-uso"
                   color="blue.600"
                   _hover={{ color: "blue.700", textDecoration: "underline" }}
                 >
                   Condiciones de uso
                 </CLink>
                 <CLink
-                  href="https://tu-sitio.com/privacidad"
-                  isExternal
+                  as={RouterLink}
+                  to="/avisos-privacidad"
                   color="blue.600"
                   _hover={{ color: "blue.700", textDecoration: "underline" }}
                 >
