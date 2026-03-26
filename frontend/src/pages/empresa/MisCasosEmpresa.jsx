@@ -1,6 +1,6 @@
 // src/pages/empresa/MisCasosEmpresa.jsx
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Avatar,
   Badge,
@@ -72,6 +72,7 @@ import {
   FiFilter,
   FiChevronRight,
   FiX,
+  FiChevronLeft,
 } from "react-icons/fi";
 import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import api from "../../utils/axiosInstance";
@@ -297,6 +298,7 @@ function CaseCard({ caso, onOpen }) {
    ========================================================================= */
 export default function MisCasosEmpresa() {
   const toast = useToast();
+  const navigate = useNavigate();
   const reduceMotion = usePrefersReducedMotion();
   const [searchParams] = useSearchParams();
 
@@ -343,6 +345,11 @@ export default function MisCasosEmpresa() {
   const filtersActive = useMemo(() => {
     return !!(fEstado || fPrioridad || (search || "").trim() || orden !== "NUEVOS");
   }, [fEstado, fPrioridad, search, orden]);
+
+  const handleVolver = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/empresa");
+  };
 
   /* ---------------- fetch cases ---------------- */
   const fetchCasos = useCallback(async ({ silent = false } = {}) => {
@@ -604,6 +611,21 @@ export default function MisCasosEmpresa() {
                         </motion.div>
 
                         <Box>
+                          <HStack spacing={1} fontSize="xs" color={muted} mb={2}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              leftIcon={<FiChevronLeft />}
+                              onClick={handleVolver}
+                              color={muted}
+                              px={2}
+                              _hover={{ color: ferreYellow, bg: "transparent" }}
+                            >
+                              Volver
+                            </Button>
+                            <Text>/</Text>
+                            <Text fontWeight="medium">Soporte y casos</Text>
+                          </HStack>
                           <HStack spacing={2} flexWrap="wrap">
                             <Heading size="md">Soporte y casos (Empresa)</Heading>
                             <Tag size="sm" borderRadius="full" variant="subtle" colorScheme="gray">
@@ -1131,8 +1153,8 @@ export default function MisCasosEmpresa() {
                             {loadingComentarios
                               ? "Cargando…"
                               : comentarios.length === 1
-                              ? "1 mensaje"
-                              : `${comentarios.length} mensajes`}
+                                ? "1 mensaje"
+                                : `${comentarios.length} mensajes`}
                           </TagLabel>
                         </Tag>
                       </HStack>
@@ -1209,6 +1231,8 @@ export default function MisCasosEmpresa() {
                 </Stack>
               )}
             </ModalBody>
+
+
 
             {/* Composer pinned */}
             <ModalFooter bg={useColorModeValue("whiteAlpha.900", "blackAlpha.400")} backdropFilter="blur(14px)">

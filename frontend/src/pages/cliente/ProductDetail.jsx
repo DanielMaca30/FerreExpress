@@ -837,9 +837,12 @@ export default function ClienteProductDetail() {
                   >
                     {fmtCop(totalPrice)}
                   </Text>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    IVA incluido (19%)
+                  </Text>
                   {qty > 1 && (
                     <Text fontSize="sm" color="gray.500">
-                      {fmtCop(unitPrice)} por unidad
+                      {fmtCop(unitPrice)} 
                     </Text>
                   )}
                 </Box>

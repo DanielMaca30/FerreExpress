@@ -209,54 +209,6 @@ export default function CondicionesUso() {
             © {new Date().getFullYear()} FerreExpress S.A.S. • Todos los derechos reservados
           </Text>
         </Container>
-
-        {/* Botón flotante */}
-        <Button
-          position="fixed"
-          bottom={{ base: 4, md: 8 }}
-          right={{ base: 4, md: 8 }}
-          size="lg"
-          bg="#f8bd22"
-          color="gray.900"
-          fontWeight="bold"
-          shadow="2xl"
-          rounded="full"
-          px={8}
-          py={7}
-          leftIcon={<FiMessageSquare size={22} />}
-          _hover={{ bg: "#e0a800", transform: "translateY(-4px)" }}
-          onClick={onOpen}
-          zIndex={999}
-        >
-          Contactar por dudas legales
-        </Button>
-
-        {/* Modal de contacto */}
-        <Modal isOpen={isOpen} onClose={onClose} size={{ base: "full", md: "lg" }}>
-          <ModalOverlay />
-          <ModalContent>
-            <ModalHeader>
-              <HStack><FiMail size={24} /><Text>Contactar por Términos y Condiciones</Text></HStack>
-            </ModalHeader>
-            <ModalCloseButton />
-            <ModalBody pb={6}>
-              <form onSubmit={handleSubmit}>
-                <VStack spacing={5}>
-                  <FormControl isRequired><FormLabel>Nombre completo</FormLabel><Input value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} /></FormControl>
-                  <FormControl isRequired><FormLabel>Correo electrónico</FormLabel><Input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} /></FormControl>
-                  <FormControl><FormLabel>Teléfono</FormLabel><Input value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} /></FormControl>
-                  <FormControl isRequired><FormLabel>Mensaje o duda</FormLabel><Textarea rows={5} placeholder="Escribe aquí tu consulta sobre los Términos y Condiciones..." value={formData.mensaje} onChange={e => setFormData({ ...formData, mensaje: e.target.value })} /></FormControl>
-                </VStack>
-              </form>
-            </ModalBody>
-            <ModalFooter>
-              <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-              <Button ml={3} bg="#f8bd22" color="gray.900" _hover={{ bg: "#e0a800" }} onClick={handleSubmit}>
-                Enviar mensaje
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </Modal>
       </Box>
     </>
   );

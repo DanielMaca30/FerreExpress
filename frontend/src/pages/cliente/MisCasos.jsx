@@ -64,6 +64,7 @@ import {
   FiChevronRight,
   FiX,
   FiZap,
+  FiChevronLeft,
 } from "react-icons/fi";
 import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import api from "../../utils/axiosInstance";
@@ -328,6 +329,11 @@ export default function MisCasos() {
 
   // auto open
   const [autoOpenedId, setAutoOpenedId] = useState(null);
+
+  const handleVolver = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/cliente");
+  };
 
   // ✅ Siempre que entro aquí, me llevo al inicio de la página
   useEffect(() => {
@@ -603,7 +609,23 @@ export default function MisCasos() {
                         </Box>
                       </motion.div>
 
-                      <Box>
+                        <Box>
+                        <HStack spacing={1} fontSize="xs" color={muted} mb={2}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            leftIcon={<FiChevronLeft />}
+                            onClick={handleVolver}
+                            color={muted}
+                            px={2}
+                            _hover={{ color: ferreYellow, bg: "transparent" }}
+                          >
+                            Volver
+                          </Button>
+                          <Text>/</Text>
+                          <Text fontWeight="medium">Soporte y casos</Text>
+                        </HStack>
+
                         <HStack spacing={2} flexWrap="wrap">
                           <Tag size="sm" borderRadius="full" variant="subtle" colorScheme="yellow">
                             <TagLabel>Mi cuenta</TagLabel>
@@ -612,7 +634,6 @@ export default function MisCasos() {
                           <Tag size="sm" borderRadius="full" variant="outline" colorScheme="yellow">
                             <TagLabel>Soporte y casos</TagLabel>
                           </Tag>
-
                           {lastUpdated && (
                             <Text fontSize="xs" color={muted}>
                               Actualizado:{" "}
@@ -629,34 +650,16 @@ export default function MisCasos() {
                         </Text>
 
                         <HStack spacing={2} mt={3} flexWrap="wrap">
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            leftIcon={<FiHelpCircle />}
-                            onClick={() => navigate("/cliente/ayuda")}
-                            _focus={focusRing}
-                            rounded="full"
-                          >
+                          <Button size="xs" variant="ghost" leftIcon={<FiHelpCircle />}
+                            onClick={() => navigate("/cliente/ayuda")} _focus={focusRing} rounded="full">
                             Centro de ayuda
                           </Button>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            leftIcon={<FiTruck />}
-                            onClick={() => navigate("/cliente/pedidos")}
-                            _focus={focusRing}
-                            rounded="full"
-                          >
+                          <Button size="xs" variant="ghost" leftIcon={<FiTruck />}
+                            onClick={() => navigate("/cliente/pedidos")} _focus={focusRing} rounded="full">
                             Mis pedidos
                           </Button>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            leftIcon={<FiUser />}
-                            onClick={() => navigate("/cliente/perfil")}
-                            _focus={focusRing}
-                            rounded="full"
-                          >
+                          <Button size="xs" variant="outline" leftIcon={<FiUser />}
+                            onClick={() => navigate("/cliente/perfil")} _focus={focusRing} rounded="full">
                             Mi perfil
                           </Button>
                         </HStack>
@@ -1162,8 +1165,8 @@ export default function MisCasos() {
                             {loadingComentarios
                               ? "Cargando…"
                               : comentarios.length === 1
-                              ? "1 mensaje"
-                              : `${comentarios.length} mensajes`}
+                                ? "1 mensaje"
+                                : `${comentarios.length} mensajes`}
                           </TagLabel>
                         </Tag>
 

@@ -29,7 +29,7 @@ import {
   Tooltip,
   Kbd,
 } from "@chakra-ui/react";
-import { FiTrash2, FiShoppingBag, FiArrowRight, FiRefreshCw } from "react-icons/fi";
+import { FiTrash2, FiShoppingBag, FiArrowRight } from "react-icons/fi";
 import { useNavigate, Link as RouterLink } from "react-router-dom";
 import { API_BASE_URL } from "../../utils/axiosInstance";
 
@@ -301,8 +301,9 @@ export default function Carrito() {
               <Tooltip label="Vaciar carrito" hasArrow>
                 <IconButton
                   aria-label="Vaciar carrito"
-                  icon={<FiRefreshCw />}
+                  icon={<FiTrash2 />}
                   variant="ghost"
+                  colorScheme="red"
                   onClick={clearAll}
                   type="button"
                 />

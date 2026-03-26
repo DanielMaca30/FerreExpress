@@ -79,7 +79,7 @@ export default function PublicLayout() {
   const hideNavbar = hideNavbarRoutes.includes(pathname);
 
   // Breakpoints
-  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true });
+  const isDesktopLarge = useBreakpointValue({ base: false, lg: true });
   const showDesktopNav = !!isDesktopLarge;
   const useDrawerNav = !showDesktopNav;
 
@@ -287,7 +287,7 @@ export default function PublicLayout() {
   const searchFont = useBreakpointValue({ base: "sm", md: "md" });
 
   return (
-    <Box bg={bgPage} minH="100vh">
+    <Box bg={bgPage} minH="100dvh">
       {/* ===== HEADER ===== */}
       {!hideNavbar && (
         <MotionBox
@@ -669,10 +669,13 @@ export default function PublicLayout() {
 
       {/* Contenido principal + Footer */}
       <MotionBox
-        style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
+        style={{
+          paddingTop: effectiveHeaderH,
+          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
+          willChange: "transform",
+        }}
         animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        minH="100vh"
         display="flex"
         flexDirection="column"
       >
@@ -796,6 +799,7 @@ export default function PublicLayout() {
           </Container>
         </Box>
       </MotionBox>
+      
     </Box>
   );
 }

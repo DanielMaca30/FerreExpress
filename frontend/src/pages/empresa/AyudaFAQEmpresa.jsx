@@ -52,6 +52,7 @@ import {
   FiDollarSign,
   FiClock,
   FiX,
+  FiChevronLeft,
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import api from "../../utils/axiosInstance";
@@ -90,6 +91,11 @@ export default function AyudaFAQEmpresa() {
   const [feedbackState, setFeedbackState] = useState({});
   const [feedbackSendingId, setFeedbackSendingId] = useState(null);
   const [topicShortcut, setTopicShortcut] = useState("");
+
+  const handleVolver = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/empresa");
+  };
 
   // ✅ scroll top al entrar
   useEffect(() => {
@@ -360,11 +366,22 @@ export default function AyudaFAQEmpresa() {
           >
             <Stack spacing={stackSpacing}>
               <HStack spacing={1} fontSize="xs" color={muted}>
-                <Text>Estás en</Text>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<FiChevronLeft />}
+                  onClick={handleVolver}
+                  color={muted}
+                  px={2}
+                  _hover={{ color: "yellow.500", bg: "transparent" }}
+                >
+                  Volver
+                </Button>
+                <Text>/</Text>
                 <Tag size="sm" variant="subtle" colorScheme="gray">
                   <TagLabel>Empresa</TagLabel>
                 </Tag>
-                <Icon as={FiChevronRight} boxSize={3} opacity={0.7} aria-hidden="true" />
+                <Icon as={FiChevronRight} boxSize={3} opacity={0.7} />
                 <Tag size="sm" variant="outline" colorScheme="gray">
                   <TagLabel>Centro de ayuda</TagLabel>
                 </Tag>

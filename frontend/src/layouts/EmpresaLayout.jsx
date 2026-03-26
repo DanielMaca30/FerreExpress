@@ -53,6 +53,7 @@ import {
   FiBell,
   FiBriefcase,
   FiFileText,
+  FiHelpCircle,
 } from "react-icons/fi";
 import { FaWhatsapp, FaInstagram, FaFacebook, FaXTwitter } from "react-icons/fa6";
 import { useEffect, useMemo, useRef, useState, useCallback, useLayoutEffect } from "react";
@@ -408,7 +409,7 @@ export default function EmpresaLayout() {
   const effectiveHeaderH = headerH;
 
   return (
-    <Box bg={bgPage} minH="100vh">
+    <Box bg={bgPage} minH="100dvh">
       {/* ===== HEADER EMPRESA (fixed + hide solo base/md) ===== */}
       <MotionBox
         as="header"
@@ -1041,10 +1042,13 @@ export default function EmpresaLayout() {
 
       {/* ===== CONTENIDO + FOOTER (se mueven con el header cuando se esconde) ===== */}
       <MotionBox
-        style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
+        style={{
+          paddingTop: effectiveHeaderH,
+          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
+          willChange: "transform",
+        }}
         animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        minH="100vh"
         display="flex"
         flexDirection="column"
       >
@@ -1141,6 +1145,25 @@ export default function EmpresaLayout() {
           </Container>
         </Box>
       </MotionBox>
+
+      {/* ===== BOTÓN FLOTANTE SOPORTE (siempre visible) ===== */}
+      <Tooltip label="¿Necesitas ayuda? Abre un caso de soporte" placement="right" hasArrow>
+        <IconButton
+          icon={<FiHelpCircle size={22} />}
+          aria-label="Soporte"
+          colorScheme="yellow"
+          size="lg"
+          isRound
+          position="fixed"
+          bottom={6}
+          left={6}
+          boxShadow="0 6px 20px rgba(248,189,34,0.45)"
+          onClick={() => navigate(`${basePath}/casos-empresa`)}
+          zIndex={999}
+          _hover={{ transform: "scale(1.1)", boxShadow: "0 8px 24px rgba(248,189,34,0.6)" }}
+          transition="all 0.2s ease"
+        />
+      </Tooltip>
     </Box>
   );
 }

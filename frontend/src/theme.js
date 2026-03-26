@@ -3,12 +3,13 @@ import { extendTheme } from "@chakra-ui/react";
 
 const theme = extendTheme({
   breakpoints: {
-    base: "0px",
-    sm: "480px",
-    md: "768px",
-    lmd: "1080px",
-    lg: "1280px",
-    xl: "1536px",
+    base: "0px",    // móvil pequeño
+    sm: "480px",    // móvil grande
+    md: "768px",    // tablet
+    lg: "960px",    // laptop (cubre 1366px con zoom hasta ~140%)
+    lmd: "1200px",  // laptop grande / desktop pequeño
+    xl: "1440px",   // desktop estándar
+    "2xl": "1920px", // desktop grande
   },
 
   colors: {

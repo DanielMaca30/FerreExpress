@@ -115,12 +115,12 @@ export default function Login() {
       const pref = localStorage.getItem(LS_REMEMBER_PREF);
       if (pref === "0") setRememberMe(false);
       if (pref === "1") setRememberMe(true);
-    } catch {}
+    } catch { }
 
     try {
       const last = localStorage.getItem(LS_LAST_EMAIL);
       if (last) setEmail(last);
-    } catch {}
+    } catch { }
 
     // autofocus (control del usuario)
     setTimeout(() => {
@@ -132,7 +132,7 @@ export default function Login() {
   useEffect(() => {
     try {
       localStorage.setItem(LS_REMEMBER_PREF, rememberMe ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [rememberMe]);
 
   // ✅ Captura token de Google (?token=...) y persiste sesión
@@ -149,10 +149,10 @@ export default function Login() {
       (role === "CLIENTE"
         ? "/cliente"
         : role === "CONTRATISTA"
-        ? "/empresa"
-        : role === "ADMIN"
-        ? "/admin"
-        : "/");
+          ? "/empresa"
+          : role === "ADMIN"
+            ? "/admin"
+            : "/");
 
     // limpia query param
     const url = new URL(window.location.href);
@@ -223,7 +223,7 @@ export default function Login() {
         // ✅ recordar email (no contraseña)
         try {
           localStorage.setItem(LS_LAST_EMAIL, email.trim());
-        } catch {}
+        } catch { }
 
         const role = res?.user?.role;
 
@@ -231,20 +231,20 @@ export default function Login() {
           role === "CLIENTE"
             ? "Bienvenido, Cliente"
             : role === "CONTRATISTA"
-            ? "Bienvenido, Empresa"
-            : role === "ADMIN"
-            ? "Bienvenido, Admin"
-            : "Bienvenido";
+              ? "Bienvenido, Empresa"
+              : role === "ADMIN"
+                ? "Bienvenido, Admin"
+                : "Bienvenido";
 
         const from =
           location.state?.from?.pathname ||
           (role === "CLIENTE"
             ? "/cliente"
             : role === "CONTRATISTA"
-            ? "/empresa"
-            : role === "ADMIN"
-            ? "/admin"
-            : "/");
+              ? "/empresa"
+              : role === "ADMIN"
+                ? "/admin"
+                : "/");
 
         setSuccessMsg(roleMsg);
         setRedirectTo(from);
@@ -306,16 +306,16 @@ export default function Login() {
   const pulseProps = prefersReducedMotion
     ? {}
     : {
-        initial: { boxShadow: "0 0 0 0 rgba(72,187,120,0.0)" },
-        animate: {
-          boxShadow: [
-            "0 0 0 0 rgba(72,187,120,0.0)",
-            "0 0 0 12px rgba(72,187,120,0.12)",
-            "0 0 0 0 rgba(72,187,120,0.0)",
-          ],
-        },
-        transition: { duration: 1.2, repeat: Infinity, ease: "easeInOut" },
-      };
+      initial: { boxShadow: "0 0 0 0 rgba(72,187,120,0.0)" },
+      animate: {
+        boxShadow: [
+          "0 0 0 0 rgba(72,187,120,0.0)",
+          "0 0 0 12px rgba(72,187,120,0.12)",
+          "0 0 0 0 rgba(72,187,120,0.0)",
+        ],
+      },
+      transition: { duration: 1.2, repeat: Infinity, ease: "easeInOut" },
+    };
 
   // ✅ Responsive “full-bleed” en móvil: sin sombra, sin bordes, sin esquinas redondeadas.
   const cardRadius = { base: "none", sm: "2xl" };
@@ -491,19 +491,29 @@ export default function Login() {
 
                 {/* ✅ Control y libertad (recordar sesión) + recuperación (olvidé clave) */}
                 <HStack w="full" align="center" pt={1}>
-                  <Tooltip
-                    label="Mantiene tu sesión activa en este dispositivo. Recomendado solo en equipos personales."
-                    hasArrow
-                    placement="top-start"
+                  <Checkbox
+                    isChecked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    colorScheme="yellow"
                   >
-                    <Checkbox
-                      isChecked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      colorScheme="yellow"
-                    >
-                      Mantener sesión iniciada
-                    </Checkbox>
-                  </Tooltip>
+                    <HStack spacing={1} align="center">
+                      <Text fontSize="sm">Mantener sesión iniciada</Text>
+                      <Tooltip
+                        label="Mantiene tu sesión activa en este dispositivo. Recomendado solo en equipos personales."
+                        hasArrow
+                        placement="top"
+                        closeOnClick
+                        closeDelay={0}
+                      >
+                        <InfoIcon
+                          boxSize={3}
+                          color={subtleText}
+                          cursor="help"
+                          flexShrink={0}
+                        />
+                      </Tooltip>
+                    </HStack>
+                  </Checkbox>
 
                   <Spacer />
 

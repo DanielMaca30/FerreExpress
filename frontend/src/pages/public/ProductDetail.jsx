@@ -644,12 +644,20 @@ export default function ProductDetailPublic() {
               {/* Precio y Disponibilidad */}
               <Flex justify="space-between" align="center" wrap="wrap" gap={2}>
                 <Box>
-                  <Text fontSize="3xl" fontWeight="bold" color={titleCol} letterSpacing="-0.02em">
+                  <Text
+                    fontSize="3xl"
+                    fontWeight="bold"
+                    color={titleCol}
+                    letterSpacing="-0.02em"
+                  >
                     {fmtCop(totalPrice)}
+                  </Text>
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    IVA incluido (19%)
                   </Text>
                   {qty > 1 && (
                     <Text fontSize="sm" color="gray.500">
-                      {fmtCop(unitPrice)} c/u
+                      {fmtCop(unitPrice)} {/* c/u o por unidad según el archivo */}
                     </Text>
                   )}
                 </Box>

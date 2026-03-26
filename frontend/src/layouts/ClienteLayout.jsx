@@ -51,6 +51,7 @@ import {
   FiMapPin,
   FiMenu,
   FiBell,
+  FiHelpCircle,
 } from "react-icons/fi";
 import { FaWhatsapp, FaInstagram, FaFacebook, FaXTwitter } from "react-icons/fa6";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -84,7 +85,7 @@ export default function ClienteLayout() {
   // ================== BREAKPOINTS “GENERALES” ==================
   // 2xl (≥1536): desktop grande -> nav completa visible
   // <2xl: drawer (mobile/tablet/laptop) -> evita header gigante y bugs
-  const isDesktopLarge = useBreakpointValue({ base: false, "2xl": true });
+  const isDesktopLarge = useBreakpointValue({ base: false, lg: true });
   const showDesktopNav = !!isDesktopLarge;
   const useDrawerNav = !showDesktopNav;
 
@@ -417,7 +418,7 @@ export default function ClienteLayout() {
   const effectiveHeaderH = headerH;
 
   return (
-    <Box bg={bgPage} minH="100vh">
+    <Box bg={bgPage} minH="100dvh">
       {/* ===== HEADER CLIENTE (fixed + hide on scroll solo base/md) ===== */}
       <MotionBox
         as="header"
@@ -1007,10 +1008,13 @@ export default function ClienteLayout() {
 
       {/* ===== CONTENIDO + FOOTER (se mueve junto con el header) ===== */}
       <MotionBox
-        style={{ paddingTop: effectiveHeaderH, willChange: "transform" }}
+        style={{
+          paddingTop: effectiveHeaderH,
+          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
+          willChange: "transform",
+        }}
         animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        minH="100vh"
         display="flex"
         flexDirection="column"
       >
@@ -1077,7 +1081,7 @@ export default function ClienteLayout() {
               <HStack spacing={{ base: 5, md: 6 }} justify={{ base: "center", md: "flex-end" }}>
                 {[
                   { Icon: FaWhatsapp, label: "WhatsApp", color: "#25D366", url: "https://wa.me/message/YJTPSMKGHFBAH1" },
-                  { Icon: FaInstagram, label: "Instagram", color: "#E4405F", url: "https://www.instagram.com/ferreexpress.sas?igsh=MXVkMWNwbTVpZGRrZg=="},
+                  { Icon: FaInstagram, label: "Instagram", color: "#E4405F", url: "https://www.instagram.com/ferreexpress.sas?igsh=MXVkMWNwbTVpZGRrZg==" },
                   { Icon: FaFacebook, label: "Facebook", color: "#1877F2", url: "https://www.facebook.com/profile.php?id=61569576237043&sk=about" },
                   { Icon: FaXTwitter, label: "X", color: "#000000" },
                 ].map((social) => (
@@ -1112,6 +1116,24 @@ export default function ClienteLayout() {
           </Container>
         </Box>
       </MotionBox>
+      {/* ===== BOTÓN FLOTANTE SOPORTE (siempre visible) ===== */}
+      <Tooltip label="¿Necesitas ayuda? Abre un caso de soporte" placement="right" hasArrow>
+        <IconButton
+          icon={<FiHelpCircle size={22} />}
+          aria-label="Soporte"
+          colorScheme="yellow"
+          size="lg"
+          isRound
+          position="fixed"
+          bottom={6}
+          left={6}
+          boxShadow="0 6px 20px rgba(248,189,34,0.45)"
+          onClick={() => navigate("/cliente/casos")}
+          zIndex={999}
+          _hover={{ transform: "scale(1.1)", boxShadow: "0 8px 24px rgba(248,189,34,0.6)" }}
+          transition="all 0.2s ease"
+        />
+      </Tooltip>
     </Box>
   );
 }

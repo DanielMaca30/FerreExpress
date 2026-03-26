@@ -1683,27 +1683,6 @@ export default function PerfilEmpresa() {
         </Box>
       </Container>
 
-      {/* 🛟 Botón flotante soporte (igual vibe Cliente) */}
-      {!isEmpresaBloqueada && (
-        <Tooltip label="¿Necesitas ayuda? Contáctanos" placement="left" hasArrow>
-          <IconButton
-            icon={<Icon as={FiLifeBuoy} boxSize={6} />}
-            aria-label="Soporte"
-            colorScheme="yellow"
-            size="lg"
-            isRound
-            position="fixed"
-            bottom={6}
-            right={6}
-            boxShadow="0 6px 20px rgba(236, 201, 75, 0.4)"
-            onClick={() => navigate("/empresa/casos-empresa")}
-            zIndex={99}
-            _hover={{ transform: "scale(1.1)" }}
-            transition="all 0.2s"
-          />
-        </Tooltip>
-      )}
-
       {/* MODAL DIRECCIÓN (estilo Cliente) */}
       <Modal
         isOpen={isDirModalOpen}
