@@ -107,6 +107,8 @@ const getProductos = async (req, res) => {
         precio: Number(p.precio),
         precio_sin_iva: Number(p.precio_sin_iva ?? 0),
         iva: Number(p.iva ?? 0),
+        stock: p.stock !== null && p.stock !== undefined ? Number(p.stock) : null,
+        precio_original: p.precio_original ? Number(p.precio_original) : null,
         activo: p.activo === 1 || p.activo === true,
         imagen_principal: p.imagen_principal || null,
       })),
@@ -155,8 +157,10 @@ const getProductoById = async (req, res) => {
       precio: Number(producto.precio),
       precio_sin_iva: Number(producto.precio_sin_iva ?? 0),
       iva: Number(producto.iva ?? 0),
+      stock: producto.stock !== null && producto.stock !== undefined ? Number(producto.stock) : null,
+      precio_original: producto.precio_original ? Number(producto.precio_original) : null,
       activo: producto.activo === 1 || producto.activo === true,
-      imagenes,
+      imagen_principal: producto.imagen_principal || null,
     });
   } catch (error) {
     console.error("Error al obtener producto:", error);
@@ -567,4 +571,4 @@ const setImagenPrincipal = async (req, res) => {
   }
 };
 
-module.exports = {getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal};
+module.exports = { getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal };
