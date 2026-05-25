@@ -41,8 +41,13 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
-const swaggerDocument = YAML.load(path.join(__dirname, "../docs/openapi.yaml"));
-app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+try {
+  const swaggerDocument = YAML.load(path.join(__dirname, "../docs/openapi.yaml"));
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+} catch {
+  app.get("/docs", (_req, res) => res.json({ message: "API docs not available in this environment" }));
+}
+
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 const vercelFerreRegex = /^https:\/\/ferre-express(-[a-z0-9-]+)?\.vercel\.app$/i;
