@@ -1006,15 +1006,10 @@ export default function ClienteLayout() {
         </DrawerContent>
       </Drawer>
 
-      {/* ===== CONTENIDO + FOOTER (se mueve junto con el header) ===== */}
-      <MotionBox
-        style={{
-          paddingTop: effectiveHeaderH,
-          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
-          willChange: "transform",
-        }}
-        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
+      {/* ===== CONTENIDO + FOOTER ===== */}
+      <Box
+        style={{ paddingTop: effectiveHeaderH }}
+        minHeight="100dvh"
         display="flex"
         flexDirection="column"
       >
@@ -1115,8 +1110,8 @@ export default function ClienteLayout() {
             </Grid>
           </Container>
         </Box>
-      </MotionBox>
-      {/* ===== BOTÓN FLOTANTE SOPORTE (siempre visible) ===== */}
+      </Box>
+      {/* ===== BOTON FLOTANTE SOPORTE (siempre visible) ===== */}
       <Tooltip label="¿Necesitas ayuda? Abre un caso de soporte" placement="right" hasArrow>
         <IconButton
           icon={<FiHelpCircle size={22} />}

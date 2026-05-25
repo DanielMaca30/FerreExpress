@@ -8,6 +8,7 @@ const { logAuditoria } = require("../utils/auditoria");
 
 
 const generarToken = (usuario) => {
+  if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET no configurado");
   return jwt.sign(
     {
       sub: usuario.id,
@@ -15,8 +16,8 @@ const generarToken = (usuario) => {
       email: usuario.email,
       username: usuario.username,
     },
-    process.env.JWT_SECRET || "supersecret",
-    { expiresIn: process.env.JWT_EXPIRES || "1h" }
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES || "8h" }
   );
 };
 
@@ -295,10 +296,10 @@ const verifyReset = async (req, res) => {
     const cleanCode = codigo.toString().trim();
 
     const [rows] = await pool.query(
-      `SELECT r.*, u.id as user_id, u.email
+      `SELECT r.id as token_id, r.expira, r.usado, u.id as user_id, u.email
        FROM reset_tokens r
        JOIN usuarios u ON r.user_id = u.id
-       WHERE CAST(r.token AS CHAR) = ? 
+       WHERE CAST(r.token AS CHAR) = ?
          AND r.usado = 0`,
       [cleanCode]
     );
@@ -314,13 +315,14 @@ const verifyReset = async (req, res) => {
       return res.status(400).json({ error: "Código expirado" });
     }
 
+    // BUG-01 fix: usar token_id explícito (r.id) para no confundir con user_id
     await pool.query("UPDATE reset_tokens SET usado = 1 WHERE id = ?", [
-      user.id,
+      user.token_id,
     ]);
 
     const tempToken = jwt.sign(
       { sub: user.user_id, tipo: "RESET", email: user.email },
-      process.env.JWT_SECRET || "supersecret",
+      process.env.JWT_SECRET,
       { expiresIn: "10m" }
     );
 
@@ -352,7 +354,7 @@ const resetPassword = async (req, res) => {
 
     let payload;
     try {
-      payload = jwt.verify(token, process.env.JWT_SECRET || "supersecret");
+      payload = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
       return res
         .status(400)
@@ -464,13 +466,30 @@ const updatePerfil = async (req, res) => {
   }
 };
 
-// Listar Usuarios (Admin)
+// Listar Usuarios (Admin) con paginación
 const listarUsuarios = async (req, res) => {
   try {
+    let { page = 1, limit = 50, search = "" } = req.query;
+    page = Math.max(1, parseInt(page, 10) || 1);
+    limit = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const offset = (page - 1) * limit;
+    const like = `%${search}%`;
+
     const [rows] = await pool.query(
-      "SELECT id, username, email, role, estado, created_at, telefono, nit FROM usuarios ORDER BY id DESC"
+      `SELECT id, username, email, role, estado, created_at, telefono, nit
+       FROM usuarios
+       WHERE username LIKE ? OR email LIKE ?
+       ORDER BY id DESC
+       LIMIT ? OFFSET ?`,
+      [like, like, limit, offset]
     );
-    res.json(rows);
+
+    const [[{ total }]] = await pool.query(
+      "SELECT COUNT(*) as total FROM usuarios WHERE username LIKE ? OR email LIKE ?",
+      [like, like]
+    );
+
+    res.json({ data: rows, total, page, limit, pages: Math.ceil(total / limit) });
   } catch (error) {
     console.error("Error al listar usuarios:", error);
     res.status(500).json({ error: "Error al listar usuarios" });

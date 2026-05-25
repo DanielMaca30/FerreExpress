@@ -439,9 +439,20 @@ export default function Checkout() {
                     <Badge colorScheme="teal">Paso 2/2</Badge>
                   </HStack>
 
+                  {/* Pasarela simulada — aviso legal */}
+                  <Box bg="orange.50" border="1px solid" borderColor="orange.200" borderRadius="md" p={3} mb={3}>
+                    <HStack spacing={2}>
+                      <Text fontSize="lg">⚠️</Text>
+                      <VStack align="start" spacing={0}>
+                        <Text fontWeight="bold" fontSize="sm" color="orange.700">Entorno de pruebas</Text>
+                        <Text fontSize="xs" color="orange.600">Esta es una <strong>pasarela de pago simulada</strong>. No se realizarán cargos reales. No ingreses datos bancarios reales.</Text>
+                      </VStack>
+                    </HStack>
+                  </Box>
+
                   {/* Medios aceptados */}
                   <VStack align="stretch" spacing={2} mb={3}>
-                    <Text color={muted} fontSize="sm">Medios aceptados:</Text>
+                    <Text color={muted} fontSize="sm">Medios aceptados (simulados):</Text>
                     <PaymentMethods logos={["/Visa.png", "/Mastercard.png", "/PSE.png", "/Nequi.png", "/DaviPlata.png"]} />
                   </VStack>
 
@@ -734,23 +745,23 @@ export default function Checkout() {
                   onChange={(e) => setFormDir((s) => ({ ...s, telefono: e.target.value }))}
                   placeholder="+57 3xx xxx xxxx"
                 />
-              </FormControl>
+                </FormControl>
 
-              <Checkbox
-                isChecked={formDir.es_principal}
-                onChange={(e) => setFormDir((s) => ({ ...s, es_principal: e.target.checked }))}
-              >
-                Marcar como principal
-              </Checkbox>
+              <FormControl display="flex" alignItems="center">
+                <Checkbox
+                  isChecked={formDir.es_principal}
+                  onChange={(e) => setFormDir((s) => ({ ...s, es_principal: e.target.checked }))}
+                  colorScheme="yellow"
+                >
+                  Establecer como direccion principal
+                </Checkbox>
+              </FormControl>
             </VStack>
           </ModalBody>
-
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={() => setShowAddModal(false)}>
-              Cancelar
-            </Button>
-            <Button colorScheme="yellow" color="black" onClick={saveDireccion} isLoading={guardandoDir}>
-              Guardar dirección
+          <ModalFooter gap={2}>
+            <Button variant="ghost" onClick={() => setShowAddModal(false)}>Cancelar</Button>
+            <Button colorScheme="yellow" onClick={saveDireccion} isLoading={guardandoDir}>
+              Guardar direccion
             </Button>
           </ModalFooter>
         </ModalContent>

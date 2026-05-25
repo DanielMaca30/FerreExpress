@@ -919,6 +919,17 @@ export default function CheckoutEmpresa() {
                 3. Método de Pago {isCotizacionFlow ? "(Pago de cotización)" : ""}
               </Heading>
 
+              {/* Pasarela simulada — aviso legal */}
+              <Box bg="orange.50" border="1px solid" borderColor="orange.200" borderRadius="md" p={3} mb={4}>
+                <HStack spacing={2}>
+                  <Text fontSize="lg">⚠️</Text>
+                  <Box>
+                    <Text fontWeight="bold" fontSize="sm" color="orange.700">Entorno de pruebas</Text>
+                    <Text fontSize="xs" color="orange.600">Esta es una <strong>pasarela de pago simulada</strong>. No se realizarán cargos reales. No ingreses datos bancarios reales.</Text>
+                  </Box>
+                </HStack>
+              </Box>
+
               <RadioGroup onChange={setMetodoPago} value={metodoPago}>
                 <Stack direction={{ base: "column", md: "row" }} spacing={6}>
                   <HStack
@@ -1143,23 +1154,16 @@ export default function CheckoutEmpresa() {
                 onChange={(e) =>
                   setFormDir((s) => ({ ...s, es_principal: e.target.checked }))
                 }
+                colorScheme="yellow"
               >
-                Marcar como principal
+                Establecer como principal
               </Checkbox>
             </VStack>
           </ModalBody>
-
-          <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={closeAddModal}>
-              Cancelar
-            </Button>
-            <Button
-              colorScheme="yellow"
-              color="black"
-              onClick={saveDireccion}
-              isLoading={guardandoDir}
-            >
-              Guardar dirección
+          <ModalFooter gap={2}>
+            <Button variant="ghost" onClick={onCloseDirModal}>Cancelar</Button>
+            <Button colorScheme="yellow" onClick={handleGuardarDir} isLoading={savingDir}>
+              Guardar
             </Button>
           </ModalFooter>
         </ModalContent>

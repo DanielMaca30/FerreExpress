@@ -15,6 +15,8 @@ const {
   detallePedidoPropio,
 } = require("../controllers/pedidoController");
 
+const { buildFacturaPdf } = require("../utils/facturaBuilder");
+
 const { requireAuth } = require("../middlewares/authMiddleware");
 const { requireRole } = require("../middlewares/roleMiddleware");
 
@@ -35,6 +37,35 @@ router.get("/pedidos/mios", requireAuth, listarMisPedidos);
 
 // GET /api/v1/pedidos/:id/mio → detalle del propio pedido (ticket)
 router.get("/pedidos/:id/mio", requireAuth, detallePedidoPropio);
+
+// GET /api/v1/pedidos/:id/comprobante → descarga PDF del comprobante (RF-04)
+router.get("/pedidos/:id/comprobante", requireAuth, async (req, res) => {
+  try {
+    const pedidoId = Number(req.params.id);
+    const userId = req.user.sub || req.user.id;
+    const role = req.user.role;
+
+    // Solo el dueno del pedido o un ADMIN puede descargar
+    const pool = require("../db");
+    const [[pedido]] = await pool.query(
+      "SELECT usuario_id FROM pedidos WHERE id = ? LIMIT 1",
+      [pedidoId]
+    );
+    if (!pedido) return res.status(404).json({ error: "Pedido no encontrado" });
+    if (role !== "ADMIN" && pedido.usuario_id !== userId) {
+      return res.status(403).json({ error: "Acceso no autorizado" });
+    }
+
+    const pdfBuffer = await buildFacturaPdf(pedidoId);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="comprobante-pedido-${pedidoId}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.end(pdfBuffer);
+  } catch (err) {
+    console.error("Error generando comprobante:", err);
+    res.status(500).json({ error: "Error al generar comprobante" });
+  }
+});
 
 // POST /api/v1/pedidos/directo → crear pedido desde carrito (cliente/contratista)
 router.post(

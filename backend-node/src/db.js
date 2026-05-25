@@ -7,10 +7,9 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD || "ferrepass",
   database: process.env.DB_NAME || process.env.MYSQLDATABASE || "ferreexpress",
   port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
-
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
+  queueLimit: 100,
 });
 
 module.exports = pool;

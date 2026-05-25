@@ -124,4 +124,29 @@ const feedbackFAQ = async (req, res) => {
   }
 };
 
-module.exports = {listarFAQ, crearFAQ, actualizarFAQ, eliminarFAQ, reordenarFAQ, feedbackFAQ};
+
+// RF-05: Metricas de FAQ para admin
+const metricsFAQ = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, pregunta, util, no_util,
+              (util + no_util) AS total_votos,
+              CASE WHEN (util + no_util) = 0 THEN 0
+                   ELSE ROUND(util * 100.0 / (util + no_util), 1)
+              END AS pct_util
+       FROM faq
+       ORDER BY total_votos DESC`
+    );
+
+    const totalVotos = rows.reduce((s, r) => s + r.total_votos, 0);
+    const masUtiles = [...rows].sort((a, b) => b.pct_util - a.pct_util).slice(0, 5);
+    const menosUtiles = [...rows].sort((a, b) => a.pct_util - b.pct_util).slice(0, 5);
+
+    res.json({ total_votos: totalVotos, faqs: rows, mas_utiles: masUtiles, menos_utiles: menosUtiles });
+  } catch (error) {
+    console.error("Error al obtener metricas FAQ:", error);
+    res.status(500).json({ error: "Error al obtener metricas" });
+  }
+};
+
+module.exports = {listarFAQ, crearFAQ, actualizarFAQ, eliminarFAQ, reordenarFAQ, feedbackFAQ, metricsFAQ};

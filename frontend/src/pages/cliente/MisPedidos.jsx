@@ -1001,14 +1001,42 @@ export default function MisPedidos() {
                       )}
                     </Box>
 
-                    <HStack justify="space-between" pt={1}>
-                      <Button ref={initialFocusRef} variant="outline" onClick={closeDetalle} minH="44px">
-                        Cerrar
-                      </Button>
-                      <Button rightIcon={<FiArrowRight />} onClick={() => navigate("/cliente")} minH="44px">
-                        Volver al catálogo
-                      </Button>
-                    </HStack>
+                    <Stack spacing={2} pt={1}>
+                      {(det?.estado === "ENTREGADO" || det?.estado === "PAGADO") && (
+                        <Button
+                          colorScheme="green"
+                          variant="outline"
+                          leftIcon={<FiArrowRight />}
+                          minH="44px"
+                          w="full"
+                          onClick={async () => {
+                            try {
+                              const resp = await api.get(`/pedidos/${det.id}/comprobante`, { responseType: "blob" });
+                              const url = URL.createObjectURL(new Blob([resp.data], { type: "application/pdf" }));
+                              const a = document.createElement("a");
+                              a.href = url;
+                              a.download = `comprobante-pedido-${det.id}.pdf`;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            } catch {
+                              toast({ title: "No se pudo descargar el comprobante", status: "error", duration: 3000 });
+                            }
+                          }}
+                        >
+                          Descargar comprobante PDF
+                        </Button>
+                      )}
+                      <HStack justify="space-between">
+                        <Button ref={initialFocusRef} variant="outline" onClick={closeDetalle} minH="44px">
+                          Cerrar
+                        </Button>
+                        <Button rightIcon={<FiArrowRight />} onClick={() => navigate("/cliente")} minH="44px">
+                          Volver al catalogo
+                        </Button>
+                      </HStack>
+                    </Stack>
                   </Stack>
                 </MotionBox>
               ) : null}

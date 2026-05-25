@@ -45,7 +45,7 @@ import Inicio from "./pages/empresa/Inicio";
 import MisCotizaciones from "./pages/empresa/MisCotizaciones";
 import MisPedidosEmpresa from "./pages/empresa/MisPedidosEmpresa";
 import CarritoEmpresa from "./pages/empresa/CarritoEmpresa";
-import CheckoutEmpresa from "./pages/empresa/checkoutEmpresa";
+import CheckoutEmpresa from "./pages/empresa/CheckoutEmpresa";
 import PedidoProcesandoEmpresa from "./pages/empresa/PedidoProcesandoEmpresa";
 import PedidoResultadoEmpresa from "./pages/empresa/PedidoResultadoEmpresa";
 import PerfilEmpresa from "./pages/empresa/PerfilEmpresa";
@@ -148,7 +148,7 @@ export default function App() {
 
           <Route path="perfil-empresa" element={<PerfilEmpresa />} />
           <Route path="casos-empresa" element={<MisCasosEmpresa />} />
-          <Route path="/empresa/ayuda" element={<AyudaFAQEmpresa />} />
+          <Route path="ayuda" element={<AyudaFAQEmpresa />} />
 
           {/* ✅ Nuevas legales empresa */}
           <Route path="condiciones-uso-empresa" element={<CondicionesUsoEmpresa />} />

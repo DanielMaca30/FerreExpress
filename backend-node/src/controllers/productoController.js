@@ -20,12 +20,18 @@ const getProductos = async (req, res) => {
     } = req.query;
 
     page = parseInt(page, 10) || 1;
-    limit = parseInt(limit, 10) || 10;
+    limit = Math.min(parseInt(limit, 10) || 10, 100); // máximo 100 por página
     const offset = (page - 1) * limit;
 
     const validSort = ["nombre", "precio", "created_at"];
     if (!validSort.includes(sort)) sort = "created_at";
     order = order.toUpperCase() === "ASC" ? "ASC" : "DESC";
+
+    // Validar precioMin/precioMax como números positivos (CODE-06)
+    const pMin = precioMin !== undefined ? parseFloat(precioMin) : NaN;
+    const pMax = precioMax !== undefined ? parseFloat(precioMax) : NaN;
+    const precioMinValido = !isNaN(pMin) && pMin >= 0 ? pMin : null;
+    const precioMaxValido = !isNaN(pMax) && pMax >= 0 ? pMax : null;
 
     const nombreFiltro = (search || nombre || "").trim();
 
@@ -55,13 +61,13 @@ const getProductos = async (req, res) => {
       query += " AND p.nombre LIKE ?";
       params.push(`%${nombreFiltro}%`);
     }
-    if (precioMin) {
+    if (precioMinValido !== null) {
       query += " AND p.precio >= ?";
-      params.push(precioMin);
+      params.push(precioMinValido);
     }
-    if (precioMax) {
+    if (precioMaxValido !== null) {
       query += " AND p.precio <= ?";
-      params.push(precioMax);
+      params.push(precioMaxValido);
     }
     if (categoria) {
       query += " AND p.categoria = ?";
@@ -83,13 +89,13 @@ const getProductos = async (req, res) => {
       countQuery += " AND nombre LIKE ?";
       countParams.push(`%${nombreFiltro}%`);
     }
-    if (precioMin) {
+    if (precioMinValido !== null) {
       countQuery += " AND precio >= ?";
-      countParams.push(precioMin);
+      countParams.push(precioMinValido);
     }
-    if (precioMax) {
+    if (precioMaxValido !== null) {
       countQuery += " AND precio <= ?";
-      countParams.push(precioMax);
+      countParams.push(precioMaxValido);
     }
     if (categoria) {
       countQuery += " AND categoria = ?";
@@ -365,22 +371,12 @@ const addImagenToProducto = async (req, res) => {
   try {
     const { id } = req.params;
 
-    console.log("👉 POST /productos/:id/imagenes RAW", {
-      params: req.params,
-      // 👀 ahora sí vemos exactamente qué es req.files y req.file
-      filesType: req.files && typeof req.files,
-      filesKeys: req.files && Object.keys(req.files),
-      hasFileProp: !!req.file,
-      body: req.body,
-    });
-
     // Validar que el producto exista
     const [[producto]] = await pool.query(
       "SELECT id FROM productos WHERE id = ?",
       [id]
     );
     if (!producto) {
-      console.warn("[addImagenToProducto] Producto no encontrado:", id);
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
@@ -401,15 +397,7 @@ const addImagenToProducto = async (req, res) => {
       files = [req.file];
     }
 
-    console.log(
-      "[addImagenToProducto] Normalized files count:",
-      files.length
-    );
-
     if (!files.length) {
-      console.warn(
-        "[addImagenToProducto] Sin archivos después de normalizar req.files/req.file"
-      );
       return res
         .status(400)
         .json({ error: "Debe adjuntar al menos una imagen" });
@@ -428,15 +416,7 @@ const addImagenToProducto = async (req, res) => {
     const imagenesInsertadas = [];
 
     for (const file of files) {
-      console.log(
-        "[addImagenToProducto] procesando archivo:",
-        file.originalname,
-        file.mimetype,
-        file.size
-      );
-
       if (!allowed.includes(file.mimetype)) {
-        console.warn("[addImagenToProducto] Formato no permitido:", file.mimetype);
         return res.status(400).json({
           error: "Formato no permitido (usa JPG, PNG o WEBP)",
         });
@@ -571,4 +551,38 @@ const setImagenPrincipal = async (req, res) => {
   }
 };
 
-module.exports = { getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal };
+
+// RF-02: Productos relacionados (misma categoria, excluyendo el actual)
+const getProductosRelacionados = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 6, 20);
+
+    // Obtener categoria del producto actual
+    const [[producto]] = await pool.query(
+      "SELECT categoria FROM productos WHERE id = ? AND activo = 1",
+      [id]
+    );
+
+    if (!producto) {
+      return res.json({ data: [] });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT p.id, p.nombre, p.precio, p.categoria, p.descripcion,
+              (SELECT url FROM imagenes_producto i WHERE i.producto_id = p.id ORDER BY i.es_principal DESC, i.id ASC LIMIT 1) AS imagen_principal
+       FROM productos p
+       WHERE p.categoria = ? AND p.id <> ? AND p.activo = 1
+       ORDER BY RAND()
+       LIMIT ?`,
+      [producto.categoria, id, limit]
+    );
+
+    res.json({ data: rows });
+  } catch (error) {
+    console.error("Error al obtener productos relacionados:", error);
+    res.status(500).json({ error: "Error al obtener productos relacionados" });
+  }
+};
+
+module.exports = { getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal, getProductosRelacionados };

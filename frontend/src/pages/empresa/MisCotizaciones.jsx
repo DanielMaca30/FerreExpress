@@ -169,6 +169,51 @@ function formatCurrency(value) {
   }).format(Number(value) || 0);
 }
 
+// RF-07: Countdown de vigencia de cotizacion
+function VigenciaCountdown({ fechaVigencia, estadoVigencia }) {
+  const [remaining, setRemaining] = useState("");
+
+  useEffect(() => {
+    if (estadoVigencia === "VENCIDA") {
+      setRemaining("VENCIDA");
+      return;
+    }
+    const fin = parseDateSafe(fechaVigencia);
+    if (!fin) return;
+
+    const calcular = () => {
+      const diff = fin - new Date();
+      if (diff <= 0) { setRemaining("VENCIDA"); return; }
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const d = Math.floor(h / 24);
+      if (d > 0) setRemaining(`Vence en ${d}d ${h % 24}h`);
+      else if (h > 0) setRemaining(`Vence en ${h}h ${m}m`);
+      else setRemaining(`Vence en ${m}m`);
+    };
+
+    calcular();
+    const id = setInterval(calcular, 60000);
+    return () => clearInterval(id);
+  }, [fechaVigencia, estadoVigencia]);
+
+  if (!remaining) return null;
+  const vencida = remaining === "VENCIDA";
+  return (
+    <span style={{
+      fontSize: "11px",
+      fontWeight: "600",
+      color: vencida ? "#c53030" : remaining.includes("0d") || remaining.includes("1d") ? "#c05621" : "#276749",
+      background: vencida ? "#fff5f5" : remaining.includes("0d") || remaining.includes("1d") ? "#fffaf0" : "#f0fff4",
+      borderRadius: "999px",
+      padding: "2px 8px",
+      border: `1px solid ${vencida ? "#fc8181" : remaining.includes("0d") || remaining.includes("1d") ? "#fbd38d" : "#9ae6b4"}`,
+    }}>
+      {remaining}
+    </span>
+  );
+}
+
 function normalizeList(raw) {
   if (Array.isArray(raw)) return raw;
   if (Array.isArray(raw?.cotizaciones)) return raw.cotizaciones;
@@ -958,15 +1003,21 @@ export default function MisCotizaciones() {
                             </VStack>
                           </HStack>
 
-                          <Text mt={3} fontSize="xs" color={subtle}>
-                            Vigencia hasta:{" "}
-                            {formatDate(
-                              c.fecha_vigencia ||
-                                c.vigencia_hasta ||
-                                c.fecha_vencimiento ||
-                                c.vigenciaHasta
-                            )}
-                          </Text>
+                          <HStack mt={3} spacing={2} flexWrap="wrap">
+                            <Text fontSize="xs" color={subtle}>
+                              Vigencia hasta:{" "}
+                              {formatDate(
+                                c.fecha_vigencia ||
+                                  c.vigencia_hasta ||
+                                  c.fecha_vencimiento ||
+                                  c.vigenciaHasta
+                              )}
+                            </Text>
+                            <VigenciaCountdown
+                              fechaVigencia={c.fecha_vigencia || c.vigencia_hasta || c.fecha_vencimiento || c.vigenciaHasta}
+                              estadoVigencia={c.estado_vigencia}
+                            />
+                          </HStack>
 
                           {/* Acciones (touch-friendly) */}
                           <SimpleGrid columns={pagable ? 2 : 1} spacing={2} mt={4}>
@@ -1064,8 +1115,12 @@ export default function MisCotizaciones() {
                                       c.vigenciaHasta
                                   )}
                                 </Text>
+                                <VigenciaCountdown
+                                  fechaVigencia={c.fecha_vigencia || c.vigencia_hasta || c.fecha_vencimiento || c.vigenciaHasta}
+                                  estadoVigencia={c.estado_vigencia}
+                                />
                                 <Text fontSize="xs" color={subtle}>
-                                  Última actualización:{" "}
+                                  Ultima actualizacion:{" "}
                                   {formatDate(c.actualizada_en || c.updated_at || c.fecha_actualizacion)}
                                 </Text>
                               </VStack>
@@ -1465,76 +1520,24 @@ export default function MisCotizaciones() {
           </ModalBody>
 
           {/* ✅ Footer sticky (especialmente útil en mobile) */}
-          <ModalFooter borderTopWidth="1px" borderColor={borderLight}>
-            <HStack w="full" justify="space-between" gap={3} flexWrap="wrap">
-              <Button variant="outline" onClick={handleCloseDetalle} h="46px">
-                Cerrar
+          <ModalFooter borderTopWidth="1px" borderColor={borderLight} pt={3} pb={4} flexWrap="wrap" gap={2}>
+            {canPagarCotizacion(selectedCotizacion) && (
+              <Button
+                colorScheme="yellow"
+                rightIcon={<FiCreditCard />}
+                minH="44px"
+                onClick={() => handlePagar(selectedCotizacion)}
+                flex={1}
+              >
+                Pagar cotizacion
               </Button>
-
-              <HStack spacing={2}>
-                <Button
-                  leftIcon={<FiDownload />}
-                  variant="outline"
-                  onClick={() => selectedCotizacion && handleDownloadPdf(selectedCotizacion)}
-                  isDisabled={!selectedCotizacion}
-                  h="46px"
-                >
-                  PDF
-                </Button>
-
-                {selectedCotizacion && canPagarCotizacion(selectedCotizacion) && (
-                  <Button
-                    leftIcon={<FiCreditCard />}
-                    colorScheme="yellow"
-                    onClick={() => handleIrAPasarela(selectedCotizacion)}
-                    h="46px"
-                  >
-                    Pagar
-                  </Button>
-                )}
-              </HStack>
-            </HStack>
+            )}
+            <Button variant="outline" onClick={() => setSelectedCotizacion(null)} minH="44px" flex={1}>
+              Cerrar
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
-
-      {/* ===================== Barra fija inferior (mobile) ===================== */}
-      <Box
-        display={{ base: "block", md: "none" }}
-        position="fixed"
-        left={0}
-        right={0}
-        bottom={0}
-        zIndex={10}
-        bg={cardBg}
-        borderTopWidth="1px"
-        borderColor={borderLight}
-        px={4}
-        py={3}
-        sx={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
-        boxShadow="0 -6px 16px rgba(0,0,0,0.08)"
-      >
-        <HStack spacing={2}>
-          <IconButton
-            icon={<FiRefreshCw />}
-            aria-label="Recargar"
-            variant="outline"
-            h="46px"
-            w="46px"
-            isLoading={reloading}
-            onClick={() => fetchCotizaciones({ silent: true })}
-          />
-          <Button
-            colorScheme="yellow"
-            w="full"
-            h="46px"
-            rightIcon={<FiArrowRight />}
-            onClick={handleCrearNuevaCotizacion}
-          >
-            Nueva cotización
-          </Button>
-        </HStack>
-      </Box>
     </Box>
   );
 }

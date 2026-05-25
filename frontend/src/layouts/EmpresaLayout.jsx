@@ -1040,15 +1040,10 @@ export default function EmpresaLayout() {
         </DrawerContent>
       </Drawer>
 
-      {/* ===== CONTENIDO + FOOTER (se mueven con el header cuando se esconde) ===== */}
-      <MotionBox
-        style={{
-          paddingTop: effectiveHeaderH,
-          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
-          willChange: "transform",
-        }}
-        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
+      {/* ===== CONTENIDO + FOOTER ===== */}
+      <Box
+        style={{ paddingTop: effectiveHeaderH }}
+        minHeight="100dvh"
         display="flex"
         flexDirection="column"
       >
@@ -1144,9 +1139,9 @@ export default function EmpresaLayout() {
             </Grid>
           </Container>
         </Box>
-      </MotionBox>
+      </Box>
 
-      {/* ===== BOTÓN FLOTANTE SOPORTE (siempre visible) ===== */}
+      {/* ===== BOTON FLOTANTE SOPORTE (siempre visible) ===== */}
       <Tooltip label="¿Necesitas ayuda? Abre un caso de soporte" placement="right" hasArrow>
         <IconButton
           icon={<FiHelpCircle size={22} />}

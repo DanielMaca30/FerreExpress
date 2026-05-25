@@ -43,11 +43,11 @@ const crearCotizacion = async (req, res) => {
     // Calcular subtotales y total
     for (const item of productos) {
       const [rows] = await connection.query(
-        "SELECT * FROM productos WHERE id = ?",
+        "SELECT * FROM productos WHERE id = ? AND activo = 1",
         [item.producto_id]
       );
       if (rows.length === 0)
-        throw new Error(`Producto con id ${item.producto_id} no existe`);
+        throw new Error(`Producto con id ${item.producto_id} no existe o está inactivo`);
 
       const producto = rows[0];
       const cantidad = Number(item.cantidad);
@@ -216,10 +216,11 @@ const listarCotizaciones = async (req, res) => {
     const { estado_gestion, estado_vigencia, fecha_desde, fecha_hasta } =
       req.query;
 
-    // Sincroniza vigencia en BD
-    await pool.query(
+    // Sincroniza vigencia (solo si no se filtró por estado específico, para no bloquear innecesariamente)
+    // Se ejecuta en background para no retrasar la respuesta
+    pool.query(
       "UPDATE cotizaciones SET estado_vigencia = 'VENCIDA' WHERE fecha_vigencia < NOW() AND estado_vigencia = 'VIGENTE'"
-    );
+    ).catch((e) => console.error("Error sincronizando vigencia cotizaciones:", e));
 
     let query = `
       SELECT c.id, u.username, u.email, 
@@ -819,7 +820,9 @@ const exportarCotizacionPDF = async (req, res) => {
     doc.end();
   } catch (error) {
     console.error("Error al exportar PDF:", error);
-    res.status(500).json({ error: "Error al exportar PDF" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Error al generar PDF" });
+    }
   }
 };
 

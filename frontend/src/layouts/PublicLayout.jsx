@@ -832,14 +832,9 @@ export default function PublicLayout() {
       </Drawer>
 
       {/* ===== Contenido principal ===== */}
-      <MotionBox
-        style={{
-          paddingTop: effectiveHeaderH,
-          minHeight: `calc(100dvh + ${effectiveHeaderH}px)`,
-          willChange: "transform",
-        }}
-        animate={{ y: hideOnScroll && hideHeader ? -effectiveHeaderH : 0 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
+      <Box
+        style={{ paddingTop: effectiveHeaderH }}
+        minHeight="100dvh"
         display="flex"
         flexDirection="column"
       >
@@ -937,7 +932,7 @@ export default function PublicLayout() {
             </Grid>
           </Container>
         </Box>
-      </MotionBox>
+      </Box>
     </Box>
   );
 }

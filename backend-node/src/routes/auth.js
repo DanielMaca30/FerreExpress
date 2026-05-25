@@ -1,6 +1,5 @@
 // backend-node/src/routes/auth.js
 const express = require("express");
-const router = express.Router();
 const passport = require("passport");
 
 const {
@@ -21,146 +20,50 @@ const {
 const { requireAuth } = require("../middlewares/authMiddleware");
 const { requireRole } = require("../middlewares/roleMiddleware");
 
-/* ============================================================
-   ✅ Config Frontend URL (para redirects Google)
-   - En local: http://localhost:5173
-   - En prod:  FRONTEND_URL=https://tu-front.vercel.app
-   ============================================================ */
-const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
-  /\/$/,
-  ""
-);
+const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
 
-/* ============================================================
-   🔐 Autenticación con Google (OAuth 2.0)
-   ============================================================ */
-router.get(
-  "/auth/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
-);
+// authLimiter se recibe como parametro desde app.js
+module.exports = (authLimiter) => {
+  const router = express.Router();
 
-router.get(
-  "/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: `${FRONTEND_URL}/login`,
-  }),
-  (req, res) => {
-    const token = req.user?.token;
+  // Google OAuth
+  router.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
-    if (!token) {
-      // fallback defensivo
-      return res.redirect(`${FRONTEND_URL}/login?error=google_token_missing`);
+  router.get(
+    "/auth/google/callback",
+    passport.authenticate("google", { failureRedirect: `${FRONTEND_URL}/login` }),
+    (req, res) => {
+      const token = req.user?.token;
+      if (!token) return res.redirect(`${FRONTEND_URL}/login?error=google_token_missing`);
+      return res.redirect(`${FRONTEND_URL}/login?token=${encodeURIComponent(token)}`);
     }
+  );
 
-    // ✅ Redirigir al frontend con el JWT
-    return res.redirect(
-      `${FRONTEND_URL}/login?token=${encodeURIComponent(token)}`
-    );
-  }
-);
+  // Registro
+  router.post("/auth/register/cliente", registerCliente);
+  router.post("/auth/register/empresa", registerEmpresa);
 
-/* ============================================================
-   🧾 Registro y autenticación local
-   ============================================================ */
+  // Login (rate limited)
+  router.post("/auth/login", authLimiter, login);
 
-/**
- * @route   POST /auth/register/cliente
- * @desc    Registro de cliente convencional
- * @access  Público
- */
-router.post("/auth/register/cliente", registerCliente);
+  // Recuperacion de contrasena (rate limited)
+  router.post("/auth/forgot-password", authLimiter, forgotPassword);
+  router.post("/auth/verify-reset", verifyReset);
+  router.put("/auth/reset-password", resetPassword);
 
-/**
- * @route   POST /auth/register/empresa
- * @desc    Registro de empresa/contratista
- * @access  Público
- */
-router.post("/auth/register/empresa", registerEmpresa);
+  // Cambio de contrasena autenticado
+  router.put("/auth/change-password", requireAuth, changePassword);
 
-/**
- * @route   POST /auth/login
- * @desc    Login para todos los roles (Cliente, Empresa, Admin)
- * @access  Público
- */
-router.post("/auth/login", login);
+  // Perfil
+  router.get("/auth/perfil", requireAuth, getPerfil);
+  router.put("/auth/perfil", requireAuth, updatePerfil);
 
-/**
- * @route   POST /auth/forgot-password
- * @desc    Solicita código de recuperación y lo envía por correo
- * @access  Público
- */
-router.post("/auth/forgot-password", forgotPassword);
+  // Convertir cliente a contratista
+  router.post("/auth/convertir-empresa", requireAuth, convertirAEmpresa);
 
-/**
- * @route   POST /auth/verify-reset
- * @desc    Verifica código de recuperación y genera token temporal
- * @access  Público
- */
-router.post("/auth/verify-reset", verifyReset);
+  // Admin - gestion de usuarios
+  router.get("/admin/usuarios", requireAuth, requireRole("ADMIN"), listarUsuarios);
+  router.put("/admin/usuarios/:id/estado", requireAuth, requireRole("ADMIN"), cambiarEstadoUsuario);
 
-/**
- * @route   PUT /auth/reset-password
- * @desc    Restablece la contraseña con token temporal
- * @access  Token temporal (sin sesión)
- */
-router.put("/auth/reset-password", resetPassword);
-
-/**
- * @route   PUT /auth/change-password
- * @desc    Cambia la contraseña estando autenticado
- * @access  Privado (JWT normal)
- */
-router.put("/auth/change-password", requireAuth, changePassword);
-
-/* ============================================================
-   👤 Gestión de Perfil de Usuario
-   ============================================================ */
-
-/**
- * @route   GET /auth/perfil
- * @desc    Obtener datos del usuario logueado
- * @access  Privado
- */
-router.get("/auth/perfil", requireAuth, getPerfil);
-
-/**
- * @route   PUT /auth/perfil
- * @desc    Actualizar datos básicos (username, telefono)
- * @access  Privado
- */
-router.put("/auth/perfil", requireAuth, updatePerfil);
-
-/**
- * @route   POST /auth/convertir-empresa
- * @desc    Convierte un CLIENTE a CONTRATISTA guardando NIT + razón social
- * @access  Privado (JWT)
- */
-router.post("/auth/convertir-empresa", requireAuth, convertirAEmpresa);
-
-/* ============================================================
-   🧑‍💼 Administración de usuarios (solo ADMIN)
-   ============================================================ */
-
-/**
- * @route   GET /admin/usuarios
- * @desc    Listar usuarios del sistema
- * @access  Privado (ADMIN)
- */
-router.get("/admin/usuarios", requireAuth, requireRole("ADMIN"), listarUsuarios);
-
-/**
- * @route   PUT /admin/usuarios/:id/estado
- * @desc    Cambiar estado de usuario (ACTIVO / BLOQUEADO)
- * @access  Privado (ADMIN)
- */
-router.put(
-  "/admin/usuarios/:id/estado",
-  requireAuth,
-  requireRole("ADMIN"),
-  cambiarEstadoUsuario
-);
-
-/* ============================================================
-   📤 Exportación del router
-   ============================================================ */
-module.exports = router;
+  return router;
+};
