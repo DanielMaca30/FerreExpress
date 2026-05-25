@@ -428,7 +428,8 @@ const addImagenToProducto = async (req, res) => {
         });
       }
 
-      const imageUrl = `/uploads/${file.filename}`;
+      // Cloudinary devuelve la URL en file.path
+      const imageUrl = file.path || file.secure_url || file.url;
       const es_principal = existentes === 0 ? 1 : 0;
 
       const [result] = await pool.query(
@@ -586,3 +587,4 @@ const getProductosRelacionados = async (req, res) => {
 };
 
 module.exports = { getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal, getProductosRelacionados };
+deleteImagenFromProducto, setPrincipalImagen, getProductosRelacionados };
