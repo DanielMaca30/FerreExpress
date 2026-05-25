@@ -587,4 +587,3 @@ const getProductosRelacionados = async (req, res) => {
 };
 
 module.exports = { getProductos, getProductoById, createProducto, updateProducto, deleteProducto, getImagenesByProducto, addImagenToProducto, deleteImagen, setImagenPrincipal, getProductosRelacionados };
-deleteImagenFromProducto, setPrincipalImagen, getProductosRelacionados };
